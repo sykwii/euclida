@@ -1,67 +1,78 @@
-<h1>Снаряди</h1>
+<div class="eu-page">
+  <header class="eu-page-header">
+    <div>
+      <h1>Снаряди</h1>
+      <p>Довідник типів снарядів для БК, сумісності та ВГЗ.</p>
+    </div>
+  </header>
 
-<form class="form" (ngSubmit)="create()">
-  <select name="systemType" [(ngModel)]="form.systemType" [disabled]="saving">
-    <option value="barrel">Ствольна</option>
-    <option value="rocket">Реактивна</option>
-  </select>
+  <form class="form eu-page-toolbar" (ngSubmit)="create()">
+    <select name="systemType" [(ngModel)]="form.systemType" [disabled]="saving">
+      <option value="barrel">Ствольна</option>
+      <option value="rocket">Реактивна</option>
+    </select>
 
-  <input
-    name="damageType"
-    [(ngModel)]="form.damageType"
-    placeholder="Тип ураження"
-    [disabled]="saving"
-  />
+    <input
+      name="damageType"
+      [(ngModel)]="form.damageType"
+      placeholder="Тип ураження"
+      [disabled]="saving"
+    />
 
-  <input
-    name="marking"
-    [(ngModel)]="form.marking"
-    placeholder="Маркування"
-    [disabled]="saving"
-  />
+    <input
+      name="marking"
+      [(ngModel)]="form.marking"
+      placeholder="Маркування"
+      [disabled]="saving"
+    />
 
-  <button type="submit" [disabled]="saving">
-    {{ saving ? 'Додавання...' : 'Додати' }}
-  </button>
-</form>
+    <button type="submit" class="primary-button" [disabled]="saving">
+      {{ saving ? 'Додавання...' : 'Додати' }}
+    </button>
+  </form>
 
-<div class="ui-skeleton-list" *ngIf="loading" aria-label="Завантаження снарядів">
-  <span></span>
-  <span></span>
-  <span></span>
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження снарядів">
+    <article class="ui-skeleton-card" *ngFor="let row of [1, 2, 3]">
+      <span class="ui-skeleton-line medium"></span>
+      <span class="ui-skeleton-line long"></span>
+      <span class="ui-skeleton-line short"></span>
+    </article>
+  </div>
+
+  <div class="ui-state error" *ngIf="!loading && errorMessage">
+    <span class="ui-state-icon">!</span>
+    <strong>Не вдалося отримати дані</strong>
+    <small>{{ errorMessage }}</small>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </div>
+
+  <div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+    <span class="ui-state-icon">∅</span>
+    <strong>Снаряди ще не додані</strong>
+    <small>Додайте перший тип снаряда для подальшого використання в БК і ВГЗ.</small>
+  </div>
+
+  <table *ngIf="!loading && !errorMessage && items.length > 0">
+    <thead>
+      <tr>
+        <th>Маркування</th>
+        <th>Тип системи</th>
+        <th>Тип ураження</th>
+        <th></th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr *ngFor="let item of items">
+        <td>{{ item.marking }}</td>
+        <td>{{ item.systemType }}</td>
+        <td>{{ item.damageType }}</td>
+        <td>
+          <button type="button" class="danger-button" (click)="remove(item.id)" [disabled]="deletingId === item.id">
+            {{ deletingId === item.id ? 'Видалення...' : 'Видалити' }}
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 </div>
-
-<div class="ui-state ui-state-error" *ngIf="!loading && errorMessage">
-  <strong>Не вдалося отримати дані</strong>
-  <p>{{ errorMessage }}</p>
-  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
-</div>
-
-<div class="ui-state ui-state-empty" *ngIf="!loading && !errorMessage && items.length === 0">
-  <strong>Снаряди ще не додані</strong>
-  <p>Додайте перший тип снаряда для подальшого використання в БК і ВГЗ.</p>
-</div>
-
-<table *ngIf="!loading && !errorMessage && items.length > 0">
-  <thead>
-    <tr>
-      <th>Маркування</th>
-      <th>Тип системи</th>
-      <th>Тип ураження</th>
-      <th></th>
-    </tr>
-  </thead>
-
-  <tbody>
-    <tr *ngFor="let item of items">
-      <td>{{ item.marking }}</td>
-      <td>{{ item.systemType }}</td>
-      <td>{{ item.damageType }}</td>
-      <td>
-        <button type="button" (click)="remove(item.id)" [disabled]="deletingId === item.id">
-          {{ deletingId === item.id ? 'Видалення...' : 'Видалити' }}
-        </button>
-      </td>
-    </tr>
-  </tbody>
-</table>
