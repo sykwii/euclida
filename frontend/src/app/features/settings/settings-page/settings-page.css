@@ -1,0 +1,21 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 360px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+input,
+button {
+  padding: 8px 10px;
+}

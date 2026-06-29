@@ -1,0 +1,22 @@
+<section class="documents-page">
+  <header class="page-header">
+    <div>
+      <h1>Документи</h1>
+      <p>Формування звітів і експорт у TXT, CSV/Excel та PDF.</p>
+    </div>
+  </header>
+
+  <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+  <div class="grid">
+    <article class="doc-card" *ngFor="let card of cards">
+      <h2>{{ card.title }}</h2>
+      <p>{{ card.description }}</p>
+      <div class="actions">
+        <button type="button" (click)="download(card.kind, 'text')" [disabled]="loadingKey === card.kind + '-text'">TXT</button>
+        <button type="button" (click)="download(card.kind, 'csv')" [disabled]="loadingKey === card.kind + '-csv'">Excel/CSV</button>
+        <button type="button" (click)="download(card.kind, 'pdf')" [disabled]="loadingKey === card.kind + '-pdf'">PDF</button>
+      </div>
+    </article>
+  </div>
+</section>

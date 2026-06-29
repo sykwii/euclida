@@ -1,0 +1,69 @@
+<h1>Зразки озброєння</h1>
+
+<form class="form" (ngSubmit)="create()">
+  <input
+    name="name"
+    [(ngModel)]="form.name"
+    placeholder="Назва зразка, наприклад 2С1"
+    [disabled]="submitting"
+  />
+
+  <select name="systemType" [(ngModel)]="form.systemType" [disabled]="submitting">
+    <option value="barrel">Ствольна</option>
+    <option value="rocket">Реактивна</option>
+  </select>
+
+  <input
+    name="zonesCount"
+    type="number"
+    min="0"
+    [(ngModel)]="form.zonesCount"
+    placeholder="Кількість зон"
+    [disabled]="submitting"
+  />
+
+  <button type="submit" [disabled]="submitting">{{ submitting ? 'Збереження...' : 'Додати' }}</button>
+</form>
+
+<div class="ui-skeleton-grid" *ngIf="loading">
+  <div class="ui-skeleton-card" *ngFor="let item of [1, 2, 3]">
+    <span class="ui-skeleton-line medium"></span>
+    <span class="ui-skeleton-line long"></span>
+    <span class="ui-skeleton-line short"></span>
+  </div>
+</div>
+
+<div class="ui-state error" *ngIf="!loading && errorMessage">
+  <span class="ui-state-icon">!</span>
+  <strong>{{ errorMessage }}</strong>
+  <small>Перевірте з'єднання із сервером або повторіть запит.</small>
+  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+</div>
+
+<div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+  <span class="ui-state-icon">∅</span>
+  <strong>Зразки озброєння ще не додані</strong>
+  <small>Додайте зразки для подальшого створення СГ та зон дальності.</small>
+</div>
+
+<table *ngIf="!loading && !errorMessage && items.length > 0">
+  <thead>
+    <tr>
+      <th>Назва</th>
+      <th>Тип</th>
+      <th>Кількість зон</th>
+      <th></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let item of items">
+      <td>{{ item.name }}</td>
+      <td>{{ item.systemType }}</td>
+      <td>{{ item.zonesCount }}</td>
+      <td>
+        <button type="button" [disabled]="submitting" (click)="remove(item.id)">Видалити</button>
+      </td>
+    </tr>
+  </tbody>
+</table>

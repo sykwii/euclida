@@ -1,0 +1,40 @@
+<h1>Підрозділи</h1>
+
+<div class="ui-skeleton-grid" *ngIf="loading">
+  <div class="ui-skeleton-card" *ngFor="let item of [1, 2, 3]">
+    <span class="ui-skeleton-line medium"></span>
+    <span class="ui-skeleton-line long"></span>
+    <span class="ui-skeleton-line short"></span>
+  </div>
+</div>
+
+<div class="ui-state error" *ngIf="!loading && errorMessage">
+  <span class="ui-state-icon">!</span>
+  <strong>{{ errorMessage }}</strong>
+  <small>Перевірте з'єднання із сервером або повторіть запит.</small>
+  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+</div>
+
+<div class="ui-state" *ngIf="!loading && !errorMessage && units.length === 0">
+  <span class="ui-state-icon">∅</span>
+  <strong>Підрозділи ще не додані</strong>
+  <small>Створіть підрозділи для маршрутизації ВГЗ та обмеження видимості.</small>
+</div>
+
+<table *ngIf="!loading && !errorMessage && units.length > 0">
+  <thead>
+    <tr>
+      <th>Назва</th>
+      <th>Тип</th>
+      <th>Порядок</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let unit of units">
+      <td>{{ unit.name }}</td>
+      <td>{{ unit.type }}</td>
+      <td>{{ unit.sortOrder }}</td>
+    </tr>
+  </tbody>
+</table>

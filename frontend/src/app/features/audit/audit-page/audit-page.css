@@ -1,0 +1,12 @@
+.audit-page { padding:24px; color:#e5e7eb; }
+.page-header { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:18px; }
+h1 { margin:0 0 6px; font-size:28px; }
+p, small { color:#9ca3af; }
+.filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+input, button { border:1px solid #334155; background:#111827; color:#e5e7eb; border-radius:10px; padding:10px 12px; }
+button { cursor:pointer; }
+table { width:100%; border-collapse:collapse; background:#020617; border:1px solid #334155; border-radius:12px; overflow:hidden; }
+th, td { text-align:left; padding:10px; border-bottom:1px solid #1f2937; vertical-align:top; }
+th { background:#0f172a; }
+.state, .error { padding:14px; border:1px solid #334155; border-radius:12px; background:#0f172a; }
+.error { border-color:#7f1d1d; color:#fecaca; }

@@ -1,0 +1,270 @@
+<div class="map-workspace">
+  <div id="work-map"></div>
+  <div class="map-overlay"></div>
+
+  <header class="map-topbar">
+    <div>
+      <h1>Робоча карта</h1>
+      <p>Актуальна обстановка без перевантаження історичними мітками</p>
+    </div>
+
+    <div class="toolbar">
+      <button type="button" [class.active]="mapPreset === 'ops'" (click)="applyLayerPreset('ops')">Оперативно</button>
+      <button type="button" [class.active]="mapPreset === 'planning'" (click)="applyLayerPreset('planning')">План</button>
+      <button type="button" [class.active]="mapPreset === 'logistics'" (click)="applyLayerPreset('logistics')">Логістика</button>
+      <button type="button" [class.active]="mapPreset === 'analysis'" (click)="applyLayerPreset('analysis')">Аналіз</button>
+      <button type="button" [class.active]="showPositions" (click)="togglePositions()">ВП</button>
+      <button type="button" [class.active]="showThreats" (click)="toggleThreats()">Загрози</button>
+      <button type="button" [class.active]="showSectors" (click)="toggleSectors()">Сектори</button>
+      <button type="button" [class.active]="showResults" (click)="toggleResults()">Історія роботи</button>
+      <button type="button" [class.active]="measureMode" (click)="toggleMeasureMode()">Відстань</button>
+      <select name="readinessFilter" [(ngModel)]="readinessFilter" (ngModelChange)="applyMapFilters()" title="Готовність ВП">
+        <option value="">Усі ВП</option>
+        <option value="ready">БГ</option>
+        <option value="in_progress">У роботі</option>
+        <option value="not_ready">Не БГ</option>
+        <option value="unknown">Невідомо</option>
+      </select>
+      <select name="resultHistoryRange" [(ngModel)]="resultHistoryRange" (ngModelChange)="setResultHistoryRange($event)" title="Період історії роботи">
+        <option value="today">Історія: сьогодні</option>
+        <option value="7">Історія: 7 днів</option>
+        <option value="all">Історія: усе</option>
+      </select>
+      <select name="resultTypeFilter" [(ngModel)]="resultTypeFilter" (ngModelChange)="applyMapFilters()" title="Результати">
+        <option value="">Усі результати</option>
+        <option value="mining">Мінування</option>
+        <option value="area_denial">Закриття зони</option>
+        <option value="hit">Ураження</option>
+        <option value="destroyed">Знищено</option>
+        <option value="suppression">Придушення</option>
+        <option value="smoke">Димова завіса</option>
+        <option value="fire">Пожежа</option>
+        <option value="illumination">Освітлення</option>
+      </select>
+      <button type="button" class="icon-round" title="Оновити" (click)="refreshMap()">↻</button>
+      <button type="button" title="Додати вогневе завдання" (click)="goToCreateOrder()">＋</button>
+      <button type="button" class="icon-round" title="Налаштування загроз" (click)="openSettings()">⚙</button>
+      <button type="button" class="icon-round" title="Закрити панелі" (click)="closeAllPanels()">×</button>
+    </div>
+  </header>
+
+  <div class="map-stats">
+    <div><strong>{{ positionsCount }}</strong><span>ВП</span></div>
+    <div><strong>{{ readyCount }}</strong><span>БГ</span></div>
+    <div><strong>{{ inProgressCount }}</strong><span>У роботі</span></div>
+    <div><strong>{{ notReadyCount }}</strong><span>Не БГ</span></div>
+    <div><strong>{{ threatsCount }}</strong><span>Загрози</span></div>
+  </div>
+
+  <aside class="active-orders-panel">
+    <header>
+      <div>
+        <span>Активні</span>
+        <h2>{{ activeOrders.length }} ВГЗ</h2>
+      </div>
+      <button type="button" class="ghost-button" (click)="openOrderList()">Усі</button>
+    </header>
+
+    <button
+      type="button"
+      class="active-order"
+      *ngFor="let order of activeOrders | slice:0:6"
+      [class.focused]="focusedOrderNumber === order.orderNumber"
+      (click)="openOrderOnMap(order)"
+    >
+      <span>{{ getOrderStatusLabel(order.status) }}</span>
+      <strong>{{ order.orderNumber }}</strong>
+      <small>{{ order.targetSettlement || '-' }} · {{ order.selectedFirePosition?.name || 'без ВП' }}</small>
+    </button>
+  </aside>
+
+  <div class="measure-card" *ngIf="measureMode">
+    <strong>Вимірювання відстані</strong>
+    <p>Точка 1: {{ measureStart ? (measureStart.lat + ', '+ measureStart.lng) : 'натисніть на карту' }}</p>
+    <p>Точка 2: {{ measureEnd ? (measureEnd.lat + ', '+ measureEnd.lng) : 'натисніть другу точку' }}</p>
+    <p *ngIf="measureDistanceM !== null">Відстань: <b>{{ measureDistanceM }}</b> м</p>
+    <button type="button" (click)="clearMeasure()">Очистити</button>
+  </div>
+
+  <div class="focused-target-banner" *ngIf="focusedOrderTarget">
+    <span>Фокус</span>
+    <strong>{{ focusedOrderNumber }}</strong>
+    <button type="button" class="icon-round small" (click)="closeAllPanels()">×</button>
+  </div>
+
+  <div class="map-menu" *ngIf="mapMenuVisible">
+    <div class="mini-header">
+      <strong>Нова мітка</strong>
+      <button type="button" class="mini-close" (click)="hideMapMenu()">×</button>
+    </div>
+    <p>{{ clickedLat }}, {{ clickedLng }}</p>
+    <button type="button" (click)="startCreateTarget()">Створити ціль / ВГЗ</button>
+    <button type="button" (click)="startCreateThreat()">Додати повітряну загрозу</button>
+  </div>
+
+  <div class="map-menu" *ngIf="threatFormVisible">
+    <div class="mini-header">
+      <strong>Мітка загрози</strong>
+      <button type="button" class="mini-close" (click)="cancelThreatForm()">×</button>
+    </div>
+    <p>{{ clickedLat }}, {{ clickedLng }}</p>
+    <input name="threatType" [(ngModel)]="threatType" placeholder="Тип мітки" />
+    <button type="button" (click)="saveThreat()">Зберегти</button>
+  </div>
+
+  <aside class="side-card threat-card" *ngIf="selectedThreat as threat">
+    <div class="card-header">
+      <div>
+        <span class="card-kicker">Мітка загрози</span>
+        <h2>{{ threat.threatType }}</h2>
+      </div>
+      <button type="button" class="icon-round small" (click)="closeThreatPanel()">×</button>
+    </div>
+    <section>
+      <h3>Координати</h3>
+      <p>{{ threat.lat }}, {{ threat.lng }}</p>
+    </section>
+    <section>
+      <h3>Створено</h3>
+      <p>{{ threat.createdAt | date: 'dd.MM.yyyy HH:mm' }}</p>
+    </section>
+    <button type="button" class="danger-button" (click)="removeSelectedThreat()">Видалити мітку</button>
+  </aside>
+
+  <aside class="side-card" *ngIf="selectedPosition as position">
+    <div class="card-header">
+      <div>
+        <span class="card-kicker">Вогнева позиція</span>
+        <h2>{{ position.name }}</h2>
+      </div>
+      <button type="button" class="icon-round small" (click)="closePositionPanel()">×</button>
+    </div>
+
+    <div class="status-badge" [class.ready]="position.readinessStatus === 'ready'" [class.progress]="position.readinessStatus === 'in_progress'" [class.danger]="position.readinessStatus === 'not_ready'">
+      {{ getReadinessLabel(position.readinessStatus) }}
+    </div>
+
+    <button type="button" class="edit-button" (click)="editSelectedPosition()">Редагувати</button>
+
+    <section>
+      <h3>Координати</h3>
+      <p>Lat/Lng: {{ position.lat }}, {{ position.lng }}</p>
+      <p>MGRS: {{ position.mgrs || '-' }}</p>
+    </section>
+
+    <section>
+      <h3>Сектор стрільби</h3>
+      <p>ОН: {{ position.mainDirectionUnits || '-' }} / {{ position.mainDirectionDegrees || '-' }}°</p>
+      <p>Ліворуч: {{ position.traverseLeftUnits || '-' }} / {{ position.traverseLeftDegrees || '-' }}°</p>
+      <p>Праворуч: {{ position.traverseRightUnits || '-' }} / {{ position.traverseRightDegrees || '-' }}°</p>
+      <p>Межі: {{ position.sectorLeftDegrees || '-' }}° → {{ position.sectorRightDegrees || '-' }}°</p>
+    </section>
+
+    <section>
+      <h3>Готовність</h3>
+      <p *ngIf="position.notReadyReason; else noReason">{{ position.notReadyReason }}</p>
+      <ng-template #noReason>
+        <span class="ready-text">Обмеження відсутні</span>
+      </ng-template>
+    </section>
+
+    <section>
+      <h3>Озброєння</h3>
+      <ng-container *ngIf="selectedPositionCard?.assignedWeapon as weapon; else noWeapon">
+        <p>Зразок: {{ weapon.weaponModel?.name || '-' }}</p>
+        <p>Позивний: {{ weapon.callsign || '-' }}</p>
+        <p>№: {{ weapon.serialNumber || '-' }}</p>
+        <p>Підрозділ: {{ weapon.unit?.name || '-' }}</p>
+      </ng-container>
+      <ng-template #noWeapon>
+        <span class="muted">Озброєння не призначене</span>
+      </ng-template>
+    </section>
+
+    <section>
+      <h3>Виконані ВГЗ</h3>
+      <p>Виконано: {{ selectedPositionCard?.completedRequestsCount || position.completedVgzCount || 0 }}</p>
+    </section>
+
+    <section>
+      <h3>Локальний БК</h3>
+      <p class="stock-title">
+        {{
+          selectedPositionCard?.firePosition?.ammoDepot?.name ||
+          position.ammoDepot?.name ||
+          '-'
+        }}
+      </p>
+      <p class="muted">
+        Остання поставка:
+        {{
+          selectedPositionCard?.lastSupplyAt
+            ? (selectedPositionCard?.lastSupplyAt | date: 'dd.MM.yyyy HH:mm')
+            : '-'
+        }}
+      </p>
+
+      <div class="stock-block" *ngIf="selectedPositionCard">
+        <div class="stock-group">
+          <h4>Снаряд</h4>
+          <div class="stock-row" *ngFor="let item of selectedPositionCard.localStock.shells">
+            <span>{{ item.shell?.marking || '-' }}</span>
+            <strong>{{ item.quantity }}</strong>
+          </div>
+          <p class="muted" *ngIf="selectedPositionCard.localStock.shells.length === 0">Немає</p>
+        </div>
+
+        <div class="stock-group">
+          <h4>Заряд</h4>
+          <div class="stock-row" *ngFor="let item of selectedPositionCard.localStock.charges">
+            <span>{{ item.charge?.marking || '-' }}</span>
+            <strong>{{ item.quantity }}</strong>
+          </div>
+          <p class="muted" *ngIf="selectedPositionCard.localStock.charges.length === 0">Немає</p>
+        </div>
+
+        <div class="stock-group">
+          <h4>Підривники</h4>
+          <div class="stock-row" *ngFor="let item of selectedPositionCard.localStock.fuzes">
+            <span>{{ item.fuze?.marking || '-' }}</span>
+            <strong>{{ item.quantity }}</strong>
+          </div>
+          <p class="muted" *ngIf="selectedPositionCard.localStock.fuzes.length === 0">Немає</p>
+        </div>
+
+        <div class="stock-group">
+          <h4>Капсулі</h4>
+          <div class="stock-row" *ngFor="let item of selectedPositionCard.localStock.primers">
+            <span>{{ item.primer?.marking || '-' }}</span>
+            <strong>{{ item.quantity }}</strong>
+          </div>
+          <p class="muted" *ngIf="selectedPositionCard.localStock.primers.length === 0">Немає</p>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <div class="cursor-coordinates">
+    <strong>Координати курсора</strong>
+    <span>Decimal: {{ cursorLat !== null ? cursorLat : '-' }}, {{ cursorLng !== null ? cursorLng : '-' }}</span>
+    <span>MGRS: {{ cursorMgrs }}</span>
+    <span>Висота: {{ cursorElevation }}</span>
+  </div>
+
+  <div class="map-loading-state" *ngIf="isMapLoading">
+    <div class="safe-skeleton-line wide"></div>
+    <div class="safe-skeleton-line"></div>
+    <span>Завантаження карти...</span>
+  </div>
+
+  <div class="map-empty-state" *ngIf="hasMapLoaded && !isMapLoading && positionsCount === 0 && threatsCount === 0 && activeOrders.length === 0">
+    <strong>Дані карти відсутні</strong>
+    <span>ВП, активні ВГЗ або загрози ще не завантажені.</span>
+    <button type="button" class="ghost-button" (click)="refreshMap()">Повторити</button>
+  </div>
+
+  <div class="map-error" *ngIf="errorMessage">
+    <strong>{{ errorMessage }}</strong>
+    <button type="button" class="ghost-button" (click)="refreshMap()">Повторити</button>
+  </div>
+</div>

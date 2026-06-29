@@ -1,0 +1,167 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import type { AuthUser } from '../auth/auth-user.types';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { WriteAccessGuard } from '../auth/write-access.guard';
+import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
+import { CreateServiceOrderDto } from './dto/create-service-order.dto';
+import { SendServiceOrderDto } from './dto/send-service-order.dto';
+import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
+import { ServiceOrder } from './service-order.entity';
+import {
+  ServiceOrderMapResult,
+  ServiceOrdersService,
+} from './service-orders.service';
+
+@UseGuards(JwtAuthGuard)
+@Controller('service-orders')
+export class ServiceOrdersController {
+  constructor(private readonly service: ServiceOrdersService) {}
+
+  @Get()
+  findAll(@CurrentUser() user: AuthUser): Promise<ServiceOrder[]> {
+    return this.service.findAll(user);
+  }
+
+  @Get('map-results')
+  findMapResults(@CurrentUser() user: AuthUser): Promise<ServiceOrderMapResult[]> {
+    return this.service.findMapResults(user);
+  }
+
+  @Get(':id')
+  findOne(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<ServiceOrder> {
+    return this.service.findOne(id, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post()
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() body: CreateServiceOrderDto,
+  ): Promise<ServiceOrder> {
+    return this.service.create(body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Patch(':id')
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: UpdateServiceOrderDto,
+  ): Promise<ServiceOrder> {
+    return this.service.update(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Delete(':id')
+  remove(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.service.remove(id, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/suggestions')
+  getSuggestions(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.service.getSuggestions(id, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/select-position')
+  selectPosition(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      firePositionId: string;
+      shellId: string;
+      chargeId: string;
+      zoneId: string | null;
+    },
+  ) {
+    return this.service.selectPosition(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/send')
+  sendToUnit(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: SendServiceOrderDto,
+  ): Promise<ServiceOrder> {
+    return this.service.sendToUnit(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/accept')
+  accept(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<ServiceOrder> {
+    return this.service.accept(id, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/reject')
+  reject(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+  ): Promise<ServiceOrder> {
+    return this.service.reject(id, reason, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/start')
+  start(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<ServiceOrder> {
+    return this.service.start(id, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/complete')
+  complete(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: CompleteServiceOrderDto,
+  ): Promise<ServiceOrder> {
+    return this.service.complete(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/cancel')
+  cancel(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ): Promise<ServiceOrder> {
+    return this.service.cancel(id, body.reason, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/reopen')
+  reopenRejected(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<ServiceOrder> {
+    return this.service.reopenRejected(id, user);
+  }
+}

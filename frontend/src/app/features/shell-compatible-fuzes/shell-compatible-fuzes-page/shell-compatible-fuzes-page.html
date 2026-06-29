@@ -1,0 +1,42 @@
+<h1>Сумісність: снаряд ↔ запалювач</h1>
+
+<form class="form" (ngSubmit)="create()">
+  <select name="shellId" [(ngModel)]="form.shellId">
+    <option value="">Оберіть снаряд</option>
+    <option *ngFor="let shell of shells" [value]="shell.id">
+      {{ shell.marking }}
+    </option>
+  </select>
+
+  <select name="fuzeId" [(ngModel)]="form.fuzeId">
+    <option value="">Оберіть запалювач</option>
+    <option *ngFor="let fuze of fuzes" [value]="fuze.id">
+      {{ fuze.marking }}
+    </option>
+  </select>
+
+  <button type="submit">Додати</button>
+</form>
+
+<p *ngIf="loading">Завантаження...</p>
+<p *ngIf="errorMessage">{{ errorMessage }}</p>
+
+<table *ngIf="!loading && !errorMessage">
+  <thead>
+    <tr>
+      <th>Снаряд</th>
+      <th>Запалювач</th>
+      <th></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let item of items">
+      <td>{{ item.shell?.marking || item.shellId }}</td>
+      <td>{{ item.fuze?.marking || item.fuzeId }}</td>
+      <td>
+        <button type="button" (click)="remove(item.id)">Видалити</button>
+      </td>
+    </tr>
+  </tbody>
+</table>

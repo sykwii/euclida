@@ -1,0 +1,228 @@
+<div class="equipment-page">
+  <header class="page-header">
+    <div>
+      <h1>Озброєння</h1>
+      <p>Стан готовності, прив’язка до підрозділу та швидке редагування</p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="ghost-button" (click)="syncFirePositionStates()" [disabled]="syncing">{{ syncing ? 'Синхронізація...' : 'Синхронізувати ВП' }}</button>
+      <button type="button" class="ghost-button" (click)="load()" [disabled]="loading">Оновити</button>
+    </div>
+  </header>
+
+
+
+  <section class="stats-grid">
+    <article class="stat-card">
+      <strong>{{ totalCount }}</strong>
+      <span>Всього</span>
+    </article>
+
+    <article class="stat-card ready">
+      <strong>{{ readyCount }}</strong>
+      <span>БГ</span>
+    </article>
+
+    <article class="stat-card danger">
+      <strong>{{ notReadyCount }}</strong>
+      <span>НЕ БГ</span>
+    </article>
+
+    <article class="stat-card repair">
+      <strong>{{ repairCount }}</strong>
+      <span>Ремонт</span>
+    </article>
+  </section>
+
+  <section class="editor-card" *ngIf="canCreateWeapon() || editingId">
+    <div class="editor-head">
+      <div>
+        <span>{{ editingId ? 'Редагування' : 'Нове Озброєння' }}</span>
+        <h2>{{ editingId ? 'Оновити картку' : 'Додати Озброєння' }}</h2>
+      </div>
+
+      <button
+        type="button"
+        class="ghost-button"
+        *ngIf="editingId"
+        (click)="cancelEdit()"
+      >
+        Скасувати
+      </button>
+    </div>
+
+    <form class="equipment-form" (ngSubmit)="save()">
+      <select name="weaponModelId" [(ngModel)]="form.weaponModelId">
+        <option value="">Оберіть зразок</option>
+        <option *ngFor="let model of weaponModels" [value]="model.id">
+          {{ model.name }} · {{ model.systemType }}
+        </option>
+      </select>
+
+      <input
+        name="serialNumber"
+        [(ngModel)]="form.serialNumber"
+        placeholder="№ зразку"
+      />
+
+      <input
+        name="callsign"
+        [(ngModel)]="form.callsign"
+        placeholder="Позивний"
+      />
+
+      <select
+        name="locationType"
+        [(ngModel)]="form.locationType"
+        (ngModelChange)="onLocationTypeChange($event)"
+      >
+        <option value="reserve">В РЗ</option>
+        <option value="fire_position">На точці</option>
+      </select>
+
+      <select
+        *ngIf="form.locationType === 'reserve'"
+        name="unitId"
+        [(ngModel)]="form.unitId"
+      >
+        <option value="">Оберіть підрозділ</option>
+        <option *ngFor="let unit of availableUnits" [value]="unit.id">
+          {{ unit.name }}
+        </option>
+      </select>
+
+      <select
+        *ngIf="form.locationType === 'fire_position'"
+        name="firePositionId"
+        [(ngModel)]="form.firePositionId"
+      >
+        <option value="">Оберіть вільну точку</option>
+        <option
+          *ngFor="let position of getAvailableFirePositions()"
+          [value]="position.id"
+        >
+          {{ position.name }}
+        </option>
+      </select>
+
+      <select name="readinessStatus" [(ngModel)]="form.readinessStatus">
+        <option value="unknown">Невідомо</option>
+        <option value="ready">БГ</option>
+        <option value="not_ready">НЕ БГ</option>
+        <option value="repair">Ремонт</option>
+      </select>
+
+      <input
+        *ngIf="form.readinessStatus !== 'ready'"
+        name="notReadyReason"
+        [(ngModel)]="form.notReadyReason"
+        placeholder="Причина"
+      />
+
+      <button type="submit" class="primary-button" [disabled]="saving">
+        {{ saving ? 'Збереження...' : (editingId ? 'Зберегти' : 'Додати') }}
+      </button>
+    </form>
+  </section>
+
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження СГ">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <div class="ui-state ui-state-error" *ngIf="!loading && errorMessage">
+    <strong>Не вдалося отримати дані</strong>
+    <p>{{ errorMessage }}</p>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </div>
+
+  <section class="equipment-grid" *ngIf="!loading && !errorMessage && visibleItems.length > 0">
+    <article class="equipment-card" *ngFor="let item of visibleItems">
+      <div class="card-top">
+        <span
+          class="status-dot"
+          [class]="getReadinessClass(item.readinessStatus)"
+        ></span>
+
+        <span
+          class="status-label"
+          [class]="getReadinessClass(item.readinessStatus)"
+        >
+          {{ getReadinessLabel(item.readinessStatus) }}
+        </span>
+      </div>
+
+      <h2>{{ item.weaponModel?.name || 'Без зразка' }}</h2>
+
+      <div class="compact-info">
+        <p>
+          <span>№</span>
+          <strong>{{ item.serialNumber || '—' }}</strong>
+        </p>
+
+        <p>
+          <span>Позивний</span>
+          <strong>{{ item.callsign || '—' }}</strong>
+        </p>
+      </div>
+
+      <div
+        class="location-box"
+        [class.on-position]="item.locationType === 'fire_position'"
+      >
+        <span>
+          {{ item.locationType === 'fire_position' ? 'На точці' : 'В РЗ' }}
+        </span>
+
+        <strong>
+          {{
+            item.locationType === 'fire_position'
+              ? (item.firePosition?.name || '—')
+              : (item.unit?.name || '—')
+          }}
+        </strong>
+      </div>
+
+      <div class="reason-box" *ngIf="item.notReadyReason">
+        {{ item.notReadyReason }}
+      </div>
+
+      <div class="card-actions" *ngIf="canEditWeapon(item)">
+        <button
+          type="button"
+          class="ghost-button"
+          (click)="startEdit(item)"
+        >
+          Редагувати
+        </button>
+
+        <button
+          type="button"
+          class="danger-button"
+          (click)="remove(item.id)"
+          [disabled]="deletingId === item.id"
+        >
+          {{ deletingId === item.id ? 'Видалення...' : 'Видалити' }}
+        </button>
+
+<button
+  type="button"
+  class="ghost-button"
+  *ngIf="canEditWeapon(item) && item.locationType === 'fire_position'"
+  (click)="moveToReserve(item)"
+  [disabled]="movingId === item.id"
+>
+  {{ movingId === item.id ? 'Зняття...' : 'Зняти з ВП' }}
+</button>
+
+      </div>
+    </article>
+  </section>
+
+  <div class="ui-state ui-state-empty" *ngIf="!loading && !errorMessage && visibleItems.length === 0">
+    <strong>СГ ще не додані</strong>
+    <p>Додайте перший засіб ураження або перевірте доступ до підрозділу.</p>
+  </div>
+</div>

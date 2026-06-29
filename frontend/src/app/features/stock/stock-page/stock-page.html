@@ -1,0 +1,182 @@
+<div class="eu-page stock-page">
+  <main class="eu-page-content stock-main">
+    <header class="eu-page-header page-header">
+      <div>
+        <h1>Залишки БК</h1>
+        <p>Картки місць зберігання з прихованим вмістом</p>
+      </div>
+
+      <div class="eu-page-actions header-actions">
+        <button type="button" class="ghost-button" (click)="toggleStatsPanel()">Статистика</button>
+        <button type="button" class="ghost-button" (click)="load()" [disabled]="loading || refreshing">
+          {{ refreshing ? 'Оновлення...' : 'Оновити' }}
+        </button>
+      </div>
+    </header>
+
+    <section class="eu-page-toolbar search-card">
+      <input
+        name="searchTerm"
+        [(ngModel)]="searchTerm"
+        placeholder="Пошук ресурсу: маркування, назва..."
+      />
+<select name="selectedResourceType" [(ngModel)]="selectedResourceType">
+  <option value="">Усі типи</option>
+  <option value="shells">Снаряди</option>
+  <option value="charges">Заряди</option>
+  <option value="fuzes">Запалювачі</option>
+  <option value="primers">Капсулі</option>
+</select>
+      <span>
+        Показано складів: {{ filteredItems.length }}
+        <small *ngIf="refreshing"> · оновлення</small>
+      </span>
+    </section>
+
+    <div class="ui-state error" *ngIf="errorMessage && !loading">
+      <span class="ui-state-icon">⚠</span>
+      <strong>Не вдалося отримати залишки БК</strong>
+      <small>{{ errorMessage }}</small>
+      <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+    </div>
+
+    <div class="ui-skeleton-grid" *ngIf="loading && items.length === 0" aria-label="Завантаження залишків БК">
+      <div class="ui-skeleton-card" *ngFor="let item of pageSkeleton">
+        <span class="ui-skeleton-line short"></span>
+        <span class="ui-skeleton-line long"></span>
+        <span class="ui-skeleton-line medium"></span>
+      </div>
+    </div>
+
+    <section class="stock-grid" *ngIf="!loading && !errorMessage && filteredItems.length > 0">
+      <article class="depot-stock-card" *ngFor="let item of filteredItems">
+        <button type="button" class="depot-stock-head" (click)="toggleDepot(item.depot.id)">
+          <div>
+            <h2>{{ item.depot.name }}</h2>
+            <span>{{ getDepotTypeLabel(item.depot.depotType) }}</span>
+          </div>
+
+          <strong>{{ getDepotTotal(item) }}</strong>
+        </button>
+
+        <div class="stock-summary">
+          <span>A: {{ getTypeTotal(item, 'shells') }}</span>
+          <span>B: {{ getTypeTotal(item, 'charges') }}</span>
+          <span>C: {{ getTypeTotal(item, 'fuzes') }}</span>
+          <span>D: {{ getTypeTotal(item, 'primers') }}</span>
+        </div>
+
+        <p class="empty" *ngIf="!hasAnyStock(item)">Немає залишків</p>
+
+        <div class="depot-details" *ngIf="expandedDepotId === item.depot.id">
+          <section *ngIf="getVisibleResources(item.shells, 'shells').length">
+            <h3>Снаряди</h3>
+            <div class="stock-row" *ngFor="let resource of getVisibleResources(item.shells, 'shells')">
+              <span>{{ resource.marking }}</span>
+              <strong>{{ resource.quantity }}</strong>
+            </div>
+          </section>
+
+          <section *ngIf="getVisibleResources(item.charges, 'charges').length">
+            <h3>Заряди</h3>
+            <div class="stock-row" *ngFor="let resource of getVisibleResources(item.charges, 'charges')">
+              <span>{{ resource.marking }}</span>
+              <strong>{{ resource.quantity }}</strong>
+            </div>
+          </section>
+
+          <section *ngIf="getVisibleResources(item.fuzes, 'fuzes').length">
+            <h3>Запалювачі</h3>
+            <div class="stock-row" *ngFor="let resource of getVisibleResources(item.fuzes, 'fuzes')">
+              <span>{{ resource.marking }}</span>
+              <strong>{{ resource.quantity }}</strong>
+            </div>
+          </section>
+
+          <section *ngIf="getVisibleResources(item.primers, 'primers').length">
+            <h3>Капсулі</h3>
+            <div class="stock-row" *ngFor="let resource of getVisibleResources(item.primers, 'primers')">
+              <span>{{ resource.marking }}</span>
+              <strong>{{ resource.quantity }}</strong>
+            </div>
+          </section>
+        </div>
+      </article>
+    </section>
+
+    <div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+      <span class="ui-state-icon">▦</span>
+      <strong>Залишки БК відсутні</strong>
+      <small>Склади ще не мають ресурсів або дані не були заведені.</small>
+    </div>
+
+    <div class="ui-state" *ngIf="!loading && !errorMessage && items.length > 0 && filteredItems.length === 0">
+      <span class="ui-state-icon">⌕</span>
+      <strong>За фільтром нічого не знайдено</strong>
+      <small>Змініть тип ресурсу або очистіть пошук.</small>
+    </div>
+  </main>
+
+  <aside class="stats-panel" *ngIf="statsPanelOpen && !loading">
+    <div class="panel-head">
+      <div>
+        <span>Загальні залишки</span>
+        <h2>{{ getGlobalTotal() }}</h2>
+      </div>
+
+      <button type="button" class="icon-button" (click)="toggleStatsPanel()">×</button>
+    </div>
+
+    <p class="muted">
+      Складів з залишками: {{ getGlobalDepotsCount() }}
+    </p>
+
+    <div class="stat-block">
+      <h3>Снаряди</h3>
+      <strong>{{ getGlobalTypeTotal('shells') }}</strong>
+      <span>позицій: {{ getGlobalTypePositions('shells') }}</span>
+      <div class="top-resources">
+  <div *ngFor="let resource of getTopResources('shells')">
+    <span>{{ resource.marking }}</span>
+    <strong>{{ resource.quantity }}</strong>
+  </div>
+</div>
+    </div>
+
+    <div class="stat-block">
+      <h3>Заряди</h3>
+      <strong>{{ getGlobalTypeTotal('charges') }}</strong>
+      <span>позицій: {{ getGlobalTypePositions('charges') }}</span>
+      <div class="top-resources">
+  <div *ngFor="let resource of getTopResources('charges')">
+    <span>{{ resource.marking }}</span>
+    <strong>{{ resource.quantity }}</strong>
+  </div>
+</div>
+    </div>
+
+    <div class="stat-block">
+      <h3>Запалювачі</h3>
+      <strong>{{ getGlobalTypeTotal('fuzes') }}</strong>
+      <span>позицій: {{ getGlobalTypePositions('fuzes') }}</span>
+      <div class="top-resources">
+  <div *ngFor="let resource of getTopResources('fuzes')">
+    <span>{{ resource.marking }}</span>
+    <strong>{{ resource.quantity }}</strong>
+  </div>
+</div>
+    </div>
+
+    <div class="stat-block">
+      <h3>Капсулі</h3>
+      <strong>{{ getGlobalTypeTotal('primers') }}</strong>
+      <span>позицій: {{ getGlobalTypePositions('primers') }}</span>
+      <div class="top-resources">
+  <div *ngFor="let resource of getTopResources('primers')">
+    <span>{{ resource.marking }}</span>
+    <strong>{{ resource.quantity }}</strong>
+  </div>
+</div>
+    </div>
+  </aside>
+</div>

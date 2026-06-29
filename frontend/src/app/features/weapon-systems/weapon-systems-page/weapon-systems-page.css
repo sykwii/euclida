@@ -1,0 +1,267 @@
+.equipment-page {
+  height: calc(100dvh - 48px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 6px;
+}
+
+.page-header,
+.editor-head,
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-header h1,
+.editor-head h2,
+.equipment-card h2 {
+  margin: 0;
+}
+
+.page-header p,
+.editor-head span {
+  margin: 4px 0 0;
+  color: #94a3b8;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.stat-card,
+.editor-card,
+.equipment-card {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+.stat-card {
+  padding: 16px;
+}
+
+.stat-card strong {
+  display: block;
+  color: #fff;
+  font-size: 28px;
+}
+
+.stat-card span {
+  color: #94a3b8;
+}
+
+.stat-card.ready {
+  border-color: rgba(34, 197, 94, 0.32);
+}
+
+.stat-card.danger {
+  border-color: rgba(239, 68, 68, 0.32);
+}
+
+.stat-card.repair {
+  border-color: rgba(250, 204, 21, 0.32);
+}
+
+.editor-card {
+  padding: 18px;
+}
+
+.equipment-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+  align-items: center;
+}
+
+.equipment-form input,
+.equipment-form select {
+  min-width: 0;
+  width: 100%;
+}
+
+.equipment-form input[name="notReadyReason"] {
+  grid-column: span 2;
+}
+
+.equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+}
+
+.equipment-card {
+  padding: 16px;
+  transition: 0.18s ease;
+}
+
+.equipment-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(46, 230, 214, 0.24);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.status-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 7px;
+  box-shadow: 0 0 24px currentColor;
+}
+
+.status-dot.ready,
+.status-label.ready {
+  color: #00ff88;
+}
+
+.status-dot.ready {
+  background: #00ff88;
+}
+
+.status-dot.danger,
+.status-label.danger {
+  color: #ff4040;
+}
+
+.status-dot.danger {
+  background: #ff4040;
+}
+
+.status-dot.repair,
+.status-label.repair {
+  color: #ffd400;
+}
+
+.status-dot.repair {
+  background: #ffd400;
+}
+
+.status-dot.unknown,
+.status-label.unknown {
+  color: #94a3b8;
+}
+
+.status-dot.unknown {
+  background: #94a3b8;
+}
+
+.status-label {
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.equipment-card h2 {
+  color: #fff;
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+
+.compact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compact-info p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: #94a3b8;
+}
+
+.compact-info strong {
+  color: #e5e7eb;
+  text-align: right;
+}
+
+.reason-box {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.26);
+}
+
+.card-actions {
+  margin-top: 14px;
+}
+
+.primary-button {
+  border-color: rgba(46, 230, 214, 0.58);
+  background: linear-gradient(135deg, rgba(46, 230, 214, 0.22), rgba(46, 230, 214, 0.1));
+  font-weight: 700;
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.danger-button {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.error {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+@media (max-width: 1300px) {
+  .equipment-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.location-box {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.location-box span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.location-box strong {
+  color: #e5e7eb;
+}
+
+.location-box.on-position {
+  border-color: rgba(46, 230, 214, 0.24);
+  background: rgba(46, 230, 214, 0.08);
+}
+

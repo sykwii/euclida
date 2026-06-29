@@ -1,0 +1,208 @@
+<section class="eu-page eu-d-page">
+  <header class="eu-page-header eu-d-hero">
+    <div class="eu-d-hero__copy">
+      <p class="eu-d-eyebrow">ЄВКЛІДА CORE · {{ scopeLabel }}</p>
+      <h1>Поточна обстановка</h1>
+      <p>Ситуація зараз, активні ВГЗ, логістика, повітряна обстановка і останні події в одному робочому екрані.</p>
+    </div>
+
+    <div class="eu-d-sync" [class.eu-d-sync--refreshing]="refreshing">
+      <span class="eu-d-sync__dot"></span>
+      <div>
+        <b>{{ refreshing ? 'Оновлення' : 'Синхронізовано' }}</b>
+        <small>{{ lastSyncLabel }}</small>
+      </div>
+    </div>
+
+    <div class="eu-page-actions eu-d-hero__actions">
+      <button type="button" class="primary-button" routerLink="/service-orders" [queryParams]="{ create: 'true', view: 'cards' }">
+        Створити ВГЗ
+      </button>
+      <button type="button" class="ghost-button" routerLink="/map">Карта</button>
+      <button type="button" class="ghost-button" [disabled]="refreshing" (click)="load()">
+        {{ refreshing ? 'Оновлення…' : 'Оновити' }}
+      </button>
+    </div>
+  </header>
+
+  <div class="eu-d-state eu-d-state--error" *ngIf="errorMessage && !loading">
+    <strong>Не вдалося отримати частину даних</strong>
+    <span>{{ errorMessage }}</span>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </div>
+
+  <div class="eu-d-skeleton" *ngIf="loading" aria-label="Завантаження командного дашборду">
+    <div class="eu-d-skeleton__card" *ngFor="let item of dashboardSkeleton"></div>
+  </div>
+
+  <ng-container *ngIf="!loading">
+    <section class="eu-d-overview" aria-label="Поточна обстановка">
+      <article class="eu-d-status eu-d-status--{{ situationalTone }}">
+        <span class="eu-d-card-label">Ситуація зараз</span>
+        <strong>{{ activeThreats.length + attentionOrders.length + criticalAmmoWarnings }}</strong>
+        <small>подій потребують контролю</small>
+      </article>
+
+      <article
+        class="eu-d-kpi eu-d-kpi--{{ card.tone }}"
+        *ngFor="let card of commandCards; trackBy: trackByCard"
+        [routerLink]="card.route"
+        [queryParams]="card.queryParams || null"
+      >
+        <span>{{ card.label }}</span>
+        <strong>{{ card.value }}</strong>
+        <small>{{ card.hint }}</small>
+      </article>
+    </section>
+
+    <section class="eu-d-main">
+      <article class="eu-d-panel eu-d-panel--missions">
+        <div class="eu-d-panel__head">
+          <div>
+            <span>Активні ВГЗ</span>
+            <h2>Фокус зміни</h2>
+          </div>
+          <a routerLink="/service-orders" [queryParams]="{ view: 'cards' }">Усі ВГЗ</a>
+        </div>
+
+        <div class="eu-d-empty" *ngIf="attentionOrders.length === 0">
+          <b>Критичних ВГЗ немає</b>
+          <span>Активні завдання контролюються у штатному режимі.</span>
+        </div>
+
+        <div class="eu-d-mission-list" *ngIf="attentionOrders.length > 0">
+          <article class="eu-d-mission" *ngFor="let order of attentionOrders" (click)="openOrder(order)">
+            <div class="eu-d-mission__top">
+              <span class="eu-d-badge eu-d-badge--{{ statusClass(order.status) }}">{{ statusLabel(order.status) }}</span>
+              <b>{{ order.orderNumber }}</b>
+              <time>{{ shortTime(order.updatedAt || order.createdAt) }}</time>
+            </div>
+
+            <h3>{{ taskLabel(order.taskType) }}</h3>
+            <p>{{ order.targetSettlement || 'Район не вказано' }}</p>
+
+            <div class="eu-d-mission__facts">
+              <div><span>ВП</span><b>{{ order.selectedFirePosition?.name || 'потрібен підбір' }}</b></div>
+              <div><span>БК</span><b>{{ order.actualQuantity || order.plannedQuantity || '—' }}</b></div>
+              <div><span>Снаряд</span><b>{{ order.selectedShell?.marking || '—' }}</b></div>
+            </div>
+
+            <div class="eu-d-mini-timeline">
+              <span
+                *ngFor="let step of missionTimeline(order); trackBy: trackByTimeline"
+                [class]="'eu-d-mini-step eu-d-mini-step--' + step.state"
+                [title]="step.label + ' · ' + step.time"
+              ></span>
+            </div>
+
+            <footer>
+              <button type="button" class="ghost-button" (click)="openOnMap(order); $event.stopPropagation()">Карта</button>
+              <button type="button" class="primary-button" (click)="openOrder(order); $event.stopPropagation()">Відкрити</button>
+            </footer>
+          </article>
+        </div>
+      </article>
+
+      <aside class="eu-d-column">
+        <article class="eu-d-panel">
+          <div class="eu-d-panel__head eu-d-panel__head--compact">
+            <div>
+              <span>Готовність</span>
+              <h2>ВП і СГ</h2>
+            </div>
+          </div>
+
+          <div class="eu-d-readiness">
+            <div class="eu-d-readiness__row" routerLink="/fire-positions">
+              <div><b>ВП</b><span>{{ readyFirePositions }} / {{ totalFirePositions }}</span></div>
+              <strong>{{ firePositionReadinessRate }}%</strong>
+              <i><em [style.width.%]="firePositionReadinessRate"></em></i>
+            </div>
+            <div class="eu-d-readiness__row" routerLink="/weapon-systems">
+              <div><b>СГ</b><span>{{ readyWeapons }} / {{ totalWeapons }}</span></div>
+              <strong>{{ weaponReadinessRate }}%</strong>
+              <i><em [style.width.%]="weaponReadinessRate"></em></i>
+            </div>
+          </div>
+        </article>
+
+        <article class="eu-d-panel eu-d-panel--logistics eu-d-panel--{{ logisticsRiskLevel }}">
+          <div class="eu-d-panel__head eu-d-panel__head--compact">
+            <div>
+              <span>Логістика</span>
+              <h2>БК і підвіз</h2>
+            </div>
+            <a routerLink="/stock">Склад</a>
+          </div>
+
+          <div class="eu-d-logistics">
+            <div><span>Критичний БК</span><b>{{ criticalAmmoWarnings }}</b></div>
+            <div><span>Попередження</span><b>{{ dashboardWarnings.length }}</b></div>
+            <div><span>План сьогодні</span><b>{{ plannedToday }}</b></div>
+          </div>
+
+          <div class="eu-d-warning-list" *ngIf="dashboardWarnings.length > 0">
+            <p *ngFor="let warning of dashboardWarnings">{{ warning }}</p>
+          </div>
+        </article>
+
+        <article class="eu-d-panel">
+          <div class="eu-d-panel__head eu-d-panel__head--compact">
+            <div>
+              <span>Швидкі дії</span>
+              <h2>Оператор</h2>
+            </div>
+          </div>
+
+          <a
+            class="eu-d-action"
+            *ngFor="let action of quickActions; trackBy: trackByAction"
+            [routerLink]="action.route"
+            [queryParams]="action.queryParams || null"
+          >
+            <div><b>{{ action.label }}</b><span>{{ action.hint }}</span></div>
+            <small *ngIf="action.hotkey">{{ action.hotkey }}</small>
+          </a>
+        </article>
+      </aside>
+    </section>
+
+    <section class="eu-d-bottom">
+      <article class="eu-d-panel">
+        <div class="eu-d-panel__head eu-d-panel__head--compact">
+          <div>
+            <span>Останні події</span>
+            <h2>Жива картина</h2>
+          </div>
+          <a routerLink="/event-logs">Журнал</a>
+        </div>
+
+        <div class="eu-d-activity" *ngIf="recentActivity.length > 0; else noActivity">
+          <div class="eu-d-activity__row eu-d-activity__row--{{ item.tone }}" *ngFor="let item of recentActivity; trackBy: trackByActivity">
+            <time>{{ item.time }}</time>
+            <div><b>{{ item.title }}</b><span>{{ item.details }}</span></div>
+          </div>
+        </div>
+        <ng-template #noActivity>
+          <div class="eu-d-empty"><b>Події відсутні</b></div>
+        </ng-template>
+      </article>
+
+      <article class="eu-d-panel">
+        <div class="eu-d-panel__head eu-d-panel__head--compact">
+          <div>
+            <span>Навантаження ВП</span>
+            <h2>Топ активності</h2>
+          </div>
+          <a routerLink="/analytics">Деталі</a>
+        </div>
+
+        <div class="eu-d-empty" *ngIf="topFirePositions.length === 0"><b>Дані для рейтингу відсутні</b></div>
+        <div class="eu-d-load" *ngFor="let item of topFirePositions">
+          <span>{{ item.name }}</span>
+          <b>{{ item.total }}</b>
+        </div>
+      </article>
+    </section>
+  </ng-container>
+</section>

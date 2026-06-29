@@ -1,0 +1,55 @@
+<h1>Мітки загроз</h1>
+
+<form class="form" (ngSubmit)="create()">
+  <input name="threatType" [(ngModel)]="form.threatType" placeholder="Тип мітки" />
+  <input name="lat" [(ngModel)]="form.lat" placeholder="Lat" />
+  <input name="lng" [(ngModel)]="form.lng" placeholder="Lng" />
+  <button type="submit">Додати</button>
+</form>
+
+<div class="ui-state error" *ngIf="errorMessage && !loading">
+  <span class="ui-state-icon">⚠</span>
+  <strong>Не вдалося отримати мітки загроз</strong>
+  <small>{{ errorMessage }}</small>
+  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+</div>
+
+<div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження загроз">
+  <div class="ui-skeleton-card" *ngFor="let item of pageSkeleton">
+    <span class="ui-skeleton-line short"></span>
+    <span class="ui-skeleton-line long"></span>
+    <span class="ui-skeleton-line medium"></span>
+  </div>
+</div>
+
+<table *ngIf="!loading && !errorMessage && items.length > 0">
+  <thead>
+    <tr>
+      <th>Тип</th>
+      <th>Координати</th>
+      <th>Активна</th>
+      <th>Створено</th>
+      <th></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let item of items">
+      <td>{{ item.threatType }}</td>
+      <td>{{ item.lat }}, {{ item.lng }}</td>
+      <td>{{ item.isActive ? 'Так' : 'Ні' }}</td>
+      <td>{{ item.createdAt | date: 'dd.MM.yyyy HH:mm' }}</td>
+      <td>
+        <button type="button" (click)="remove(item.id)" *ngIf="item.isActive">
+          Видалити
+        </button>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+  <span class="ui-state-icon">◌</span>
+  <strong>Мітки загроз відсутні</strong>
+  <small>Активні повітряні загрози ще не додані.</small>
+</div>

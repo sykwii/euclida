@@ -1,0 +1,12 @@
+.documents-page { padding:24px; color:#e5e7eb; }
+.page-header { margin-bottom:20px; }
+h1 { margin:0 0 6px; font-size:28px; }
+p { color:#9ca3af; }
+.grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:14px; }
+.doc-card { border:1px solid #334155; background:#020617; border-radius:16px; padding:18px; }
+h2 { margin:0 0 8px; font-size:20px; }
+.actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+button { border:1px solid #334155; background:#111827; color:#e5e7eb; border-radius:10px; padding:10px 14px; cursor:pointer; }
+button:disabled { opacity:.6; cursor:wait; }
+.error { padding:14px; border:1px solid #7f1d1d; color:#fecaca; background:#0f172a; border-radius:12px; margin-bottom:14px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }

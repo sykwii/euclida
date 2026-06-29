@@ -1,0 +1,50 @@
+<h1>Запалювачі</h1>
+
+<form class="form" (ngSubmit)="create()">
+  <input name="marking" [(ngModel)]="form.marking" placeholder="Маркування" [disabled]="submitting" />
+
+  <input name="material" [(ngModel)]="form.material" placeholder="Матеріал" [disabled]="submitting" />
+
+  <button type="submit" [disabled]="submitting">{{ submitting ? 'Збереження...' : 'Додати' }}</button>
+</form>
+
+<div class="ui-skeleton-grid" *ngIf="loading">
+  <div class="ui-skeleton-card" *ngFor="let item of [1, 2, 3]">
+    <span class="ui-skeleton-line medium"></span>
+    <span class="ui-skeleton-line long"></span>
+    <span class="ui-skeleton-line short"></span>
+  </div>
+</div>
+
+<div class="ui-state error" *ngIf="!loading && errorMessage">
+  <span class="ui-state-icon">!</span>
+  <strong>{{ errorMessage }}</strong>
+  <small>Перевірте з'єднання із сервером або повторіть запит.</small>
+  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+</div>
+
+<div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+  <span class="ui-state-icon">∅</span>
+  <strong>Запалювачі ще не додані</strong>
+  <small>Додайте перший запис через форму вище.</small>
+</div>
+
+<table *ngIf="!loading && !errorMessage && items.length > 0">
+  <thead>
+    <tr>
+      <th>Маркування</th>
+      <th>Матеріал</th>
+      <th></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let item of items">
+      <td>{{ item.marking }}</td>
+      <td>{{ item.material || '—' }}</td>
+      <td>
+        <button type="button" [disabled]="submitting" (click)="remove(item.id)">Видалити</button>
+      </td>
+    </tr>
+  </tbody>
+</table>

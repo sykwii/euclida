@@ -1,0 +1,243 @@
+<div class="eu-page positions-page">
+  <header class="eu-page-header page-header ui-surface">
+    <div>
+      <p class="eyebrow">ВП</p>
+      <h1>Вогневі позиції</h1>
+      <p>Координати, готовність, локальний БК та прив’язка Озброєння</p>
+    </div>
+
+    <button type="button" class="ghost-button" (click)="load()">Оновити</button>
+  </header>
+
+
+  <section class="stats-grid">
+    <article class="stat-card ui-surface">
+      <strong>{{ totalCount }}</strong>
+      <span>Всього</span>
+    </article>
+
+    <article class="stat-card ready ui-surface">
+      <strong>{{ readyCount }}</strong>
+      <span>БГ</span>
+    </article>
+
+    <article class="stat-card danger ui-surface">
+      <strong>{{ notReadyCount }}</strong>
+      <span>НЕ БГ</span>
+    </article>
+
+    <article class="stat-card sg ui-surface">
+      <strong>{{ withSgCount }}</strong>
+      <span>З Озброєнням</span>
+    </article>
+  </section>
+
+  <section class="editor-card ui-surface">
+    <div class="editor-head">
+      <div>
+        <span>{{ editingId ? 'Редагування' : 'Нова ВП' }}</span>
+        <h2>{{ editingId ? 'Оновити ВП' : 'Додати ВП' }}</h2>
+      </div>
+
+      <button type="button" class="ghost-button" *ngIf="editingId" (click)="cancelEdit()">
+        Скасувати
+      </button>
+    </div>
+
+    <form class="position-form" (ngSubmit)="save()">
+      <input name="name" [(ngModel)]="form.name" placeholder="Назва ВП" />
+
+      <select name="unitId" [(ngModel)]="form.unitId">
+        <option value="">Без підрозділу</option>
+        <option *ngFor="let unit of availableUnits" [value]="unit.id">
+          {{ unit.name }}
+        </option>
+      </select>
+
+      <select name="coordinateMode" [(ngModel)]="form.coordinateMode">
+        <option value="decimal">Decimal</option>
+        <option value="mgrs">MGRS</option>
+      </select>
+
+      <ng-container *ngIf="form.coordinateMode === 'decimal'">
+        <input name="lat" [(ngModel)]="form.lat" placeholder="Широта" />
+        <input name="lng" [(ngModel)]="form.lng" placeholder="Довгота" />
+        <input name="mgrs" [(ngModel)]="form.mgrs" placeholder="MGRS 36U XB 12345 67890" />
+      </ng-container>
+
+      <ng-container *ngIf="form.coordinateMode === 'mgrs'">
+        <input class="wide" name="mgrs" [(ngModel)]="form.mgrs" placeholder="MGRS 36U XB 12345 67890" />
+      </ng-container>
+
+      <input name="mainDirectionUnits" type="number" step="0.01" [(ngModel)]="form.mainDirectionUnits" placeholder="ОН" />
+      <input name="traverseLeftUnits" type="number" step="0.01" [(ngModel)]="form.traverseLeftUnits" placeholder="Доворот ліворуч" />
+      <input name="traverseRightUnits" type="number" step="0.01" [(ngModel)]="form.traverseRightUnits" placeholder="Доворот праворуч" />
+
+      <label class="form-date">
+        <span>Остання ротація</span>
+        <input
+          name="personnelRotationDate"
+          type="date"
+          [(ngModel)]="form.personnelRotationDate"
+        />
+      </label>
+
+      <button type="submit" class="primary-button">
+        {{ editingId ? 'Зберегти' : 'Додати' }}
+      </button>
+    </form>
+  </section>
+
+  <div class="ui-state error" *ngIf="errorMessage && !loading">
+    <span class="ui-state-icon">⚠</span>
+    <strong>Не вдалося отримати дані ВП</strong>
+    <small>{{ errorMessage }}</small>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </div>
+
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження ВП">
+    <div class="ui-skeleton-card" *ngFor="let item of pageSkeleton">
+      <span class="ui-skeleton-line short"></span>
+      <span class="ui-skeleton-line long"></span>
+      <span class="ui-skeleton-line medium"></span>
+      <span class="ui-skeleton-line long"></span>
+    </div>
+  </div>
+
+  <section class="positions-grid" *ngIf="!loading && !errorMessage && ownItems.length > 0">
+    <article class="position-card ui-surface" *ngFor="let item of ownItems">
+      <div class="card-status-row">
+        <span class="status-label" [class]="getReadinessClass(item.readinessStatus)">
+          <span class="status-dot" [class]="getReadinessClass(item.readinessStatus)"></span>
+          {{ getReadinessLabel(item.readinessStatus) }}
+        </span>
+        <span class="card-code">ВП</span>
+      </div>
+
+      <div class="card-title-row">
+        <h2>{{ item.name }}</h2>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-cell">
+          <span>Підрозділ</span>
+          <strong>{{ item.unit?.name || '—' }}</strong>
+        </div>
+
+        <div class="info-cell">
+          <span>Локальний БК</span>
+          <strong>{{ item.ammoDepot?.name || '—' }}</strong>
+        </div>
+
+        <div class="info-cell coordinate-cell">
+          <span>Decimal</span>
+          <strong>{{ item.lat }}, {{ item.lng }}</strong>
+        </div>
+
+        <div class="info-cell coordinate-cell">
+          <span>MGRS</span>
+          <strong>{{ item.mgrs || '—' }}</strong>
+        </div>
+      </div>
+
+      <div class="position-metrics">
+        <div>
+          <span>Ротація</span>
+          <strong>{{ item.personnelRotationDate ? (item.personnelRotationDate | date:'dd.MM.yyyy') : '—' }}</strong>
+        </div>
+        <div>
+          <span>Днів</span>
+          <strong>{{ getRotationDays(item.personnelRotationDate) }}</strong>
+        </div>
+      </div>
+
+      <div class="weapon-box" *ngIf="item.assignedWeapon; else noWeapon">
+        <div class="weapon-status" [class]="getWeaponReadinessClass(item.assignedWeapon.readinessStatus)">
+          {{ getWeaponReadinessLabel(item.assignedWeapon.readinessStatus) }}
+        </div>
+
+        <div class="weapon-grid">
+          <p>
+            <span>Тип</span>
+            <strong>{{ item.assignedWeapon.weaponModel?.name || '—' }}</strong>
+          </p>
+          <p>
+            <span>№</span>
+            <strong>{{ item.assignedWeapon.serialNumber || '—' }}</strong>
+          </p>
+          <p>
+            <span>Позивний</span>
+            <strong>{{ item.assignedWeapon.callsign || '—' }}</strong>
+          </p>
+          <p>
+            <span>Підрозділ</span>
+            <strong>{{ item.assignedWeapon.unit?.name || '—' }}</strong>
+          </p>
+        </div>
+      </div>
+
+      <ng-template #noWeapon>
+        <div class="weapon-empty">
+          <span>Озброєння</span>
+          <strong>Не призначене</strong>
+        </div>
+      </ng-template>
+
+      <div class="reason-box" *ngIf="item.notReadyReason">
+        {{ item.notReadyReason }}
+      </div>
+
+      <div class="card-actions">
+        <button type="button" class="ghost-button" *ngIf="item.canEdit" (click)="startEdit(item.id)">
+          Редагувати
+        </button>
+
+        <button type="button" class="danger-button" *ngIf="item.canEdit" (click)="remove(item.id)">
+          Видалити
+        </button>
+      </div>
+    </article>
+  </section>
+
+  <section class="foreign-section" *ngIf="foreignGroups.length > 0">
+    <h2>ВП інших підрозділів</h2>
+
+    <article class="foreign-group" *ngFor="let group of foreignGroups">
+      <button
+        type="button"
+        class="foreign-group-head"
+        (click)="toggleForeignGroup(group.unitId)"
+      >
+        <span>{{ group.unitName }}</span>
+        <strong>{{ group.items.length }}</strong>
+        <b>{{ isForeignGroupOpen(group.unitId) ? '−' : '+' }}</b>
+      </button>
+
+      <div class="foreign-list" *ngIf="isForeignGroupOpen(group.unitId)">
+        <div class="foreign-position" *ngFor="let item of group.items">
+          <strong>{{ item.name }}</strong>
+
+          <span>
+            {{ item.hasSg ? 'СГ є' : 'СГ немає' }}
+          </span>
+
+          <em [class.ready]="isPositionAvailableForTransfer(item)">
+            {{ isPositionAvailableForTransfer(item) ? 'Доступна для зайняття' : 'Зайнята' }}
+          </em>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+    <span class="ui-state-icon">◎</span>
+    <strong>ВП ще не додані</strong>
+    <small>Додайте першу вогневу позицію або оновіть сторінку.</small>
+  </div>
+
+  <div class="ui-state" *ngIf="!loading && !errorMessage && items.length > 0 && ownItems.length === 0">
+    <span class="ui-state-icon">◌</span>
+    <strong>Немає ВП у вашому підрозділі</strong>
+    <small>Доступні позиції інших підрозділів винесені нижче окремими групами.</small>
+  </div>
+</div>

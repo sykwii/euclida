@@ -1,0 +1,829 @@
+<div class="eu-page orders-page">
+  <header class="eu-page-header page-header">
+    <div>
+      <h1>Вогневі завдання</h1>
+      <p>Створення, підбір ВП, відправлення на ПУВБ і контроль виконання</p>
+    </div>
+
+    <div class="eu-page-actions header-actions">
+      <select
+        name="problemFilter"
+        [ngModel]="problemFilter"
+        (ngModelChange)="setProblemFilter($event)"
+        title="Швидкий фільтр"
+      >
+        <option value="">Усі активні</option>
+        <option value="needs_action">Потребують дії</option>
+        <option value="overdue">Прострочені</option>
+        <option value="today">Сьогодні</option>
+        <option value="no_position">Без ВП</option>
+        <option value="no_assignee">Без виконавця</option>
+        <option value="long_progress">Довго в роботі</option>
+        <option value="rejected">Відхилені</option>
+        <option value="in_progress">У роботі</option>
+      </select>
+
+      <div class="view-switch">
+        <button type="button" [class.active]="viewMode === 'cards'" (click)="setViewMode('cards')">Картки</button>
+        <button type="button" [class.active]="viewMode === 'list'" (click)="setViewMode('list')">Список</button>
+      </div>
+
+      <div class="target-date-filter" title="Фільтр вогневих завдань за датою і часом">
+        <label>
+          З
+          <input type="datetime-local" name="targetDateFrom" [(ngModel)]="targetDateFilter.from" />
+        </label>
+        <label>
+          По
+          <input type="datetime-local" name="targetDateTo" [(ngModel)]="targetDateFilter.to" />
+        </label>
+        <button type="button" class="ghost-button compact-filter-button" (click)="setTodayDateFilter()">Сьогодні</button>
+        <button type="button" class="ghost-button compact-filter-button" (click)="clearDateFilter()">Усі</button>
+      </div>
+
+      <button type="button" class="primary-button" (click)="openCreateModal()">
+        Додати вогневе завдання
+      </button>
+
+      <button type="button" class="ghost-button" (click)="load()">
+        Оновити
+      </button>
+    </div>
+  </header>
+
+  <div class="ui-state error" *ngIf="errorMessage && !loading && !createModalOpen && !cancelModalOrder && !completeModalOrder && !rejectModalOrder">
+    <span class="ui-state-icon">!</span>
+    <strong>Не вдалося отримати дані</strong>
+    <small>{{ errorMessage }}</small>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </div>
+
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження ВГЗ">
+    <div class="ui-skeleton-card" *ngFor="let item of pageSkeleton">
+      <span class="ui-skeleton-line short"></span>
+      <span class="ui-skeleton-line long"></span>
+      <span class="ui-skeleton-line medium"></span>
+      <span class="ui-skeleton-line long"></span>
+    </div>
+  </div>
+
+  <section class="orders-grid" [class.list-view]="viewMode === 'list'" *ngIf="!loading && !errorMessage && activeItems.length > 0">
+    <div class="orders-list">
+    <article
+      class="order-card"
+      [id]="'service-order-' + item.id"
+      [class.is-focused]="focusedOrderId === item.id"
+      *ngFor="let item of activeItems"
+    >
+      <div class="card-top">
+        <span class="status-label" [class]="getStatusClass(item.status)">
+          {{ getStatusLabel(item.status) }}
+        </span>
+
+        <strong>{{ item.orderNumber }}</strong>
+      </div>
+
+      <h2>{{ getTaskTypeLabel(item.taskType) }}</h2>
+
+      <p class="operator-hint">
+        {{ getOperatorHint(item) }}
+      </p>
+
+      <div class="order-summary-grid">
+        <p>
+          <span>Ціль</span>
+          <strong>{{ item.targetSettlement || '—' }}</strong>
+        </p>
+
+        <p class="coordinate-cell coordinate-compact">
+          <span>Decimal</span>
+          <strong>{{ getDecimalCoordinates(item) }}</strong>
+        </p>
+
+        <p class="coordinate-cell coordinate-compact mgrs-cell">
+          <span>MGRS</span>
+          <strong>{{ getMgrsCoordinates(item) }}</strong>
+        </p>
+
+        <p>
+          <span>ВП</span>
+          <strong>{{ item.selectedFirePosition?.name || 'не обрано' }}</strong>
+        </p>
+
+        <p>
+          <span>БК</span>
+          <strong>{{ item.plannedQuantity }} / {{ item.actualQuantity || '—' }}</strong>
+        </p>
+
+        <p>
+          <span>Створено</span>
+          <strong>{{ formatKyivDateTime(item.createdAt) }}</strong>
+        </p>
+      </div>
+
+      <div class="ammo-chips" *ngIf="item.selectedShell || item.selectedCharge || item.selectedZone">
+        <span class="ammo-chip shell">Снаряд: {{ item.selectedShell?.marking || '—' }}</span>
+        <span class="ammo-chip charge">Заряд: {{ item.selectedCharge?.marking || '—' }}</span>
+        <span class="ammo-chip zone">{{ getSelectedZoneLabel(item) }}</span>
+      </div>
+
+      <div class="card-actions">
+        <button type="button" class="ghost-button" (click)="showOnMap(item); $event.stopPropagation()">
+          Показати на карті
+        </button>
+
+        <button
+          type="button"
+          class="primary-button next-action"
+          *ngIf="hasPrimaryAction(item)"
+          (click)="runPrimaryAction(item); $event.stopPropagation()"
+        >
+          {{ getPrimaryActionLabel(item) }}
+        </button>
+
+        <button type="button" class="ghost-button" (click)="toggleActions(item); $event.stopPropagation()">
+          Дії
+        </button>
+
+        <div class="actions-menu" *ngIf="openedActionsOrderId === item.id">
+          <button
+            type="button"
+            *ngIf="canControlOrder() && (item.status === 'draft' || item.status === 'proposed')"
+            (click)="loadSuggestions(item); closeActions(); $event.stopPropagation()"
+          >
+            Підібрати точку
+          </button>
+
+          <button
+            type="button"
+            *ngIf="canControlOrder() && item.status === 'proposed'"
+            (click)="sendToUnit(item); $event.stopPropagation()"
+          >
+            Надіслати на ПУВБ
+          </button>
+
+          <button
+            type="button"
+            *ngIf="canExecuteOrder(item) && item.status === 'accepted'"
+            (click)="start(item); $event.stopPropagation()"
+          >
+            Почати виконання
+          </button>
+
+          <button
+            type="button"
+            *ngIf="canExecuteOrder(item) && item.status === 'in_progress'"
+            (click)="openCompleteModal(item); closeActions(); $event.stopPropagation()"
+          >
+            Завершити
+          </button>
+
+          <button
+            type="button"
+            class="danger-menu-button"
+            *ngIf="
+              (canControlOrder() || canExecuteOrder(item)) &&
+              (item.status === 'proposed' ||
+              item.status === 'sent' ||
+              item.status === 'accepted' ||
+              item.status === 'in_progress')
+            "
+            (click)="openCancelModal(item); $event.stopPropagation()"
+          >
+            Скасувати
+          </button>
+
+          <button
+            type="button"
+            class="danger-menu-button"
+            *ngIf="canControlOrder() && item.status === 'draft'"
+            (click)="remove(item.id); $event.stopPropagation()"
+          >
+            Видалити
+          </button>
+
+<button
+  type="button"
+  *ngIf="canExecuteOrder(item) && (item.status === 'sent' || item.status === 'sent_to_battery' || item.status === 'sent_to_division')"
+  (click)="accept(item); $event.stopPropagation()"
+>
+  Прийняти
+</button>
+
+<button
+  type="button"
+  class="danger-menu-button"
+  *ngIf="canExecuteOrder(item) && (item.status === 'sent' || item.status === 'sent_to_battery' || item.status === 'sent_to_division')"
+  (click)="openRejectModal(item); $event.stopPropagation()"
+>
+  Відхилити
+</button>
+
+        </div>
+
+         </div>
+    
+
+      <div class="rejection-box" *ngIf="item.status === 'rejected'">
+        <strong>Відхилено</strong>
+        <p>Підрозділ: {{ item.rejectedByUnitName || '—' }}</p>
+        <p>Причина: {{ item.rejectionReason || '—' }}</p>
+        <p>Час: {{ item.rejectedAt ? (item.rejectedAt | date: 'dd.MM.yyyy HH:mm') : '—' }}</p>
+
+        <button type="button" class="primary-button" (click)="reopen(item)">
+          Підібрати іншу ВП
+        </button>
+      </div>
+
+<div class="suggestions-box" *ngIf="selectedOrderId === item.id">
+  <div class="ui-state compact" *ngIf="suggestionsLoading">
+    <span class="ui-state-icon">…</span>
+    <strong>Підбираємо доступні ВП</strong>
+  </div>
+
+  <div class="ui-state compact" *ngIf="!suggestionsLoading && suggestions.length === 0">
+    <span class="ui-state-icon">i</span>
+    <strong>Доступні ВП відсутні</strong>
+    <small>Перевірте готовність ВП, БК та допустиму дальність.</small>
+  </div>
+
+  <div class="suggestion-card" *ngFor="let suggestion of suggestions; let pointIndex = index">
+  <div class="suggestion-head">
+  <div class="suggestion-title">
+    <strong>
+      #{{ pointIndex + 1 }}
+      {{ suggestion.firePosition.name }}
+    </strong>
+
+    <span>
+      {{ suggestion.firePosition.unit?.name || '—' }}
+      · дистанція {{ suggestion.distanceM | number:'1.0-0' }} м
+      · ВГЗ {{ suggestion.completedVgzCount }}
+    </span>
+  </div>
+
+  <div class="suggestion-actions">
+    <b>{{ suggestion.variants.length }} варіант(ів)</b>
+
+    <button
+      type="button"
+      class="ghost-button"
+      (click)="toggleSuggestion(suggestion)"
+    >
+      {{ isSuggestionExpanded(suggestion, pointIndex) ? 'Згорнути' : 'Розкрити' }}
+    </button>
+  </div>
+</div>
+
+    <div class="variant-list" *ngIf="isSuggestionExpanded(suggestion, pointIndex)">
+      <article
+        class="variant-row"
+        *ngFor="let variant of suggestion.variants"
+        [class.recommended]="variant.priority === 1 && pointIndex === 0"
+      >
+        <div>
+          <strong>
+            #{{ variant.priority }}
+            {{ variant.shell.marking }}
+            +
+            {{ variant.charge.marking }}
+          </strong>
+
+          <span>
+            {{ getZoneLabel(variant.zone) }}
+          </span>
+          <small class="variant-reason">
+            {{ getSuggestionReason(suggestion, variant) }}
+          </small>
+        </div>
+
+        <div>
+          <span>Дальність</span>
+          <b>{{ variant.maxRangeM | number:'1.0-0' }} м</b>
+        </div>
+
+        <div>
+          <span>Запас</span>
+          <b>{{ variant.rangeReserveM | number:'1.0-0' }} м</b>
+        </div>
+
+        <div>
+          <span>Залишок</span>
+          <b>{{ variant.availableQuantity | number:'1.0-0' }}</b>
+        </div>
+
+        <button
+          type="button"
+          class="primary-button"
+          *ngIf="item.status === 'draft'"
+          (click)="selectSuggestion(item, suggestion, variant); $event.stopPropagation()"
+        >
+          Обрати
+        </button>
+      </article>
+    </div>
+  </div>
+</div>
+    </article>
+    </div>
+
+  </section>
+
+  <section class="history-section" *ngIf="!loading && !errorMessage">
+    <div class="section-title">
+      <div>
+        <h2>Історія завдань</h2>
+        <p>Завершені та скасовані вогневі завдання</p>
+      </div>
+
+      <div class="history-filters">
+        <input
+          name="historySearch"
+          [(ngModel)]="historyFilters.search"
+          placeholder="Пошук по номеру, району, коментарю..."
+        />
+
+        <input
+          name="historyDateFrom"
+          type="datetime-local"
+          [(ngModel)]="historyFilters.from"
+          title="Історія з"
+        />
+
+        <input
+          name="historyDateTo"
+          type="datetime-local"
+          [(ngModel)]="historyFilters.to"
+          title="Історія по"
+        />
+
+        <select name="historyStatus" [(ngModel)]="historyFilters.status">
+          <option value="">Усі статуси</option>
+          <option value="completed">Завершені</option>
+          <option value="cancelled">Скасовані</option>
+        </select>
+
+        <select name="historyResultType" [(ngModel)]="historyFilters.resultType">
+          <option value="">Усі результати</option>
+          <option value="mining">Мінування</option>
+          <option value="area_denial">Заборона дій</option>
+          <option value="hit">Уражено</option>
+          <option value="destroyed">Знищено</option>
+          <option value="suppression">Подавлення</option>
+          <option value="smoke">Дими</option>
+          <option value="fire">Підпал</option>
+          <option value="illumination">Освітлення</option>
+        </select>
+
+        <button type="button" class="ghost-button" (click)="resetHistoryFilters()">
+          Скинути
+        </button>
+      </div>
+    </div>
+
+    <div class="ui-state compact" *ngIf="historyItems.length === 0">
+      <span class="ui-state-icon">i</span>
+      <strong>Історія ВГЗ відсутня</strong>
+      <small>Завершені та скасовані вогневі завдання з’являться тут.</small>
+    </div>
+
+    <div class="history-list" *ngIf="historyItems.length > 0">
+      <article class="history-row" *ngFor="let item of historyItems">
+       <button type="button" class="history-head" (click)="toggleHistory(item)">
+  <span>{{ item.orderNumber }}</span>
+  <span>{{ item.selectedFirePosition?.name || '—' }}</span>
+  <span>{{ item.targetSettlement || '—' }}</span>
+  <span class="history-coordinates history-coord-stack">
+    <b>{{ getDecimalCoordinates(item) }}</b>
+    <small>MGRS: {{ getMgrsCoordinates(item) }}</small>
+  </span>
+  <span>{{ getResultTypeLabel(item.resultType) }}</span>
+  <span>{{ item.actualQuantity || item.plannedQuantity }}</span>
+  <span>{{ item.completedAt ? formatKyivDateTime(item.completedAt) : '—' }}</span>
+  <strong>⌄</strong>
+</button>
+
+        <div class="history-details" *ngIf="expandedHistoryOrderId === item.id">
+          <p class="wide-history-field coordinate-row">
+            <span>Decimal</span>
+            <strong class="coordinate-value">{{ getDecimalCoordinates(item) }}</strong>
+          </p>
+
+          <p class="wide-history-field coordinate-row">
+            <span>MGRS</span>
+            <strong class="coordinate-value">{{ getMgrsCoordinates(item) }}</strong>
+          </p>
+
+          <p>
+            <span>Район</span>
+            <strong>{{ item.targetSettlement || '—' }}</strong>
+          </p>
+
+<p>
+  <span>ВП</span>
+  <strong>{{ item.selectedFirePosition?.name || '—' }}</strong>
+</p>
+
+<p>
+  <span>Підрозділ</span>
+  <strong>{{ item.selectedFirePosition?.unit?.name || '—' }}</strong>
+</p>
+
+<p>
+  <span>Снаряд</span>
+  <strong>{{ item.selectedShell?.marking || '—' }}</strong>
+</p>
+
+<p>
+  <span>Заряд</span>
+  <strong>{{ item.selectedCharge?.marking || '—' }}</strong>
+</p>
+
+<p>
+  <span>Зона</span>
+  <strong>{{ getSelectedZoneLabel(item) }}</strong>
+</p>
+
+          <p>
+            <span>Планова витрата</span>
+            <strong>{{ item.plannedQuantity }}</strong>
+          </p>
+
+          <p>
+            <span>Фактична витрата</span>
+            <strong>{{ item.actualQuantity || '—' }}</strong>
+          </p>
+
+          <p>
+            <span>Результат</span>
+            <strong>{{ getResultTypeLabel(item.resultType) }}</strong>
+          </p>
+
+          <p>
+            <span>Коментар</span>
+            <strong>{{ item.resultComment || item.rejectionReason || '—' }}</strong>
+          </p>
+
+          <button
+            type="button"
+            class="ghost-button"
+            *ngIf="canEditCompleted(item)"
+            (click)="openCompleteModal(item)"
+          >
+            Редагувати результат
+          </button>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+    <span class="ui-state-icon">+</span>
+    <strong>Вогневі завдання ще не створені</strong>
+    <small>Створіть перше вогневе завдання, щоб запустити підбір ВП і маршрут виконання.</small>
+    <button type="button" class="primary-button" (click)="openCreateModal()">Створити ВГЗ</button>
+  </div>
+
+  <div class="ui-state" *ngIf="!loading && !errorMessage && items.length > 0 && activeItems.length === 0">
+    <span class="ui-state-icon">✓</span>
+    <strong>Активні ВГЗ відсутні</strong>
+    <small>Змініть фільтр або створіть нове вогневе завдання.</small>
+    <button type="button" class="ghost-button" (click)="clearDateFilter(); setProblemFilter('')">Скинути фільтри</button>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="createModalOpen" (click)="onModalBackdropClick()">
+    <section class="modal-card" (click)="onModalCardClick($event)">
+      <header class="modal-header">
+        <div>
+          <span>Нова вогневе завдання · крок {{ createStep }} з 3</span>
+          <h2>
+            {{
+              createStep === 1
+                ? 'Координати'
+                : createStep === 2
+                  ? 'Параметри'
+                  : 'Перевірка'
+            }}
+          </h2>
+        </div>
+
+        <button type="button" class="icon-button" [disabled]="modalSubmitting" (click)="closeCreateModal()">
+          ×
+        </button>
+      </header>
+
+      <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <form class="modal-grid wizard-form" (ngSubmit)="create()">
+        <ng-container *ngIf="createStep === 1">
+        <label>
+          Номер вогневі завдання
+          <input
+            name="orderNumber"
+            [(ngModel)]="form.orderNumber"
+            placeholder="Напр. 127/26"
+          />
+        </label>
+
+        <label>
+          Формат координат
+          <button
+            type="button"
+            class="switch-button"
+            [class.active]="form.coordinateMode === 'mgrs'"
+            (click)="form.coordinateMode = form.coordinateMode === 'decimal' ? 'mgrs' : 'decimal'"
+          >
+            {{ form.coordinateMode === 'decimal' ? 'Lat/Lng' : 'MGRS' }}
+          </button>
+        </label>
+
+        <section class="coordinates-card wide">
+          <div class="coordinates-card-title">Координати цілі</div>
+
+          <ng-container *ngIf="form.coordinateMode === 'decimal'">
+            <label class="coordinate-field">
+              Latitude
+              <input
+                class="coordinate-input"
+                name="targetLat"
+                [(ngModel)]="form.targetLat"
+                placeholder="49.123456"
+              />
+            </label>
+
+            <label class="coordinate-field">
+              Longitude
+              <input
+                class="coordinate-input"
+                name="targetLng"
+                [(ngModel)]="form.targetLng"
+                placeholder="36.654321"
+              />
+            </label>
+          </ng-container>
+
+          <ng-container *ngIf="form.coordinateMode === 'mgrs'">
+            <label class="coordinate-field">
+              MGRS
+              <input
+                class="coordinate-input"
+                name="targetMgrs"
+                [ngModel]="form.targetMgrs"
+                (ngModelChange)="onTargetMgrsInput($event)"
+                (blur)="normalizeFormMgrs()"
+                placeholder="36U XB 11111 22222"
+              />
+            </label>
+            <small class="coordinate-hint" [class.invalid]="form.targetMgrs && !isValidMgrs(form.targetMgrs)">
+              Формат для копіювання: 36U XB 11111 22222
+            </small>
+          </ng-container>
+        </section>
+
+        <label>
+          Район
+          <input name="targetSettlement" [(ngModel)]="form.targetSettlement" placeholder="Н.п. / район" />
+        </label>
+        </ng-container>
+
+        <ng-container *ngIf="createStep === 2">
+        <label>
+          Характер вогневі завдання
+          <select name="taskType" [(ngModel)]="form.taskType">
+            <option value="">Оберіть</option>
+            <option value="service">Бойове обслуговування</option>
+            <option value="training">Навчальна</option>
+            <option value="smoke">Димова завіса</option>
+            <option value="illumination">Освітлення</option>
+            <option value="other">Інше</option>
+          </select>
+        </label>
+
+        <label>
+          Планова витрата
+          <input
+            name="plannedQuantity"
+            type="number"
+            min="1"
+            step="1"
+            [(ngModel)]="form.plannedQuantity"
+          />
+        </label>
+        </ng-container>
+
+        <section class="create-review wide" *ngIf="createStep === 3">
+          <div>
+            <span>Номер</span>
+            <strong>{{ form.orderNumber || '—' }}</strong>
+          </div>
+          <div>
+            <span>Координати</span>
+            <strong>
+              {{
+                form.coordinateMode === 'decimal'
+                  ? form.targetLat + ', ' + form.targetLng
+                  : formatMgrs(form.targetMgrs)
+              }}
+            </strong>
+          </div>
+          <div>
+            <span>Район</span>
+            <strong>{{ form.targetSettlement || '—' }}</strong>
+          </div>
+          <div>
+            <span>Характер</span>
+            <strong>{{ getTaskTypeLabel(form.taskType) }}</strong>
+          </div>
+          <div>
+            <span>Планова витрата</span>
+            <strong>{{ form.plannedQuantity }}</strong>
+          </div>
+        </section>
+
+        <footer class="modal-actions wide">
+          <button type="button" class="ghost-button" *ngIf="createStep === 1" [disabled]="modalSubmitting" (click)="closeCreateModal()">
+            Скасувати
+          </button>
+
+          <button type="button" class="ghost-button" *ngIf="createStep > 1" [disabled]="modalSubmitting" (click)="prevCreateStep()">
+            Назад
+          </button>
+
+          <button type="button" class="primary-button" *ngIf="createStep < 3" [disabled]="modalSubmitting" (click)="nextCreateStep()">
+            Далі
+          </button>
+
+          <button type="submit" class="primary-button" *ngIf="createStep === 3" [disabled]="modalSubmitting">
+            {{ modalSubmitting ? 'Створення...' : 'Створити' }}
+          </button>
+        </footer>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="completeModalOrder" (click)="onModalBackdropClick()">
+    <section class="modal-card" (click)="onModalCardClick($event)">
+      <header class="modal-header">
+        <div>
+          <span>
+            {{ completeModalOrder.status === 'completed' ? 'Редагування результату' : 'Завершення вогневі завдання' }}
+          </span>
+
+          <h2>{{ completeModalOrder.orderNumber }}</h2>
+        </div>
+
+        <button type="button" class="icon-button" [disabled]="modalSubmitting" (click)="closeCompleteModal()">
+          ×
+        </button>
+      </header>
+
+      <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="modal-grid">
+        <label>
+          Початок
+          <input
+            [name]="'modalStartedAt' + completeModalOrder.id"
+            type="datetime-local"
+            [(ngModel)]="getCompleteForm(completeModalOrder).startedAt"
+          />
+        </label>
+
+        <label>
+          Завершення
+          <input
+            [name]="'modalCompletedAt' + completeModalOrder.id"
+            type="datetime-local"
+            [(ngModel)]="getCompleteForm(completeModalOrder).completedAt"
+          />
+        </label>
+
+        <label>
+          Фактична витрата
+          <input
+            [name]="'modalActualQuantity' + completeModalOrder.id"
+            type="number"
+            min="1"
+            step="1"
+            required
+            [(ngModel)]="getCompleteForm(completeModalOrder).actualQuantity"
+          />
+        </label>
+
+        <label>
+          Результат
+          <select
+            [name]="'modalResultType' + completeModalOrder.id"
+            [(ngModel)]="getCompleteForm(completeModalOrder).resultType"
+          >
+            <option value="">Оберіть результат</option>
+            <option value="mining">Мінування</option>
+            <option value="area_denial">Заборона дій</option>
+            <option value="hit">Уражено</option>
+            <option value="destroyed">Знищено</option>
+            <option value="suppression">Подавлення</option>
+            <option value="smoke">Дими</option>
+            <option value="fire">Підпал</option>
+            <option value="illumination">Освітлення</option>
+          </select>
+        </label>
+
+        <label class="wide">
+          Коментар
+          <input
+            [name]="'modalResultComment' + completeModalOrder.id"
+            [(ngModel)]="getCompleteForm(completeModalOrder).resultComment"
+            placeholder="Короткий опис результату"
+          />
+        </label>
+      </div>
+
+      <footer class="modal-actions">
+        <button type="button" class="ghost-button" [disabled]="modalSubmitting" (click)="closeCompleteModal()">
+          Скасувати
+        </button>
+
+        <button type="button" class="primary-button" [disabled]="modalSubmitting" (click)="saveCompleteModal()">
+          {{ modalSubmitting ? 'Збереження...' : 'Зберегти' }}
+        </button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="cancelModalOrder" (click)="onModalBackdropClick()">
+    <section class="modal-card small-modal" (click)="onModalCardClick($event)">
+      <header class="modal-header">
+        <div>
+          <span>Скасування вогневі завдання</span>
+          <h2>{{ cancelModalOrder.orderNumber }}</h2>
+        </div>
+
+        <button type="button" class="icon-button" [disabled]="modalSubmitting" (click)="closeCancelModal()">
+          ×
+        </button>
+      </header>
+
+      <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="modal-grid one-column">
+        <label>
+          Причина скасування
+          <input
+            [name]="'modalCancelReason' + cancelModalOrder.id"
+            [(ngModel)]="cancelReasonByOrderId[cancelModalOrder.id]"
+            placeholder="Наприклад: вогневе завдання втратила актуальність"
+          />
+        </label>
+      </div>
+
+      <footer class="modal-actions">
+        <button type="button" class="ghost-button" [disabled]="modalSubmitting" (click)="closeCancelModal()">
+          Назад
+        </button>
+
+        <button type="button" class="danger-button" [disabled]="modalSubmitting" (click)="saveCancelModal()">
+          {{ modalSubmitting ? 'Скасування...' : 'Скасувати вогневе завдання' }}
+        </button>
+      </footer>
+    </section>
+  </div>
+
+<div class="modal-backdrop" *ngIf="rejectModalOrder" (click)="onModalBackdropClick()">
+  <section class="modal-card small-modal" (click)="onModalCardClick($event)">
+    <header class="modal-header">
+      <div>
+        <span>Відхилення вогневі завдання</span>
+        <h2>{{ rejectModalOrder.orderNumber }}</h2>
+      </div>
+
+      <button type="button" class="icon-button" [disabled]="modalSubmitting" (click)="closeRejectModal()">
+        ×
+      </button>
+    </header>
+
+    <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+    <div class="modal-grid one-column">
+      <label>
+        Причина відхилення
+        <input
+          [name]="'modalRejectReason' + rejectModalOrder.id"
+          [(ngModel)]="rejectReasonByOrderId[rejectModalOrder.id]"
+          placeholder="Вкажіть причину відхилення"
+        />
+      </label>
+    </div>
+
+    <footer class="modal-actions">
+      <button type="button" class="ghost-button" [disabled]="modalSubmitting" (click)="closeRejectModal()">
+        Назад
+      </button>
+
+      <button type="button" class="danger-button" [disabled]="modalSubmitting" (click)="saveRejectModal()">
+        {{ modalSubmitting ? 'Відхилення...' : 'Відхилити' }}
+      </button>
+    </footer>
+  </section>
+</div>
+
+</div>

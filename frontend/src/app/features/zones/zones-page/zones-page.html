@@ -1,0 +1,59 @@
+<h1>Зони</h1>
+
+<form class="form" (ngSubmit)="create()">
+  <select name="weaponModelId" [(ngModel)]="form.weaponModelId" [disabled]="submitting || loading">
+    <option value="">Оберіть зразок</option>
+    <option *ngFor="let model of weaponModels" [value]="model.id">
+      {{ model.name }}
+    </option>
+  </select>
+
+  <input name="zoneNumber" type="number" min="1" [(ngModel)]="form.zoneNumber" placeholder="Номер зони" [disabled]="submitting" />
+  <input name="distanceFromM" type="number" min="0" [(ngModel)]="form.distanceFromM" placeholder="Від, м" [disabled]="submitting" />
+  <input name="distanceToM" type="number" min="0" [(ngModel)]="form.distanceToM" placeholder="До, м" [disabled]="submitting" />
+
+  <button type="submit" [disabled]="submitting || loading">{{ submitting ? 'Збереження...' : 'Додати' }}</button>
+</form>
+
+<div class="ui-skeleton-grid" *ngIf="loading">
+  <div class="ui-skeleton-card" *ngFor="let item of [1, 2, 3]">
+    <span class="ui-skeleton-line medium"></span>
+    <span class="ui-skeleton-line long"></span>
+    <span class="ui-skeleton-line short"></span>
+  </div>
+</div>
+
+<div class="ui-state error" *ngIf="!loading && errorMessage">
+  <span class="ui-state-icon">!</span>
+  <strong>{{ errorMessage }}</strong>
+  <small>Перевірте з'єднання із сервером або повторіть запит.</small>
+  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+</div>
+
+<div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
+  <span class="ui-state-icon">∅</span>
+  <strong>Зони ще не додані</strong>
+  <small>Додайте зони дальності для зразків озброєння.</small>
+</div>
+
+<table *ngIf="!loading && !errorMessage && items.length > 0">
+  <thead>
+    <tr>
+      <th>Зразок</th>
+      <th>Зона</th>
+      <th>Від, м</th>
+      <th>До, м</th>
+      <th></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let item of items">
+      <td>{{ item.weaponModel?.name || item.weaponModelId }}</td>
+      <td>{{ item.zoneNumber }}</td>
+      <td>{{ item.distanceFromM }}</td>
+      <td>{{ item.distanceToM }}</td>
+      <td><button type="button" [disabled]="submitting" (click)="remove(item.id)">Видалити</button></td>
+    </tr>
+  </tbody>
+</table>

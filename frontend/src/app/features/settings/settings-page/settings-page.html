@@ -1,0 +1,29 @@
+<h1>Налаштування карти</h1>
+
+<div class="ui-skeleton-list" *ngIf="loading" aria-label="Завантаження налаштувань">
+  <span></span>
+  <span></span>
+</div>
+
+<div class="ui-state ui-state-error" *ngIf="!loading && errorMessage">
+  <strong>Не вдалося отримати дані</strong>
+  <p>{{ errorMessage }}</p>
+  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+</div>
+
+<p class="ui-inline-success" *ngIf="successMessage">{{ successMessage }}</p>
+
+<form class="form" *ngIf="!loading" (ngSubmit)="save()">
+  <label>
+    Радіус впливу загрози, м
+    <input
+      name="airThreatRadiusM"
+      type="number"
+      min="1"
+      [(ngModel)]="form.airThreatRadiusM"
+      [disabled]="saving"
+    />
+  </label>
+
+  <button type="submit" [disabled]="saving">{{ saving ? 'Збереження...' : 'Зберегти' }}</button>
+</form>

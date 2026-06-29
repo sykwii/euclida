@@ -1,0 +1,26 @@
+.form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+select,
+button {
+  padding: 8px 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+th {
+  background: #f3f3f3;
+}

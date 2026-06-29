@@ -1,0 +1,146 @@
+<section class="mission-page">
+  <header class="mission-header ui-surface">
+    <div>
+      <p class="eyebrow">ВГЗ</p>
+      <h1>Вогневі завдання</h1>
+      <p class="subtitle">Єдиний формат карток: статус, ціль, ВП, засіб, БК і швидкий перехід у деталі.</p>
+    </div>
+
+    <button type="button" class="ghost-button" (click)="load(false)">
+      {{ refreshing ? 'Оновлення...' : 'Оновити' }}
+    </button>
+  </header>
+
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження ВГЗ">
+    <article class="ui-skeleton-card" *ngFor="let row of [1, 2, 3]">
+      <span></span>
+      <strong></strong>
+      <small></small>
+    </article>
+  </div>
+
+  <section class="ui-state-block ui-state-error" *ngIf="errorMessage && !loading">
+    <span class="ui-state-icon">!</span>
+    <h2>Не вдалося отримати дані</h2>
+    <p>{{ errorMessage }}</p>
+    <button type="button" class="ghost-button" (click)="load(true)">Повторити</button>
+  </section>
+
+  <div *ngIf="!loading && !errorMessage" class="mission-layout">
+    <div class="mission-grid">
+      <article
+        *ngFor="let item of items"
+        class="mission-card ui-surface"
+        [class.selected]="selectedItem?.id === item.id"
+      >
+        <div class="card-status-row">
+          <span class="status-pill" [ngClass]="getStatusClass(item.status)">
+            {{ getStatusLabel(item.status) }}
+          </span>
+          <span class="card-time">{{ item.missionDatetime | date: 'dd.MM HH:mm' }}</span>
+        </div>
+
+        <div class="card-title-row">
+          <div class="card-title-main">
+            <span class="card-code">ВГЗ #{{ item.targetNumber || '—' }}</span>
+            <h2>{{ item.targetType || 'Вогневе завдання' }}</h2>
+          </div>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-cell">
+            <span>ВП</span>
+            <strong>{{ item.firePosition?.name || 'Не визначено' }}</strong>
+          </div>
+          <div class="info-cell">
+            <span>Засіб</span>
+            <strong>{{ getWeaponLabel(item) }}</strong>
+          </div>
+          <div class="info-cell">
+            <span>Снаряд</span>
+            <strong>{{ item.shell?.marking || '—' }}</strong>
+          </div>
+          <div class="info-cell">
+            <span>Заряд</span>
+            <strong>{{ item.charge?.marking || '—' }}</strong>
+          </div>
+        </div>
+
+        <div class="ammo-summary">
+          <div>
+            <span>План</span>
+            <strong>{{ getPlannedTotal(item) }}</strong>
+          </div>
+          <div>
+            <span>Факт</span>
+            <strong>{{ getActualTotal(item) }}</strong>
+          </div>
+        </div>
+
+        <div class="mission-card__actions">
+          <button type="button" (click)="select(item)">Докладніше</button>
+        </div>
+      </article>
+
+      <section *ngIf="items.length === 0" class="ui-state-block">
+        <span class="ui-state-icon">∅</span>
+        <h2>Немає активних ВГЗ</h2>
+        <p>Вогневі завдання ще не додані або не потрапляють у поточний перегляд.</p>
+      </section>
+    </div>
+
+    <aside *ngIf="selectedItem" class="mission-details ui-surface">
+      <button type="button" class="close-button" (click)="closeDetails()">×</button>
+
+      <p class="eyebrow">Деталі ВГЗ</p>
+      <h2>Вогневе завдання #{{ selectedItem.targetNumber || '—' }}</h2>
+
+      <dl>
+        <div>
+          <dt>Дата/час</dt>
+          <dd>{{ selectedItem.missionDatetime | date: 'dd.MM.yyyy HH:mm' }}</dd>
+        </div>
+        <div>
+          <dt>Статус</dt>
+          <dd>{{ getStatusLabel(selectedItem.status) }}</dd>
+        </div>
+        <div>
+          <dt>Підрозділ ВП</dt>
+          <dd>{{ selectedItem.executingUnit?.name || '—' }}</dd>
+        </div>
+        <div>
+          <dt>ВП</dt>
+          <dd>{{ selectedItem.firePosition?.name || '—' }}</dd>
+        </div>
+        <div>
+          <dt>Засіб</dt>
+          <dd>{{ getWeaponLabel(selectedItem) }}</dd>
+        </div>
+        <div>
+          <dt>Населений пункт</dt>
+          <dd>{{ selectedItem.targetSettlement || '—' }}</dd>
+        </div>
+      </dl>
+
+      <section class="details-block">
+        <h3>Плановий БК</h3>
+        <div class="details-ammo-grid">
+          <span>Снаряди: {{ selectedItem.shellQuantity || 0 }}</span>
+          <span>Заряди: {{ selectedItem.chargeQuantity || 0 }}</span>
+          <span>Капсулі: {{ selectedItem.primerQuantity || 0 }}</span>
+          <span>Підривники: {{ selectedItem.fuzeQuantity || 0 }}</span>
+        </div>
+      </section>
+
+      <section class="details-block">
+        <h3>Фактичний розхід</h3>
+        <div class="details-ammo-grid">
+          <span>Снаряди: {{ selectedItem.actualShellQuantity || 0 }}</span>
+          <span>Заряди: {{ selectedItem.actualChargeQuantity || 0 }}</span>
+          <span>Капсулі: {{ selectedItem.actualPrimerQuantity || 0 }}</span>
+          <span>Підривники: {{ selectedItem.actualFuzeQuantity || 0 }}</span>
+        </div>
+      </section>
+    </aside>
+  </div>
+</section>

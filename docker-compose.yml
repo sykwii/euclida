@@ -1,0 +1,17 @@
+services:
+  euclida-postgres:
+    image: postgis/postgis:17-3.5
+    container_name: euclida-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: euclida_user
+      POSTGRES_PASSWORD: euclida_password
+      POSTGRES_DB: euclida_situation_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - euclida_postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+
+volumes:
+  euclida_postgres_data:

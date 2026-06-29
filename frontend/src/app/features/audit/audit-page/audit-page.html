@@ -1,0 +1,46 @@
+<section class="audit-page">
+  <header class="page-header">
+    <div>
+      <h1>Аудит</h1>
+      <p>Хто, коли і що зробив у системі. Історія не видаляється.</p>
+    </div>
+    <button type="button" (click)="load()">Оновити</button>
+  </header>
+
+  <div class="filters">
+    <input [(ngModel)]="q" placeholder="Пошук" />
+    <input [(ngModel)]="eventType" placeholder="Тип події" />
+    <input [(ngModel)]="entityType" placeholder="Сутність" />
+    <button type="button" (click)="load()">Фільтр</button>
+  </div>
+
+  <div class="ui-skeleton-list" *ngIf="loading" aria-label="Завантаження аудиту">
+    <span *ngFor="let row of [1, 2, 3, 4, 5]"></span>
+  </div>
+
+  <section class="ui-state-block ui-state-error" *ngIf="errorMessage && !loading">
+    <span class="ui-state-icon">!</span>
+    <h2>Не вдалося отримати дані</h2>
+    <p>{{ errorMessage }}</p>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </section>
+
+  <section class="ui-state-block" *ngIf="!loading && !errorMessage && logs.length === 0">
+    <span class="ui-state-icon">∅</span>
+    <h2>Події аудиту відсутні</h2>
+    <p>Коли користувачі виконуватимуть дії, вони з'являться тут.</p>
+  </section>
+
+  <table *ngIf="!loading && !errorMessage && logs.length > 0">
+    <thead><tr><th>Час</th><th>Користувач</th><th>Подія</th><th>Сутність</th><th>Деталі</th></tr></thead>
+    <tbody>
+      <tr *ngFor="let log of logs">
+        <td>{{ log.createdAt | date:'dd.MM.yyyy HH:mm:ss':'Europe/Kyiv' }}</td>
+        <td>{{ log.actorName || log.actorLogin || '—' }}</td>
+        <td><b>{{ log.title }}</b><br /><small>{{ log.eventType }} / {{ log.action }}</small></td>
+        <td>{{ log.entityType || '—' }}<br /><small>{{ log.entityName || log.entityId || '' }}</small></td>
+        <td>{{ log.details || '—' }}</td>
+      </tr>
+    </tbody>
+  </table>
+</section>

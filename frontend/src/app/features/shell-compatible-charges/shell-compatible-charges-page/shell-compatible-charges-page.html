@@ -1,0 +1,52 @@
+<h1>Сумісність: снаряд ↔ заряд</h1>
+
+<form class="form" (ngSubmit)="create()">
+  <select name="shellId" [(ngModel)]="form.shellId">
+    <option value="">Оберіть снаряд</option>
+    <option *ngFor="let shell of shells" [value]="shell.id">
+      {{ shell.marking }}
+    </option>
+  </select>
+
+  <select name="chargeId" [(ngModel)]="form.chargeId">
+    <option value="">Оберіть заряд</option>
+    <option *ngFor="let charge of charges" [value]="charge.id">
+      {{ charge.marking }}
+    </option>
+  </select>
+
+  <input
+    name="maxRangeM"
+    type="number"
+    min="1"
+    [(ngModel)]="form.maxRangeM"
+    placeholder="Макс. дальність, м"
+  />
+
+  <button type="submit">Додати</button>
+</form>
+
+<p *ngIf="loading">Завантаження...</p>
+<p *ngIf="errorMessage">{{ errorMessage }}</p>
+
+<table *ngIf="!loading && !errorMessage">
+  <thead>
+    <tr>
+      <th>Снаряд</th>
+      <th>Заряд</th>
+      <th>Макс. дальність, м</th>
+      <th></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let item of items">
+      <td>{{ item.shell?.marking || item.shellId }}</td>
+      <td>{{ item.charge?.marking || item.chargeId }}</td>
+      <td>{{ item.maxRangeM }}</td>
+      <td>
+        <button type="button" (click)="remove(item.id)">Видалити</button>
+      </td>
+    </tr>
+  </tbody>
+</table>

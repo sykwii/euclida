@@ -1,0 +1,42 @@
+<section class="recommendations-page">
+  <header class="page-header">
+    <div>
+      <h1>Рекомендації</h1>
+      <p>Контроль помилок користувача, нелогічних дій і проблем даних.</p>
+    </div>
+    <button type="button" (click)="load()" [disabled]="loading">Оновити</button>
+  </header>
+
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження рекомендацій">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <div class="ui-state ui-state-error" *ngIf="!loading && errorMessage">
+    <strong>Не вдалося отримати дані</strong>
+    <p>{{ errorMessage }}</p>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </div>
+
+  <ng-container *ngIf="dashboard && !loading && !errorMessage">
+    <div class="cards">
+      <button type="button" class="card" (click)="setFilter('all')"><b>{{ dashboard.total }}</b><span>Усього</span></button>
+      <button type="button" class="card critical" (click)="setFilter('critical')"><b>{{ dashboard.critical }}</b><span>Критично</span></button>
+      <button type="button" class="card warning" (click)="setFilter('warning')"><b>{{ dashboard.warning }}</b><span>Увага</span></button>
+      <button type="button" class="card info" (click)="setFilter('info')"><b>{{ dashboard.info }}</b><span>Інфо</span></button>
+    </div>
+
+    <div class="list">
+      <article class="item" *ngFor="let item of filteredItems()" [class.critical]="item.level === 'critical'" [class.warning]="item.level === 'warning'" [class.info]="item.level === 'info'">
+        <div class="item-head">
+          <strong>{{ item.title }}</strong>
+          <span>{{ levelLabel(item.level) }}</span>
+        </div>
+        <p>{{ item.description }}</p>
+        <small>Модуль: {{ item.module }} · Дія: {{ item.action }}</small>
+      </article>
+      <div class="ui-state ui-state-empty" *ngIf="filteredItems().length === 0"><strong>Активних рекомендацій немає</strong><p>Система не виявила критичних або нелогічних дій.</p></div>
+    </div>
+  </ng-container>
+</section>

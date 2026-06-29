@@ -1,0 +1,166 @@
+<div class="users-page">
+  <header class="page-header">
+    <div>
+      <h1>Персонал</h1>
+      <p>Створення користувачів, ролі, рівні доступу та прив’язка до підрозділів</p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="primary-button" (click)="openCreate()">
+        Додати користувача
+      </button>
+
+      <button type="button" class="ghost-button" (click)="load()">
+        Оновити
+      </button>
+    </div>
+  </header>
+
+  <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+  <p class="muted" *ngIf="loading">Завантаження...</p>
+
+  <section class="users-grid" *ngIf="!loading">
+    <article class="user-card" *ngFor="let user of items">
+      <div class="card-top">
+        <div>
+          <strong>{{ user.login }}</strong>
+          <span>{{ user.fullName || '—' }}</span>
+        </div>
+
+        <span class="status-label" [class.inactive]="!user.isActive">
+          {{ user.isActive ? 'Активний' : 'Вимкнений' }}
+        </span>
+      </div>
+
+      <div class="info-grid">
+        <p>
+          <span>Роль</span>
+          <strong>{{ getRoleLabel(user.role) }}</strong>
+        </p>
+
+        <p>
+          <span>Рівень</span>
+          <strong>{{ getScopeLabel(user.scope) }}</strong>
+        </p>
+
+        <p>
+          <span>Підрозділ</span>
+          <strong>{{ user.unit?.name || '—' }}</strong>
+        </p>
+
+        <p>
+          <span>Створено</span>
+          <strong>{{ user.createdAt | date: 'dd.MM.yyyy HH:mm' }}</strong>
+        </p>
+      </div>
+
+      <div class="card-actions">
+        <button type="button" class="ghost-button" (click)="openEdit(user)">
+          Редагувати
+        </button>
+
+        <button type="button" class="ghost-button" (click)="toggleActive(user)">
+          {{ user.isActive ? 'Вимкнути' : 'Увімкнути' }}
+        </button>
+
+        <button type="button" class="danger-button" (click)="remove(user)">
+          Видалити
+        </button>
+      </div>
+    </article>
+  </section>
+
+  <p class="muted" *ngIf="!loading && items.length === 0">
+    Користувачів ще немає.
+  </p>
+
+  <div class="modal-backdrop" *ngIf="modalOpen" (click)="onModalBackdropClick()">
+    <section class="modal-card" (click)="onModalCardClick($event)">
+      <header class="modal-header">
+        <div>
+          <span>{{ editingUser ? 'Редагування' : 'Новий користувач' }}</span>
+          <h2>{{ editingUser ? editingUser.login : 'Створення користувача' }}</h2>
+        </div>
+
+        <button type="button" class="icon-button" [disabled]="modalSubmitting" (click)="closeModal()">
+          ×
+        </button>
+      </header>
+
+      <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="modal-grid">
+        <label>
+          Логін
+          <input name="login" [(ngModel)]="form.login" />
+        </label>
+
+        <label>
+          Пароль
+          <input
+            name="password"
+            type="password"
+            [(ngModel)]="form.password"
+            [placeholder]="editingUser ? 'Залишити порожнім, якщо не міняти' : 'Пароль'"
+          />
+        </label>
+
+        <label class="wide">
+          ПІБ / позивний
+          <input name="fullName" [(ngModel)]="form.fullName" />
+        </label>
+
+        <label>
+          Роль
+          <select name="role" [(ngModel)]="form.role">
+            <option value="admin">Адміністратор</option>
+            <option value="operator">Оператор</option>
+            <option value="observer">Спостерігач</option>
+          </select>
+        </label>
+
+        <label>
+          Рівень доступу
+          <select
+            name="scope"
+            [(ngModel)]="form.scope"
+            (ngModelChange)="onScopeChange()"
+          >
+            <option value="main">Головний пункт</option>
+            <option value="division">Дивізіон</option>
+            <option value="battery">Батарея</option>
+          </select>
+        </label>
+
+        <label class="wide" *ngIf="form.scope !== 'main'">
+          Підрозділ
+          <select name="unitId" [(ngModel)]="form.unitId">
+            <option value="">Оберіть підрозділ</option>
+            <option *ngFor="let unit of availableUnits" [value]="unit.id">
+  {{ unit.name }}
+</option>
+          </select>
+        </label>
+
+        <label class="checkbox-row wide">
+          <input
+            name="isActive"
+            type="checkbox"
+            [(ngModel)]="form.isActive"
+          />
+          <span>Користувач активний</span>
+        </label>
+      </div>
+
+      <footer class="modal-actions">
+        <button type="button" class="ghost-button" [disabled]="modalSubmitting" (click)="closeModal()">
+          Скасувати
+        </button>
+
+        <button type="button" class="primary-button" [disabled]="modalSubmitting" (click)="save()">
+          {{ modalSubmitting ? 'Збереження...' : 'Зберегти' }}
+        </button>
+      </footer>
+    </section>
+  </div>
+</div>

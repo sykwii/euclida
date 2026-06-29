@@ -1,0 +1,31 @@
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  background: white;
+  border: 1px solid #ddd;
+  padding: 14px;
+  border-radius: 8px;
+}
+
+input,
+button {
+  padding: 8px 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+th {
+  background: #f3f3f3;
+}

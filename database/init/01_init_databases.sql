@@ -1,0 +1,2 @@
+CREATE DATABASE euclida_logistics_db;
+CREATE DATABASE euclida_analytics_db;

@@ -1,0 +1,39 @@
+<div class="login-page">
+  <div class="login-card">
+
+    <span class="login-mark">ЄВКЛІДА</span>
+    <h1>Тактичне скло</h1>
+    <p>Вхід до системи управління</p>
+
+    <div class="error" *ngIf="error">
+      {{ error }}
+    </div>
+
+    <label>
+      Логін
+      <input
+        [(ngModel)]="login"
+        autocomplete="username"
+      />
+    </label>
+
+    <label>
+      Пароль
+      <input
+        type="password"
+        [(ngModel)]="password"
+        autocomplete="current-password"
+      />
+    </label>
+
+    <button
+  type="button"
+  class="primary-button"
+  [disabled]="loading"
+  (click)="submit()"
+>
+  {{ loading ? 'Вхід...' : 'Увійти' }}
+</button>
+
+  </div>
+</div>

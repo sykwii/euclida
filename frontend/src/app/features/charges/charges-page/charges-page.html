@@ -1,0 +1,103 @@
+<h1>Заряди</h1>
+
+<form class="form" (ngSubmit)="create()">
+  <input name="marking" [(ngModel)]="form.marking" placeholder="Маркування" />
+
+  <select name="packagingType" [(ngModel)]="form.packagingType">
+    <option value="модулі">Модулі</option>
+    <option value="картузний">Картузний</option>
+    <option value="унітарний">Унітарний</option>
+  </select>
+
+  <select name="chargeKind" [(ngModel)]="form.chargeKind">
+    <option value="unit">Одиничний</option>
+    <option value="modular">Модульний</option>
+  </select>
+
+  <input
+    name="measurementUnit"
+    [(ngModel)]="form.measurementUnit"
+    placeholder="Одиниця виміру"
+  />
+
+  <ng-container *ngIf="form.chargeKind === 'modular'">
+    <input
+      name="modulesPerCharge"
+      type="number"
+      min="1"
+      [(ngModel)]="form.modulesPerCharge"
+      placeholder="Модулів у заряді"
+    />
+
+    <input
+      name="maxUsableModules"
+      type="number"
+      min="1"
+      [(ngModel)]="form.maxUsableModules"
+      placeholder="Можна використати"
+    />
+  </ng-container>
+
+  <input name="moduleNote" [(ngModel)]="form.moduleNote" placeholder="Примітка" />
+
+  <button type="submit">Додати</button>
+</form>
+
+<p class="hint">
+  Для модульного заряду вказуй повну кількість модулів у заряді та максимальну кількість,
+  яку дозволено використати. Наприклад: у заряді 6 модулів, але дозволено 4.
+</p>
+
+<div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження зарядів">
+  <article class="ui-skeleton-card" *ngFor="let row of [1, 2, 3]">
+    <span></span>
+    <strong></strong>
+    <small></small>
+  </article>
+</div>
+
+<section class="ui-state-block ui-state-error" *ngIf="errorMessage && !loading">
+  <span class="ui-state-icon">!</span>
+  <h2>Не вдалося отримати дані</h2>
+  <p>{{ errorMessage }}</p>
+  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+</section>
+
+<section class="ui-state-block" *ngIf="!loading && !errorMessage && items.length === 0">
+  <span class="ui-state-icon">∅</span>
+  <h2>Заряди ще не додані</h2>
+  <p>Створіть перший запис, щоб він з'явився у довіднику.</p>
+</section>
+
+<table *ngIf="!loading && !errorMessage && items.length > 0">
+  <thead>
+    <tr>
+      <th>Маркування</th>
+      <th>Тип</th>
+      <th>Пакування</th>
+      <th>Одиниця</th>
+      <th>Модулі</th>
+      <th>Примітка</th>
+      <th></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let item of items">
+      <td>{{ item.marking }}</td>
+      <td>{{ item.chargeKind === 'modular' ? 'Модульний' : 'Одиничний' }}</td>
+      <td>{{ item.packagingType }}</td>
+      <td>{{ item.measurementUnit }}</td>
+      <td>
+        <ng-container *ngIf="item.chargeKind === 'modular'; else noModules">
+          {{ item.maxUsableModules || 0 }} / {{ item.modulesPerCharge || 0 }}
+        </ng-container>
+        <ng-template #noModules>—</ng-template>
+      </td>
+      <td>{{ item.moduleNote || '—' }}</td>
+      <td>
+        <button type="button" (click)="remove(item.id)">Видалити</button>
+      </td>
+    </tr>
+  </tbody>
+</table>

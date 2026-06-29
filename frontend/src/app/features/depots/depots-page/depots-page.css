@@ -1,0 +1,154 @@
+.depots-page {
+  height: calc(100dvh - 48px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 6px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
+.page-header p {
+  margin: 4px 0 0;
+  color: #94a3b8;
+}
+
+.editor-card,
+.depot-card {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+.editor-card {
+  padding: 18px;
+}
+
+.depot-form {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr auto;
+  gap: 10px;
+}
+
+.depot-form input,
+.depot-form select {
+  min-width: 0;
+  width: 100%;
+}
+
+.depots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+}
+
+.depot-card {
+  padding: 16px;
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.type-badge {
+  color: #dffcf7;
+  background: rgba(46, 230, 214, 0.1);
+  border: 1px solid rgba(46, 230, 214, 0.18);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.depot-card h2 {
+  margin: 0 0 12px;
+  color: #fff;
+  font-size: 20px;
+}
+
+.compact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compact-info p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: #94a3b8;
+}
+
+.compact-info strong {
+  color: #e5e7eb;
+  text-align: right;
+}
+
+.primary-button {
+  border-color: rgba(46, 230, 214, 0.58);
+  background: linear-gradient(180deg, rgba(46, 230, 214, 0.22), rgba(46, 230, 214, 0.1));
+  font-weight: 700;
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.icon-danger {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.error {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+@media (max-width: 1200px) {
+  .depot-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.unit-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.unit-group > h2 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 18px;
+}
