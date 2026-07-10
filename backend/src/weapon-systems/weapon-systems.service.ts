@@ -11,7 +11,6 @@ import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { EventLogsService } from '../event-logs/event-logs.service';
 import { FirePosition } from '../fire-positions/fire-position.entity';
-import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { CreateWeaponSystemDto } from './dto/create-weapon-system.dto';
 import { UpdateWeaponSystemDto } from './dto/update-weapon-system.dto';
 import { AssignWeaponToFirePositionDto } from './dto/assign-weapon-to-fire-position.dto';
@@ -24,8 +23,7 @@ export class WeaponSystemsService implements OnModuleInit {
     @InjectRepository(WeaponSystem)
     private readonly repository: Repository<WeaponSystem>,
     private readonly accessScope: AccessScopeService,
-    private readonly realtime: RealtimeGateway,
-private readonly realtimeEvents: RealtimeEventsService,
+    private readonly realtimeEvents: RealtimeEventsService,
     private readonly eventLogs: EventLogsService,
     @InjectDataSource()
     private readonly dataSource: DataSource,

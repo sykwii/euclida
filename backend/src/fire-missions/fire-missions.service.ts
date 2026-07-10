@@ -19,7 +19,6 @@ import { DepotPrimerStock } from '../depot-primer-stock/depot-primer-stock.entit
 import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { FirePosition } from '../fire-positions/fire-position.entity';
 import { StockMovement } from '../stock-movements/stock-movement.entity';
-import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { RealtimeEventsService }
 from '../realtime/realtime-events.service';
 import { Unit } from '../units/unit.entity';
@@ -44,8 +43,7 @@ export class FireMissionsService {
     private readonly weaponSystemsRepository: Repository<WeaponSystem>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
-   private readonly realtime: RealtimeGateway,
-private readonly realtimeEvents: RealtimeEventsService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async findAllForUser(user: AuthUser): Promise<FireMission[]> {

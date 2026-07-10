@@ -19,7 +19,6 @@ import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entit
 import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { EventLogsService } from '../event-logs/event-logs.service';
 import { FirePosition } from '../fire-positions/fire-position.entity';
-import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { SendServiceOrderDto } from './dto/send-service-order.dto';
@@ -59,7 +58,6 @@ export class ServiceOrdersService {
     @InjectRepository(ServiceOrder)
     private readonly repository: Repository<ServiceOrder>,
     private readonly suggestionsService: ServiceOrderSuggestionsService,
-    private readonly realtime: RealtimeGateway,
     private readonly realtimeEvents: RealtimeEventsService,
     private readonly accessScope: AccessScopeService,
     private readonly eventLogs: EventLogsService,

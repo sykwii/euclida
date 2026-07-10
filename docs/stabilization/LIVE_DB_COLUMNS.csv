@@ -1,0 +1,680 @@
+﻿table_name,column_name,data_type,is_nullable,udt_name
+air_asset_calculations,id,uuid,NO,uuid
+air_asset_calculations,name,character varying,NO,varchar
+air_asset_calculations,unit_id,uuid,YES,uuid
+air_asset_calculations,platform_type,character varying,NO,varchar
+air_asset_calculations,callsign,character varying,YES,varchar
+air_asset_calculations,readiness_status,character varying,NO,varchar
+air_asset_calculations,lat,double precision,YES,float8
+air_asset_calculations,lng,double precision,YES,float8
+air_asset_calculations,mgrs,character varying,YES,varchar
+air_asset_calculations,endurance_minutes,integer,YES,int4
+air_asset_calculations,payload,character varying,YES,varchar
+air_asset_calculations,note,text,YES,text
+air_asset_calculations,created_at,timestamp without time zone,NO,timestamp
+air_asset_calculations,updated_at,timestamp without time zone,NO,timestamp
+air_asset_drone_stock,id,uuid,NO,uuid
+air_asset_drone_stock,air_asset_position_id,uuid,NO,uuid
+air_asset_drone_stock,drone_model_id,uuid,NO,uuid
+air_asset_drone_stock,quantity,integer,NO,int4
+air_asset_drone_stock,created_at,timestamp without time zone,YES,timestamp
+air_asset_drone_stock,updated_at,timestamp without time zone,YES,timestamp
+air_asset_positions,id,uuid,NO,uuid
+air_asset_positions,name,character varying,NO,varchar
+air_asset_positions,unit_id,uuid,NO,uuid
+air_asset_positions,callsign,character varying,NO,varchar
+air_asset_positions,asset_group,character varying,NO,varchar
+air_asset_positions,recon_type,character varying,YES,varchar
+air_asset_positions,combat_type,character varying,YES,varchar
+air_asset_positions,lat,double precision,NO,float8
+air_asset_positions,lng,double precision,NO,float8
+air_asset_positions,mgrs,character varying,YES,varchar
+air_asset_positions,readiness_status,character varying,NO,varchar
+air_asset_positions,not_ready_reason,text,YES,text
+air_asset_positions,personnel_rotation_date,date,YES,date
+air_asset_positions,asset_name,character varying,YES,varchar
+air_asset_positions,drone_model,character varying,YES,varchar
+air_asset_positions,asset_quantity,integer,NO,int4
+air_asset_positions,main_direction_units,numeric,YES,numeric
+air_asset_positions,main_direction_degrees,numeric,YES,numeric
+air_asset_positions,traverse_left_units,numeric,YES,numeric
+air_asset_positions,traverse_left_degrees,numeric,YES,numeric
+air_asset_positions,traverse_right_units,numeric,YES,numeric
+air_asset_positions,traverse_right_degrees,numeric,YES,numeric
+air_asset_positions,sector_left_degrees,integer,YES,int4
+air_asset_positions,sector_right_degrees,integer,YES,int4
+air_asset_positions,max_sector_distance_m,integer,YES,int4
+air_asset_positions,note,text,YES,text
+air_asset_positions,created_at,timestamp without time zone,NO,timestamp
+air_asset_positions,updated_at,timestamp without time zone,NO,timestamp
+air_asset_task_points,id,uuid,NO,uuid
+air_asset_task_points,task_id,uuid,NO,uuid
+air_asset_task_points,point_order,integer,NO,int4
+air_asset_task_points,lat,double precision,NO,float8
+air_asset_task_points,lng,double precision,NO,float8
+air_asset_tasks,id,uuid,NO,uuid
+air_asset_tasks,task_type,character varying,NO,varchar
+air_asset_tasks,name,character varying,NO,varchar
+air_asset_tasks,unit_id,uuid,NO,uuid
+air_asset_tasks,air_asset_position_id,uuid,NO,uuid
+air_asset_tasks,drone_model_id,uuid,YES,uuid
+air_asset_tasks,warhead_type_id,uuid,YES,uuid
+air_asset_tasks,area_name,character varying,NO,varchar
+air_asset_tasks,planned_start_at,timestamp without time zone,YES,timestamp
+air_asset_tasks,planned_end_at,timestamp without time zone,YES,timestamp
+air_asset_tasks,status,character varying,NO,varchar
+air_asset_tasks,note,text,YES,text
+air_asset_tasks,created_at,timestamp without time zone,NO,timestamp
+air_asset_tasks,updated_at,timestamp without time zone,NO,timestamp
+air_asset_warhead_stock,id,uuid,NO,uuid
+air_asset_warhead_stock,air_asset_position_id,uuid,NO,uuid
+air_asset_warhead_stock,warhead_type_id,uuid,NO,uuid
+air_asset_warhead_stock,quantity,numeric,NO,numeric
+air_asset_warhead_stock,created_at,timestamp without time zone,YES,timestamp
+air_asset_warhead_stock,updated_at,timestamp without time zone,YES,timestamp
+air_recon_area_points,id,uuid,NO,uuid
+air_recon_area_points,area_id,uuid,NO,uuid
+air_recon_area_points,point_order,integer,NO,int4
+air_recon_area_points,lat,double precision,NO,float8
+air_recon_area_points,lng,double precision,NO,float8
+air_recon_area_points,created_at,timestamp without time zone,NO,timestamp
+air_recon_areas,id,uuid,NO,uuid
+air_recon_areas,air_asset_position_id,uuid,NO,uuid
+air_recon_areas,name,character varying,YES,varchar
+air_recon_areas,active_date,date,NO,date
+air_recon_areas,note,text,YES,text
+air_recon_areas,created_at,timestamp without time zone,NO,timestamp
+air_recon_areas,updated_at,timestamp without time zone,NO,timestamp
+air_recon_areas,planned_start_at,timestamp without time zone,YES,timestamp
+air_recon_areas,planned_end_at,timestamp without time zone,YES,timestamp
+air_recon_areas,status,character varying,NO,varchar
+air_threats,id,uuid,NO,uuid
+air_threats,threat_type,character varying,NO,varchar
+air_threats,lat,double precision,NO,float8
+air_threats,lng,double precision,NO,float8
+air_threats,is_active,boolean,YES,bool
+air_threats,created_at,timestamp without time zone,YES,timestamp
+air_threats,removed_at,timestamp without time zone,YES,timestamp
+app_settings,key,character varying,NO,varchar
+app_settings,value,text,NO,text
+app_settings,updated_at,timestamp without time zone,YES,timestamp
+charge_configurations,id,uuid,NO,uuid
+charge_configurations,charge_id,uuid,NO,uuid
+charge_configurations,zone_id,uuid,YES,uuid
+charge_configurations,label,character varying,NO,varchar
+charge_configurations,charge_units_per_shot,numeric,NO,numeric
+charge_configurations,is_default,boolean,YES,bool
+charge_configurations,note,text,YES,text
+charge_configurations,created_at,timestamp without time zone,YES,timestamp
+charge_configurations,updated_at,timestamp without time zone,YES,timestamp
+charges,id,uuid,NO,uuid
+charges,marking,character varying,NO,varchar
+charges,packaging_type,character varying,NO,varchar
+charges,measurement_unit,character varying,YES,varchar
+charges,created_at,timestamp without time zone,YES,timestamp
+charges,updated_at,timestamp without time zone,YES,timestamp
+charges,charge_kind,character varying,NO,varchar
+charges,modules_per_charge,integer,YES,int4
+charges,max_usable_modules,integer,YES,int4
+charges,module_note,text,YES,text
+depot_charge_stock,id,uuid,NO,uuid
+depot_charge_stock,depot_id,uuid,NO,uuid
+depot_charge_stock,charge_id,uuid,NO,uuid
+depot_charge_stock,quantity,numeric,NO,numeric
+depot_drone_stock,id,uuid,NO,uuid
+depot_drone_stock,depot_id,uuid,NO,uuid
+depot_drone_stock,drone_model_id,uuid,NO,uuid
+depot_drone_stock,quantity,integer,NO,int4
+depot_drone_stock,created_at,timestamp without time zone,NO,timestamp
+depot_drone_stock,updated_at,timestamp without time zone,NO,timestamp
+depot_drone_warhead_stock,id,uuid,NO,uuid
+depot_drone_warhead_stock,depot_id,uuid,NO,uuid
+depot_drone_warhead_stock,warhead_type_id,uuid,NO,uuid
+depot_drone_warhead_stock,quantity,numeric,NO,numeric
+depot_drone_warhead_stock,created_at,timestamp without time zone,NO,timestamp
+depot_drone_warhead_stock,updated_at,timestamp without time zone,NO,timestamp
+depot_fuze_stock,id,uuid,NO,uuid
+depot_fuze_stock,depot_id,uuid,NO,uuid
+depot_fuze_stock,fuze_id,uuid,NO,uuid
+depot_fuze_stock,quantity,integer,NO,int4
+depot_primer_stock,id,uuid,NO,uuid
+depot_primer_stock,depot_id,uuid,NO,uuid
+depot_primer_stock,primer_id,uuid,NO,uuid
+depot_primer_stock,quantity,integer,NO,int4
+depot_shell_stock,id,uuid,NO,uuid
+depot_shell_stock,depot_id,uuid,NO,uuid
+depot_shell_stock,shell_id,uuid,NO,uuid
+depot_shell_stock,quantity,integer,NO,int4
+depots,id,uuid,NO,uuid
+depots,name,character varying,NO,varchar
+depots,depot_type,character varying,NO,varchar
+depots,unit_id,uuid,YES,uuid
+depots,parent_id,uuid,YES,uuid
+depots,lat,double precision,YES,float8
+depots,lng,double precision,YES,float8
+depots,mgrs,character varying,YES,varchar
+depots,created_at,timestamp without time zone,YES,timestamp
+depots,updated_at,timestamp without time zone,YES,timestamp
+depots,is_archived,boolean,YES,bool
+drone_models,id,uuid,NO,uuid
+drone_models,name,character varying,NO,varchar
+drone_models,drone_type,character varying,NO,varchar
+drone_models,created_at,timestamp without time zone,NO,timestamp
+drone_models,updated_at,timestamp without time zone,NO,timestamp
+drone_models,camera_type,character varying,NO,varchar
+drone_models,drone_group,character varying,NO,varchar
+drone_models,note,text,YES,text
+drone_models,max_range_m,integer,YES,int4
+drone_models,cruise_speed_kmh,integer,YES,int4
+drone_models,endurance_minutes,integer,YES,int4
+drone_models,payload_capacity_kg,numeric,YES,numeric
+drone_models,max_altitude_m,integer,YES,int4
+drone_models,max_wind_ms,numeric,YES,numeric
+drone_stock_movements,id,uuid,NO,uuid
+drone_stock_movements,movement_type,character varying,NO,varchar
+drone_stock_movements,item_type,character varying,NO,varchar
+drone_stock_movements,drone_model_id,uuid,YES,uuid
+drone_stock_movements,warhead_type_id,uuid,YES,uuid
+drone_stock_movements,from_depot_id,uuid,YES,uuid
+drone_stock_movements,to_depot_id,uuid,YES,uuid
+drone_stock_movements,from_air_asset_position_id,uuid,YES,uuid
+drone_stock_movements,to_air_asset_position_id,uuid,YES,uuid
+drone_stock_movements,quantity,numeric,NO,numeric
+drone_stock_movements,movement_datetime,timestamp without time zone,NO,timestamp
+drone_stock_movements,comment,text,YES,text
+drone_stock_movements,depot_from_id,uuid,YES,uuid
+drone_stock_movements,depot_to_id,uuid,YES,uuid
+drone_stock_movements,air_asset_from_id,uuid,YES,uuid
+drone_stock_movements,air_asset_to_id,uuid,YES,uuid
+drone_stock_movements,created_by_id,uuid,YES,uuid
+drone_stock_movements,created_at,timestamp without time zone,NO,timestamp
+drone_warhead_types,id,uuid,NO,uuid
+drone_warhead_types,name,character varying,NO,varchar
+drone_warhead_types,weight_kg,numeric,YES,numeric
+drone_warhead_types,note,text,YES,text
+drone_warhead_types,created_at,timestamp without time zone,NO,timestamp
+drone_warhead_types,updated_at,timestamp without time zone,NO,timestamp
+drone_warhead_types,measure_unit,character varying,NO,varchar
+event_logs,id,uuid,NO,uuid
+event_logs,event_type,character varying,NO,varchar
+event_logs,action,character varying,NO,varchar
+event_logs,actor_user_id,uuid,YES,uuid
+event_logs,actor_login,character varying,YES,varchar
+event_logs,actor_name,character varying,YES,varchar
+event_logs,actor_role,character varying,YES,varchar
+event_logs,actor_scope,character varying,YES,varchar
+event_logs,unit_id,uuid,YES,uuid
+event_logs,unit_name,character varying,YES,varchar
+event_logs,entity_type,character varying,YES,varchar
+event_logs,entity_id,uuid,YES,uuid
+event_logs,entity_name,character varying,YES,varchar
+event_logs,title,character varying,NO,varchar
+event_logs,details,text,YES,text
+event_logs,metadata,jsonb,YES,jsonb
+event_logs,created_at,timestamp without time zone,NO,timestamp
+event_logs,read_at,timestamp with time zone,YES,timestamptz
+ew_frequency_ranges,id,uuid,NO,uuid
+ew_frequency_ranges,ew_position_id,uuid,NO,uuid
+ew_frequency_ranges,label,character varying,YES,varchar
+ew_frequency_ranges,frequency_from_mhz,numeric,NO,numeric
+ew_frequency_ranges,frequency_to_mhz,numeric,NO,numeric
+ew_frequency_ranges,created_at,timestamp without time zone,NO,timestamp
+ew_positions,id,uuid,NO,uuid
+ew_positions,name,character varying,NO,varchar
+ew_positions,unit_id,uuid,NO,uuid
+ew_positions,callsign,character varying,NO,varchar
+ew_positions,station_name,character varying,NO,varchar
+ew_positions,lat,double precision,NO,float8
+ew_positions,lng,double precision,NO,float8
+ew_positions,mgrs,character varying,YES,varchar
+ew_positions,effect_mode,character varying,NO,varchar
+ew_positions,radius_m,integer,YES,int4
+ew_positions,main_direction_units,numeric,YES,numeric
+ew_positions,main_direction_degrees,numeric,YES,numeric
+ew_positions,traverse_left_units,numeric,YES,numeric
+ew_positions,traverse_left_degrees,numeric,YES,numeric
+ew_positions,traverse_right_units,numeric,YES,numeric
+ew_positions,traverse_right_degrees,numeric,YES,numeric
+ew_positions,sector_left_degrees,integer,YES,int4
+ew_positions,sector_right_degrees,integer,YES,int4
+ew_positions,readiness_status,character varying,NO,varchar
+ew_positions,not_ready_reason,text,YES,text
+ew_positions,personnel_rotation_date,date,YES,date
+ew_positions,note,text,YES,text
+ew_positions,created_at,timestamp without time zone,NO,timestamp
+ew_positions,updated_at,timestamp without time zone,NO,timestamp
+fire_missions,id,uuid,NO,uuid
+fire_missions,executing_unit_id,uuid,YES,uuid
+fire_missions,fire_position_id,uuid,YES,uuid
+fire_missions,weapon_system_id,uuid,YES,uuid
+fire_missions,mission_datetime,timestamp without time zone,NO,timestamp
+fire_missions,target_number,character varying,YES,varchar
+fire_missions,target_type,character varying,YES,varchar
+fire_missions,target_lat,double precision,YES,float8
+fire_missions,target_lng,double precision,YES,float8
+fire_missions,target_mgrs,character varying,YES,varchar
+fire_missions,target_settlement,character varying,YES,varchar
+fire_missions,shell_id,uuid,YES,uuid
+fire_missions,shell_quantity,integer,YES,int4
+fire_missions,charge_id,uuid,YES,uuid
+fire_missions,charge_quantity,numeric,YES,numeric
+fire_missions,primer_id,uuid,YES,uuid
+fire_missions,primer_quantity,integer,YES,int4
+fire_missions,fuze_id,uuid,YES,uuid
+fire_missions,fuze_quantity,integer,YES,int4
+fire_missions,created_at,timestamp without time zone,YES,timestamp
+fire_missions,status,character varying,YES,varchar
+fire_missions,actual_shell_quantity,integer,YES,int4
+fire_missions,actual_charge_quantity,numeric,YES,numeric
+fire_missions,actual_primer_quantity,integer,YES,int4
+fire_missions,actual_fuze_quantity,integer,YES,int4
+fire_missions,completed_at,timestamp without time zone,YES,timestamp
+fire_missions,completion_comment,text,YES,text
+fire_missions,author_user_id,uuid,YES,uuid
+fire_missions,author_unit_id,uuid,YES,uuid
+fire_missions,sent_at,timestamp without time zone,YES,timestamp
+fire_missions,accepted_at,timestamp without time zone,YES,timestamp
+fire_missions,started_at,timestamp without time zone,YES,timestamp
+fire_missions,final_edit_until,timestamp without time zone,YES,timestamp
+fire_missions,closed_at,timestamp without time zone,YES,timestamp
+fire_position_weapons,id,uuid,NO,uuid
+fire_position_weapons,fire_position_id,uuid,NO,uuid
+fire_position_weapons,weapon_system_id,uuid,NO,uuid
+fire_position_weapons,assigned_at,timestamp without time zone,YES,timestamp
+fire_position_weapons,removed_at,timestamp without time zone,YES,timestamp
+fire_positions,id,uuid,NO,uuid
+fire_positions,name,character varying,NO,varchar
+fire_positions,unit_id,uuid,YES,uuid
+fire_positions,lat,double precision,NO,float8
+fire_positions,lng,double precision,NO,float8
+fire_positions,mgrs,character varying,YES,varchar
+fire_positions,main_direction,character varying,YES,varchar
+fire_positions,traverse_limits,character varying,YES,varchar
+fire_positions,has_sg,boolean,YES,bool
+fire_positions,readiness_status,character varying,YES,varchar
+fire_positions,not_ready_reason,text,YES,text
+fire_positions,completed_vgz_count,integer,YES,int4
+fire_positions,personnel_rotation_status,character varying,YES,varchar
+fire_positions,air_situation_status,character varying,YES,varchar
+fire_positions,geom,USER-DEFINED,YES,geography
+fire_positions,created_at,timestamp without time zone,YES,timestamp
+fire_positions,updated_at,timestamp without time zone,YES,timestamp
+fire_positions,on_value,numeric,YES,numeric
+fire_positions,traverse_left,numeric,YES,numeric
+fire_positions,traverse_right,numeric,YES,numeric
+fire_positions,ammo_depot_id,uuid,YES,uuid
+fire_positions,main_direction_units,numeric,YES,numeric
+fire_positions,main_direction_degrees,numeric,YES,numeric
+fire_positions,traverse_left_degrees,numeric,YES,numeric
+fire_positions,traverse_right_degrees,numeric,YES,numeric
+fire_positions,traverse_left_units,numeric,YES,numeric
+fire_positions,traverse_right_units,numeric,YES,numeric
+fire_positions,sector_left_degrees,integer,YES,int4
+fire_positions,sector_right_degrees,integer,YES,int4
+fire_positions,construction_status,character varying,YES,varchar
+fire_positions,builders_working,boolean,YES,bool
+fire_positions,construction_percent,integer,YES,int4
+fire_positions,construction_done,text,YES,text
+fire_positions,construction_remaining,text,YES,text
+fire_positions,rotation_date,date,YES,date
+fire_positions,personnel_rotation_date,date,YES,date
+fire_positions,built_by_unit_id,uuid,YES,uuid
+fire_positions,position_type,character varying,NO,varchar
+fuzes,id,uuid,NO,uuid
+fuzes,marking,character varying,NO,varchar
+fuzes,material,character varying,YES,varchar
+fuzes,created_at,timestamp without time zone,YES,timestamp
+fuzes,updated_at,timestamp without time zone,YES,timestamp
+geography_columns,f_table_catalog,name,YES,name
+geography_columns,f_table_schema,name,YES,name
+geography_columns,f_table_name,name,YES,name
+geography_columns,f_geography_column,name,YES,name
+geography_columns,coord_dimension,integer,YES,int4
+geography_columns,srid,integer,YES,int4
+geography_columns,type,text,YES,text
+geometry_columns,f_table_catalog,character varying,YES,varchar
+geometry_columns,f_table_schema,name,YES,name
+geometry_columns,f_table_name,name,YES,name
+geometry_columns,f_geometry_column,name,YES,name
+geometry_columns,coord_dimension,integer,YES,int4
+geometry_columns,srid,integer,YES,int4
+geometry_columns,type,character varying,YES,varchar
+operator_shifts,id,uuid,NO,uuid
+operator_shifts,operator_user_id,uuid,NO,uuid
+operator_shifts,operator_login,character varying,NO,varchar
+operator_shifts,operator_name,character varying,YES,varchar
+operator_shifts,unit_id,uuid,YES,uuid
+operator_shifts,started_at,timestamp with time zone,NO,timestamptz
+operator_shifts,ended_at,timestamp with time zone,YES,timestamptz
+operator_shifts,status,character varying,NO,varchar
+operator_shifts,note,text,YES,text
+operator_shifts,created_at,timestamp with time zone,NO,timestamptz
+operator_shifts,updated_at,timestamp with time zone,NO,timestamptz
+planned_route_points,id,uuid,NO,uuid
+planned_route_points,route_id,uuid,NO,uuid
+planned_route_points,name,character varying,NO,varchar
+planned_route_points,lat,double precision,NO,float8
+planned_route_points,lng,double precision,NO,float8
+planned_route_points,is_control,boolean,NO,bool
+planned_route_points,sort_order,integer,NO,int4
+planned_routes,id,uuid,NO,uuid
+planned_routes,name,character varying,NO,varchar
+planned_routes,description,text,YES,text
+planned_routes,created_at,timestamp without time zone,NO,timestamp
+planned_routes,updated_at,timestamp without time zone,NO,timestamp
+planned_vehicle_trip_checkpoints,id,uuid,NO,uuid
+planned_vehicle_trip_checkpoints,trip_id,uuid,NO,uuid
+planned_vehicle_trip_checkpoints,route_point_id,uuid,YES,uuid
+planned_vehicle_trip_checkpoints,name,character varying,NO,varchar
+planned_vehicle_trip_checkpoints,lat,double precision,NO,float8
+planned_vehicle_trip_checkpoints,lng,double precision,NO,float8
+planned_vehicle_trip_checkpoints,is_control,boolean,NO,bool
+planned_vehicle_trip_checkpoints,sort_order,integer,NO,int4
+planned_vehicle_trip_checkpoints,passed_at,timestamp without time zone,YES,timestamp
+planned_vehicle_trips,id,uuid,NO,uuid
+planned_vehicle_trips,route_id,uuid,NO,uuid
+planned_vehicle_trips,vehicle_label,character varying,NO,varchar
+planned_vehicle_trips,driver_label,character varying,YES,varchar
+planned_vehicle_trips,planned_start_at,timestamp without time zone,YES,timestamp
+planned_vehicle_trips,status,character varying,NO,varchar
+planned_vehicle_trips,created_at,timestamp without time zone,NO,timestamp
+planned_vehicle_trips,updated_at,timestamp without time zone,NO,timestamp
+planned_vehicle_trips,start_route_point_id,uuid,YES,uuid
+planned_vehicle_trips,end_route_point_id,uuid,YES,uuid
+planned_vehicle_trips,destination_entity_type,character varying,YES,varchar
+planned_vehicle_trips,destination_entity_id,uuid,YES,uuid
+planned_vehicle_trips,destination_name,character varying,YES,varchar
+planned_vehicle_trips,trip_purpose,text,YES,text
+planned_vehicle_trips,unit_id,uuid,YES,uuid
+position_drone_stock,id,uuid,NO,uuid
+position_drone_stock,air_asset_position_id,uuid,NO,uuid
+position_drone_stock,drone_model_id,uuid,NO,uuid
+position_drone_stock,quantity,integer,NO,int4
+position_drone_warhead_stock,id,uuid,NO,uuid
+position_drone_warhead_stock,air_asset_position_id,uuid,NO,uuid
+position_drone_warhead_stock,warhead_type_id,uuid,NO,uuid
+position_drone_warhead_stock,quantity,integer,NO,int4
+primers,id,uuid,NO,uuid
+primers,marking,character varying,NO,varchar
+primers,ammo_type,character varying,YES,varchar
+primers,created_at,timestamp without time zone,YES,timestamp
+primers,updated_at,timestamp without time zone,YES,timestamp
+recon_areas,id,uuid,NO,uuid
+recon_areas,name,character varying,NO,varchar
+recon_areas,status,character varying,NO,varchar
+recon_areas,description,text,YES,text
+recon_areas,geometry,USER-DEFINED,NO,geometry
+recon_areas,created_at,timestamp with time zone,NO,timestamptz
+recon_areas,updated_at,timestamp with time zone,NO,timestamptz
+recon_areas,archived_at,timestamp with time zone,YES,timestamptz
+recon_assessments,id,uuid,NO,uuid
+recon_assessments,target_id,uuid,YES,uuid
+recon_assessments,proposed_by,character varying,YES,varchar
+recon_assessments,confirmed_by,character varying,YES,varchar
+recon_assessments,status,character varying,NO,varchar
+recon_assessments,assessment_type,character varying,NO,varchar
+recon_assessments,notes,text,YES,text
+recon_assessments,created_at,timestamp with time zone,NO,timestamptz
+recon_assessments,updated_at,timestamp with time zone,NO,timestamptz
+recon_correlations,id,uuid,NO,uuid
+recon_correlations,target_id,uuid,YES,uuid
+recon_correlations,impact_id,uuid,YES,uuid
+recon_correlations,score,integer,NO,int4
+recon_correlations,status,character varying,NO,varchar
+recon_correlations,reason_json,jsonb,NO,jsonb
+recon_correlations,distance_m,double precision,NO,float8
+recon_correlations,time_delta_sec,integer,NO,int4
+recon_correlations,payload,jsonb,NO,jsonb
+recon_correlations,created_at,timestamp with time zone,NO,timestamptz
+recon_correlations,updated_at,timestamp with time zone,NO,timestamptz
+recon_correlations,accepted_at,timestamp with time zone,YES,timestamptz
+recon_correlations,rejected_at,timestamp with time zone,YES,timestamptz
+recon_events,id,uuid,NO,uuid
+recon_events,event_type,character varying,NO,varchar
+recon_events,entity_type,character varying,NO,varchar
+recon_events,entity_id,uuid,YES,uuid
+recon_events,payload,jsonb,NO,jsonb
+recon_events,created_at,timestamp with time zone,NO,timestamptz
+recon_impact_observations,id,uuid,NO,uuid
+recon_impact_observations,platform_id,character varying,YES,varchar
+recon_impact_observations,external_id,character varying,YES,varchar
+recon_impact_observations,source,character varying,NO,varchar
+recon_impact_observations,input_provider,character varying,NO,varchar
+recon_impact_observations,target_type,character varying,NO,varchar
+recon_impact_observations,impact_datetime,timestamp with time zone,NO,timestamptz
+recon_impact_observations,lat,double precision,NO,float8
+recon_impact_observations,lng,double precision,NO,float8
+recon_impact_observations,mgrs,character varying,NO,varchar
+recon_impact_observations,geometry,USER-DEFINED,NO,geometry
+recon_impact_observations,raw_payload,jsonb,NO,jsonb
+recon_impact_observations,notes,text,YES,text
+recon_impact_observations,status,character varying,NO,varchar
+recon_impact_observations,hidden_at,timestamp with time zone,YES,timestamptz
+recon_impact_observations,archived_at,timestamp with time zone,YES,timestamptz
+recon_impact_observations,created_at,timestamp with time zone,NO,timestamptz
+recon_import_batches,id,uuid,NO,uuid
+recon_import_batches,source,character varying,NO,varchar
+recon_import_batches,status,character varying,NO,varchar
+recon_import_batches,total_rows,integer,NO,int4
+recon_import_batches,accepted_rows,integer,NO,int4
+recon_import_batches,duplicate_rows,integer,NO,int4
+recon_import_batches,error_rows,integer,NO,int4
+recon_import_batches,raw_payload,jsonb,NO,jsonb
+recon_import_batches,created_at,timestamp with time zone,NO,timestamptz
+recon_import_batches,confirmed_at,timestamp with time zone,YES,timestamptz
+recon_import_errors,id,uuid,NO,uuid
+recon_import_errors,batch_id,uuid,YES,uuid
+recon_import_errors,row_number,integer,NO,int4
+recon_import_errors,error_code,character varying,NO,varchar
+recon_import_errors,message,text,NO,text
+recon_import_errors,raw_payload,jsonb,NO,jsonb
+recon_import_errors,created_at,timestamp with time zone,NO,timestamptz
+recon_intelligence_reports,id,uuid,NO,uuid
+recon_intelligence_reports,title,character varying,NO,varchar
+recon_intelligence_reports,source,character varying,NO,varchar
+recon_intelligence_reports,input_provider,character varying,NO,varchar
+recon_intelligence_reports,report_datetime,timestamp with time zone,NO,timestamptz
+recon_intelligence_reports,summary,text,YES,text
+recon_intelligence_reports,raw_payload,jsonb,NO,jsonb
+recon_intelligence_reports,created_at,timestamp with time zone,NO,timestamptz
+recon_observations,id,uuid,NO,uuid
+recon_observations,platform_id,character varying,YES,varchar
+recon_observations,external_id,character varying,YES,varchar
+recon_observations,source,character varying,NO,varchar
+recon_observations,input_provider,character varying,NO,varchar
+recon_observations,target_type,character varying,NO,varchar
+recon_observations,observation_datetime,timestamp with time zone,NO,timestamptz
+recon_observations,lat,double precision,NO,float8
+recon_observations,lng,double precision,NO,float8
+recon_observations,mgrs,character varying,NO,varchar
+recon_observations,geometry,USER-DEFINED,NO,geometry
+recon_observations,report_id,uuid,YES,uuid
+recon_observations,raw_payload,jsonb,NO,jsonb
+recon_observations,notes,text,YES,text
+recon_observations,status,character varying,NO,varchar
+recon_observations,hidden_at,timestamp with time zone,YES,timestamptz
+recon_observations,archived_at,timestamp with time zone,YES,timestamptz
+recon_observations,created_at,timestamp with time zone,NO,timestamptz
+recon_processed_target_decisions,id,uuid,NO,uuid
+recon_processed_target_decisions,target_id,uuid,NO,uuid
+recon_processed_target_decisions,observation_id,uuid,NO,uuid
+recon_processed_target_decisions,status,character varying,NO,varchar
+recon_processed_target_decisions,decision,character varying,YES,varchar
+recon_processed_target_decisions,payload,jsonb,NO,jsonb
+recon_processed_target_decisions,created_at,timestamp with time zone,NO,timestamptz
+recon_processed_target_decisions,decided_at,timestamp with time zone,YES,timestamptz
+recon_puar_proposals,id,uuid,NO,uuid
+recon_puar_proposals,target_id,uuid,YES,uuid
+recon_puar_proposals,observation_id,uuid,YES,uuid
+recon_puar_proposals,source_kind,character varying,NO,varchar
+recon_puar_proposals,status,character varying,NO,varchar
+recon_puar_proposals,payload,jsonb,NO,jsonb
+recon_puar_proposals,comments,text,YES,text
+recon_puar_proposals,accepted_service_order_id,uuid,YES,uuid
+recon_puar_proposals,created_at,timestamp with time zone,NO,timestamptz
+recon_puar_proposals,updated_at,timestamp with time zone,NO,timestamptz
+recon_puar_proposals,accepted_at,timestamp with time zone,YES,timestamptz
+recon_settings,id,uuid,NO,uuid
+recon_settings,key,character varying,NO,varchar
+recon_settings,value,jsonb,NO,jsonb
+recon_settings,created_at,timestamp with time zone,NO,timestamptz
+recon_settings,updated_at,timestamp with time zone,NO,timestamptz
+recon_target_observations,id,uuid,NO,uuid
+recon_target_observations,target_id,uuid,NO,uuid
+recon_target_observations,observation_id,uuid,NO,uuid
+recon_target_observations,link_type,character varying,NO,varchar
+recon_target_observations,created_at,timestamp with time zone,NO,timestamptz
+recon_targets,id,uuid,NO,uuid
+recon_targets,platform_id,character varying,YES,varchar
+recon_targets,target_type,character varying,NO,varchar
+recon_targets,possible_target_types,jsonb,NO,jsonb
+recon_targets,status,character varying,NO,varchar
+recon_targets,center,USER-DEFINED,NO,geometry
+recon_targets,lat,double precision,NO,float8
+recon_targets,lng,double precision,NO,float8
+recon_targets,mgrs,character varying,NO,varchar
+recon_targets,semi_major_m,double precision,NO,float8
+recon_targets,semi_minor_m,double precision,NO,float8
+recon_targets,azimuth_deg,double precision,NO,float8
+recon_targets,confidence_index,integer,NO,int4
+recon_targets,confidence_label,character varying,NO,varchar
+recon_targets,activity_index,integer,NO,int4
+recon_targets,freshness_index,integer,NO,int4
+recon_targets,threat_index,integer,NO,int4
+recon_targets,created_at,timestamp with time zone,NO,timestamptz
+recon_targets,updated_at,timestamp with time zone,NO,timestamptz
+recon_targets,archived_at,timestamp with time zone,YES,timestamptz
+service_order_actual_ammo,id,uuid,NO,uuid
+service_order_actual_ammo,service_order_id,uuid,NO,uuid
+service_order_actual_ammo,shell_id,uuid,NO,uuid
+service_order_actual_ammo,charge_id,uuid,NO,uuid
+service_order_actual_ammo,shot_quantity,numeric,NO,numeric
+service_order_actual_ammo,charge_quantity,numeric,NO,numeric
+service_order_actual_ammo,charge_modules_per_shot,integer,YES,int4
+service_order_actual_ammo,created_at,timestamp without time zone,NO,timestamp
+service_orders,id,uuid,NO,uuid
+service_orders,order_number,character varying,NO,varchar
+service_orders,status,character varying,NO,varchar
+service_orders,target_lat,double precision,NO,float8
+service_orders,target_lng,double precision,NO,float8
+service_orders,target_mgrs,character varying,YES,varchar
+service_orders,target_settlement,character varying,YES,varchar
+service_orders,task_type,character varying,NO,varchar
+service_orders,planned_resource_a_id,uuid,YES,uuid
+service_orders,planned_resource_b_id,uuid,YES,uuid
+service_orders,planned_quantity,numeric,NO,numeric
+service_orders,selected_fire_position_id,uuid,YES,uuid
+service_orders,rejection_reason,text,YES,text
+service_orders,started_at,timestamp without time zone,YES,timestamp
+service_orders,completed_at,timestamp without time zone,YES,timestamp
+service_orders,result_type,character varying,YES,varchar
+service_orders,result_comment,text,YES,text
+service_orders,created_at,timestamp without time zone,NO,timestamp
+service_orders,updated_at,timestamp without time zone,NO,timestamp
+service_orders,selected_shell_id,uuid,YES,uuid
+service_orders,selected_charge_id,uuid,YES,uuid
+service_orders,selected_zone_id,uuid,YES,uuid
+service_orders,rejected_by_unit_name,character varying,YES,varchar
+service_orders,rejected_at,timestamp without time zone,YES,timestamp
+service_orders,actual_quantity,numeric,YES,numeric
+service_orders,created_by_user_id,uuid,YES,uuid
+service_orders,assigned_unit_id,uuid,YES,uuid
+service_orders,assigned_scope,character varying,YES,varchar
+service_orders,sent_by_user_id,uuid,YES,uuid
+service_orders,accepted_by_user_id,uuid,YES,uuid
+service_orders,completed_by_user_id,uuid,YES,uuid
+service_orders,actual_charge_quantity,numeric,YES,numeric
+service_orders,actual_charge_modules_per_shot,integer,YES,int4
+service_orders,executor_type,character varying,YES,varchar
+service_orders,selected_air_asset_position_id,uuid,YES,uuid
+service_orders,selected_drone_model_id,uuid,YES,uuid
+service_orders,selected_warhead_type_id,uuid,YES,uuid
+service_orders,linked_air_task_id,uuid,YES,uuid
+service_orders,recon_snapshot,jsonb,YES,jsonb
+service_orders,source_recon_target_id,uuid,YES,uuid
+service_orders,source_recon_observation_id,uuid,YES,uuid
+service_orders,source_puar_proposal_id,uuid,YES,uuid
+service_orders,recon_snapshot_updated_at,timestamp with time zone,YES,timestamptz
+service_orders,recon_link_checked_at,timestamp with time zone,YES,timestamptz
+shell_compatible_charges,id,uuid,NO,uuid
+shell_compatible_charges,shell_id,uuid,NO,uuid
+shell_compatible_charges,charge_id,uuid,NO,uuid
+shell_compatible_charges,max_range_m,integer,NO,int4
+shell_compatible_charges,created_at,timestamp without time zone,YES,timestamp
+shell_compatible_charges,zone_id,uuid,YES,uuid
+shell_compatible_charges,usable_modules,integer,YES,int4
+shell_compatible_charges,compatibility_note,text,YES,text
+shell_compatible_fuzes,id,uuid,NO,uuid
+shell_compatible_fuzes,shell_id,uuid,NO,uuid
+shell_compatible_fuzes,fuze_id,uuid,NO,uuid
+shell_compatible_fuzes,created_at,timestamp without time zone,YES,timestamp
+shells,id,uuid,NO,uuid
+shells,system_type,character varying,NO,varchar
+shells,damage_type,character varying,NO,varchar
+shells,marking,character varying,NO,varchar
+shells,created_at,timestamp without time zone,YES,timestamp
+shells,updated_at,timestamp without time zone,YES,timestamp
+spatial_ref_sys,srid,integer,NO,int4
+spatial_ref_sys,auth_name,character varying,YES,varchar
+spatial_ref_sys,auth_srid,integer,YES,int4
+spatial_ref_sys,srtext,character varying,YES,varchar
+spatial_ref_sys,proj4text,character varying,YES,varchar
+stock_movements,id,uuid,NO,uuid
+stock_movements,from_depot_id,uuid,YES,uuid
+stock_movements,to_depot_id,uuid,YES,uuid
+stock_movements,item_type,character varying,NO,varchar
+stock_movements,item_id,uuid,NO,uuid
+stock_movements,quantity,numeric,NO,numeric
+stock_movements,movement_datetime,timestamp without time zone,YES,timestamp
+stock_movements,comment,text,YES,text
+stock_movements,movement_type,character varying,YES,varchar
+stock_movements,fire_mission_id,uuid,YES,uuid
+stock_movements,movement_group_id,uuid,YES,uuid
+stock_movements,document_number,character varying,YES,varchar
+units,id,uuid,NO,uuid
+units,name,character varying,NO,varchar
+units,type,character varying,NO,varchar
+units,parent_id,uuid,YES,uuid
+units,sort_order,integer,YES,int4
+units,created_at,timestamp without time zone,YES,timestamp
+units,updated_at,timestamp without time zone,YES,timestamp
+users,id,uuid,NO,uuid
+users,login,character varying,NO,varchar
+users,password_hash,text,NO,text
+users,full_name,character varying,YES,varchar
+users,role,character varying,NO,varchar
+users,is_active,boolean,NO,bool
+users,created_at,timestamp without time zone,NO,timestamp
+users,updated_at,timestamp without time zone,NO,timestamp
+users,unit_id,uuid,YES,uuid
+users,scope,character varying,NO,varchar
+weapon_models,id,uuid,NO,uuid
+weapon_models,name,character varying,NO,varchar
+weapon_models,system_type,character varying,NO,varchar
+weapon_models,zones_count,integer,YES,int4
+weapon_models,created_at,timestamp without time zone,YES,timestamp
+weapon_systems,id,uuid,NO,uuid
+weapon_systems,serial_number,character varying,YES,varchar
+weapon_systems,callsign,character varying,YES,varchar
+weapon_systems,unit_id,uuid,YES,uuid
+weapon_systems,readiness_status,character varying,YES,varchar
+weapon_systems,not_ready_reason,text,YES,text
+weapon_systems,created_at,timestamp without time zone,YES,timestamp
+weapon_systems,updated_at,timestamp without time zone,YES,timestamp
+weapon_systems,weapon_model_id,uuid,YES,uuid
+weapon_systems,location_type,character varying,YES,varchar
+weapon_systems,fire_position_id,uuid,YES,uuid
+weapon_systems,maintenance_status,character varying,YES,varchar
+weapon_systems,maintenance_requested_start_at,timestamp without time zone,YES,timestamp
+weapon_systems,maintenance_planned_end_at,timestamp without time zone,YES,timestamp
+weapon_systems,maintenance_actual_end_at,timestamp without time zone,YES,timestamp
+weapon_systems,maintenance_note,text,YES,text
+weapon_systems,maintenance_requested_by_user_id,uuid,YES,uuid
+weapon_systems,maintenance_approved_by_user_id,uuid,YES,uuid
+zones,id,uuid,NO,uuid
+zones,zone_number,integer,NO,int4
+zones,distance_from_m,integer,NO,int4
+zones,distance_to_m,integer,NO,int4
+zones,created_at,timestamp without time zone,YES,timestamp
+zones,weapon_model_id,uuid,YES,uuid
+(678 rows)

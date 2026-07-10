@@ -1,0 +1,1491 @@
+﻿
+=== backend\src\air-assets\air-asset-tasks.service.ts:296 ===
+  }
+
+  private emitChanged(action: 'created' | 'updated' | 'deleted', id: string, unitId?: string): void {
+    this.realtimeEvents.emitMany(['map', 'events', 'missions'], action, {
+      entity: 'air_asset_task',
+      id,
+      unitId,
+    });
+  }
+
+  private async ensureSchema(): Promise<void> {
+    await this.dataSource.query(`
+
+=== backend\src\air-assets\air-assets.service.ts:287 ===
+  }
+
+  private emitChanged(action: 'created' | 'updated' | 'deleted', id: string, unitId?: string): void {
+    this.realtimeEvents.emitMany(['map', 'events'], action, { entity: 'air_asset_position', id, unitId });
+  }
+}
+
+
+=== backend\src\air-assets\air-recon-areas.service.ts:255 ===
+  }
+
+  private emitChanged(action: 'created' | 'updated' | 'deleted', id: string, unitId?: string): void {
+    this.realtimeEvents.emitMany(['map', 'events'], action, {
+      entity: 'air_recon_area',
+      id,
+      unitId,
+    });
+  }
+
+  private async writeAreaEvent(
+    area: AirReconArea,
+
+=== backend\src\air-threats\air-threats.service.ts:129 ===
+    action: 'created' | 'deleted' | 'updated',
+    id: string,
+  ): void {
+    this.realtimeEvents.emitMany(
+      ['threats', 'map', 'analytics', 'events'],
+      action,
+      {
+        entity: 'air_threat',
+        id,
+      },
+    );
+  }
+
+=== backend\src\charges\charges.service.ts:76 ===
+    action: 'created' | 'updated' | 'deleted',
+    id: string,
+  ): void {
+    this.realtimeEvents.emitMany(
+      ['reference', 'stock', 'analytics', 'events'],
+      action,
+      {
+        entity: 'charge',
+        id,
+      },
+    );
+  }
+
+=== backend\src\depot-charge-stock\depot-charge-stock.service.ts:34 ===
+
+    const item = this.repository.create(data);
+    const saved = await this.repository.save(item);
+    this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], 'created', {
+      entity: 'depot_charge_stock',
+      id: saved.id,
+    });
+    return saved;
+  }
+
+  private async ensureAmmoDepot(depotId: string): Promise<void> {
+    const depot = await this.depotsRepository.findOne({ where: { id: depotId } });
+
+=== backend\src\depot-fuze-stock\depot-fuze-stock.service.ts:34 ===
+
+    const item = this.repository.create(data);
+    const saved = await this.repository.save(item);
+    this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], 'created', {
+      entity: 'depot_fuze_stock',
+      id: saved.id,
+    });
+    return saved;
+  }
+
+  private async ensureAmmoDepot(depotId: string): Promise<void> {
+    const depot = await this.depotsRepository.findOne({ where: { id: depotId } });
+
+=== backend\src\depot-primer-stock\depot-primer-stock.service.ts:34 ===
+
+    const item = this.repository.create(data);
+    const saved = await this.repository.save(item);
+    this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], 'created', {
+      entity: 'depot_primer_stock',
+      id: saved.id,
+    });
+    return saved;
+  }
+
+  private async ensureAmmoDepot(depotId: string): Promise<void> {
+    const depot = await this.depotsRepository.findOne({ where: { id: depotId } });
+
+=== backend\src\depot-shell-stock\depot-shell-stock.service.ts:34 ===
+
+    const item = this.repository.create(data);
+    const saved = await this.repository.save(item);
+    this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], 'created', {
+      entity: 'depot_shell_stock',
+      id: saved.id,
+    });
+    return saved;
+  }
+
+  private async ensureAmmoDepot(depotId: string): Promise<void> {
+    const depot = await this.depotsRepository.findOne({ where: { id: depotId } });
+
+=== backend\src\depots\depots.service.ts:123 ===
+  }
+
+  private emitDepotChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], action, {
+      entity: 'depot',
+      id,
+    });
+  }
+
+  private async ensureCanUseDepot(user: AuthUser, depot: Depot): Promise<void> {
+    await this.ensureCanSeeDepotUnit(user, depot.unitId);
+  }
+
+=== backend\src\drone-logistics\drone-logistics.service.ts:329 ===
+  }
+
+  private emitChanged(action: 'created' | 'updated', id: string): void {
+    this.realtime.emitMany(['stock', 'logistics', 'analytics'], action, {
+      entity: 'drone_logistics',
+      id,
+    });
+  }
+
+  private async ensureDroneDepot(depotId: string): Promise<Depot> {
+    const depot = await this.dataSource.getRepository(Depot).findOne({ where: { id: depotId } });
+
+
+=== backend\src\ew\ew.service.ts:196 ===
+  }
+
+  private emitChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['map', 'events'], action, { entity: 'ew_position', id });
+  }
+}
+
+=== backend\src\fire-missions\fire-missions.service.ts:22 ===
+import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
+import { FirePosition } from '../fire-positions/fire-position.entity';
+import { StockMovement } from '../stock-movements/stock-movement.entity';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { RealtimeEventsService }
+from '../realtime/realtime-events.service';
+import { Unit } from '../units/unit.entity';
+import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
+import { CompleteFireMissionDto } from './dto/complete-fire-mission.dto';
+import { CreateFireMissionDto } from './dto/create-fire-mission.dto';
+import { FireMissionStatus, UpdateFireMissionStatusDto } from './dto/update-fire-mission-status.dto';
+import { FireMission } from './fire-mission.entity';
+
+=== backend\src\fire-missions\fire-missions.service.ts:47 ===
+    private readonly weaponSystemsRepository: Repository<WeaponSystem>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+   private readonly realtime: RealtimeGateway,
+private readonly realtimeEvents: RealtimeEventsService,
+  ) {}
+
+  async findAllForUser(user: AuthUser): Promise<FireMission[]> {
+    const items = await this.repository.find({
+      relations: this.relations,
+      order: { missionDatetime: 'DESC' },
+    });
+
+=== backend\src\fire-missions\fire-missions.service.ts:329 ===
+  action: string,
+): void {
+
+  this.realtimeEvents.emitMany(
+    [
+      'missions',
+      'map',
+      'analytics',
+      'events',
+    ],
+    action as any,
+    {
+
+=== backend\src\fire-position-weapons\fire-position-weapons.service.ts:65 ===
+}
+
+private emitBindingChanged(action: 'created' | 'deleted', id: string): void {
+  this.realtimeEvents.emitMany(['weapons', 'map', 'analytics', 'events'], action, {
+    entity: 'fire_position_weapon',
+    id,
+  });
+}
+}
+
+=== backend\src\fire-positions\fire-positions.service.ts:340 ===
+    action: 'created' | 'updated' | 'deleted' | 'changed',
+    id: string,
+  ): void {
+    this.realtimeEvents.emitMany(['map', 'analytics', 'events'], action, {
+      entity: 'fire_position',
+      id,
+    });
+  }
+
+  private normalizeDegrees(value: number): number {
+    return ((value % 360) + 360) % 360;
+  }
+
+=== backend\src\fuzes\fuzes.service.ts:56 ===
+  }
+
+  private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['reference', 'analytics', 'events'], action, {
+      entity: 'fuze',
+      id,
+    });
+  }
+}
+
+=== backend\src\modules\recon\events\recon-events.service.ts:21 ===
+    );
+
+    const action = eventType.includes('created') ? 'created' : eventType.includes('updated') ? 'updated' : 'changed';
+    this.realtimeEvents.emitMany(['recon', 'map', 'analytics', 'events'], action, {
+      entity: entityType,
+      id: entityId || undefined,
+      reason: eventType,
+    });
+  }
+}
+
+=== backend\src\planned-trips\planned-trips.service.ts:327 ===
+  }
+
+  private emitLogistics(action: 'created' | 'updated' | 'completed', id: string, unitId?: string): void {
+    this.realtime.emitMany(['logistics', 'map', 'analytics'], action, {
+      entity: 'planned_trip',
+      id,
+      unitId,
+    });
+  }
+
+  private normalizePoints(points: RoutePointInput[]) {
+    if (!points?.length || points.length < 2) {
+
+=== backend\src\primers\primers.service.ts:56 ===
+  }
+
+  private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['reference', 'analytics', 'events'], action, {
+      entity: 'primer',
+      id,
+    });
+  }
+}
+
+=== backend\src\realtime\realtime-events.service.ts:2 ===
+import { Injectable } from '@nestjs/common';
+import { RealtimeGateway } from './realtime.gateway';
+import { RealtimeAction, RealtimeEventPayload, RealtimeScope } from './realtime.types';
+
+@Injectable()
+export class RealtimeEventsService {
+  constructor(private readonly gateway: RealtimeGateway) {}
+
+  emit(
+  scope: RealtimeScope,
+
+=== backend\src\realtime\realtime-events.service.ts:7 ===
+
+@Injectable()
+export class RealtimeEventsService {
+  constructor(private readonly gateway: RealtimeGateway) {}
+
+  emit(
+  scope: RealtimeScope,
+  action: RealtimeAction = 'changed',
+  options: {
+    entity?: string;
+    id?: string;
+    unitId?: string;
+
+=== backend\src\realtime\realtime.gateway.ts:30 ===
+  [key: string]: unknown;
+}
+
+const realtimeLogger = new Logger('RealtimeGateway');
+
+
+function shouldLogRealtime(): boolean {
+  return process.env.REALTIME_DEBUG === '1' || process.env.REALTIME_DEBUG === 'true';
+}
+
+function logRealtimeEvent(eventName: string, payload: Partial<RealtimePayload> | RealtimeEventPayload): void {
+  if (!shouldLogRealtime()) {
+
+=== backend\src\realtime\realtime.gateway.ts:90 ===
+    credentials: true,
+  },
+})
+export class RealtimeGateway {
+  @WebSocketServer()
+  server!: Server;
+
+
+broadcastRealtimeEvent(payload: RealtimeEventPayload): void {
+  logRealtimeEvent('realtime:event', payload);
+  this.server?.emit('realtime:event', payload);
+}
+
+=== backend\src\realtime\realtime.module.ts:3 ===
+import { Module } from '@nestjs/common';
+import { RealtimeEventsService } from './realtime-events.service';
+import { RealtimeGateway } from './realtime.gateway';
+
+@Module({
+  providers: [RealtimeGateway, RealtimeEventsService],
+  exports: [RealtimeEventsService],
+})
+export class RealtimeModule {}
+
+=== backend\src\realtime\realtime.module.ts:6 ===
+import { RealtimeGateway } from './realtime.gateway';
+
+@Module({
+  providers: [RealtimeGateway, RealtimeEventsService],
+  exports: [RealtimeEventsService],
+})
+export class RealtimeModule {}
+
+=== backend\src\service-orders\service-orders.service.ts:22 ===
+import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
+import { EventLogsService } from '../event-logs/event-logs.service';
+import { FirePosition } from '../fire-positions/fire-position.entity';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
+import { CreateServiceOrderDto } from './dto/create-service-order.dto';
+import { SendServiceOrderDto } from './dto/send-service-order.dto';
+import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
+import { ServiceOrder } from './service-order.entity';
+import { ServiceOrderActualAmmo } from './service-order-actual-ammo.entity';
+import { ServiceOrderSuggestionsService } from './service-order-suggestions.service';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
+
+=== backend\src\service-orders\service-orders.service.ts:62 ===
+    @InjectRepository(ServiceOrder)
+    private readonly repository: Repository<ServiceOrder>,
+    private readonly suggestionsService: ServiceOrderSuggestionsService,
+    private readonly realtime: RealtimeGateway,
+    private readonly realtimeEvents: RealtimeEventsService,
+    private readonly accessScope: AccessScopeService,
+    private readonly eventLogs: EventLogsService,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async findAll(user: AuthUser): Promise<ServiceOrder[]> {
+
+=== backend\src\service-orders\service-orders.service.ts:224 ===
+
+    await this.writeOrderEvent(savedItem, user, 'created', 'Створено заявку');
+
+    this.notifyRealtime(savedItem, 'created');
+
+    return savedItem;
+  }
+
+  async createFromReconPuar(
+    proposal: {
+      id: string;
+      targetId: string | null;
+
+=== backend\src\service-orders\service-orders.service.ts:273 ===
+
+    const savedItem = await this.repository.save(item);
+    await this.writeOrderEvent(savedItem, user, 'created', 'Створено чернетку ВГЗ з ПУАР');
+    this.notifyRealtime(savedItem, 'created');
+    this.realtimeEvents.emitMany(['missions', 'recon', 'events'], 'created', {
+      entity: 'service_order',
+      id: savedItem.id,
+      reason: 'recon:core-puar-accepted',
+    });
+    return savedItem;
+  }
+
+
+=== backend\src\service-orders\service-orders.service.ts:274 ===
+    const savedItem = await this.repository.save(item);
+    await this.writeOrderEvent(savedItem, user, 'created', 'Створено чернетку ВГЗ з ПУАР');
+    this.notifyRealtime(savedItem, 'created');
+    this.realtimeEvents.emitMany(['missions', 'recon', 'events'], 'created', {
+      entity: 'service_order',
+      id: savedItem.id,
+      reason: 'recon:core-puar-accepted',
+    });
+    return savedItem;
+  }
+
+  async update(
+
+=== backend\src\service-orders\service-orders.service.ts:343 ===
+
+    await this.writeOrderEvent(savedItem, user, 'updated', 'Оновлено заявку');
+
+    this.notifyRealtime(savedItem, 'updated');
+
+    return savedItem;
+  }
+
+  async remove(id: string, user: AuthUser): Promise<void> {
+    const item = await this.findOne(id, user);
+
+    if (item.status !== 'draft') {
+
+=== backend\src\service-orders\service-orders.service.ts:365 ===
+
+    await this.writeOrderEvent(item, user, 'deleted', 'Видалено чернетку');
+
+    this.notifyRealtime(item, 'deleted');
+  }
+
+  async getSuggestions(id: string, user: AuthUser) {
+    const order = await this.findOne(id, user);
+
+    if (order.status !== 'draft' && order.status !== 'proposed') {
+      throw new BadRequestException(
+        'Підбір точок доступний тільки для чернетки або пропозиції',
+
+=== backend\src\service-orders\service-orders.service.ts:459 ===
+      'Обрано ВП для заявки',
+    );
+
+    this.notifyRealtime(savedOrder, 'updated');
+
+    return this.findOne(savedOrder.id, user);
+  }
+
+  async sendToUnit(
+    id: string,
+    _body: SendServiceOrderDto,
+    user: AuthUser,
+
+=== backend\src\service-orders\service-orders.service.ts:517 ===
+        : `Заявку передано на ПУВБ за ВП ${item.selectedFirePosition?.name || ''}. Оператор підрозділу виконавця отримує її автоматично`,
+    );
+
+    this.notifyRealtime(saved, 'sent');
+
+    return saved;
+  }
+  async accept(id: string, user: AuthUser): Promise<ServiceOrder> {
+    const order = await this.findOne(id, user);
+
+    await this.ensureCanExecuteOrder(order, user);
+
+
+=== backend\src\service-orders\service-orders.service.ts:542 ===
+
+    await this.writeOrderEvent(savedOrder, user, 'accepted', 'Заявку прийнято');
+
+    this.notifyRealtime(savedOrder, 'accepted');
+
+    return savedOrder;
+  }
+
+  async reject(
+    id: string,
+    reason: string,
+    user: AuthUser,
+
+=== backend\src\service-orders\service-orders.service.ts:583 ===
+      'Заявку відхилено',
+    );
+
+    this.notifyRealtime(savedOrder, 'rejected');
+
+    return savedOrder;
+  }
+
+  async reopenRejected(id: string, user: AuthUser): Promise<ServiceOrder> {
+    const order = await this.findOne(id, user);
+
+    if (user.role !== 'admin' && user.scope !== 'main') {
+
+=== backend\src\service-orders\service-orders.service.ts:629 ===
+      'reopened',
+      'Заявку повернуто на повторний підбір',
+    );
+    this.notifyRealtime(savedOrder, 'updated');
+    return savedOrder;
+  }
+
+async selectAirAsset(
+  id: string,
+  body: {
+    airAssetPositionId: string;
+    droneModelId: string;
+
+=== backend\src\service-orders\service-orders.service.ts:685 ===
+    'Обрано бойовий БпЛА для заявки',
+  );
+
+  this.notifyRealtime(savedOrder, 'updated');
+
+  return this.findOne(savedOrder.id, user);
+}
+
+
+  async start(id: string, user: AuthUser): Promise<ServiceOrder> {
+    const order = await this.findOne(id, user);
+
+
+=== backend\src\service-orders\service-orders.service.ts:723 ===
+
+    await this.writeOrderEvent(savedOrder, user, 'started', 'Заявку розпочато');
+
+    this.notifyRealtime(savedOrder, 'started');
+
+    return savedOrder;
+  }
+  async complete(
+    id: string,
+    body: CompleteServiceOrderDto,
+    user: AuthUser,
+  ): Promise<ServiceOrder> {
+
+=== backend\src\service-orders\service-orders.service.ts:951 ===
+      'Заявку завершено',
+    );
+
+    this.notifyRealtime(savedOrder, 'completed', [
+      'missions',
+      'map',
+      'stock',
+      'analytics',
+      'events',
+    ]);
+
+    return savedOrder;
+
+=== backend\src\service-orders\service-orders.service.ts:1180 ===
+      'Заявку скасовано',
+    );
+
+    this.notifyRealtime(savedOrder, 'updated');
+
+    return savedOrder;
+  }
+
+  async findMapResults(user: AuthUser): Promise<ServiceOrderMapResult[]> {
+    const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
+
+    if (allowedUnitIds !== null && allowedUnitIds.length === 0) {
+
+=== backend\src\service-orders\service-orders.service.ts:1398 ===
+    }
+  }
+
+  private notifyRealtime(
+    orderOrId?: ServiceOrder | string,
+    action:
+      | 'created'
+      | 'updated'
+      | 'deleted'
+      | 'sent'
+      | 'accepted'
+      | 'rejected'
+
+=== backend\src\service-orders\service-orders.service.ts:1422 ===
+    const unitId =
+      order?.assignedUnitId ?? order?.selectedFirePosition?.unitId ?? undefined;
+
+    this.realtimeEvents.emitMany(scopes, action, {
+      entity: 'service_order',
+      id: orderId,
+      unitId,
+    });
+  }
+}
+
+=== backend\src\settings\settings.service.ts:37 ===
+      value: String(radiusM),
+    });
+
+    this.realtimeEvents.emitMany(['settings', 'map', 'analytics', 'events'], 'updated', {
+      entity: 'settings',
+      id: this.airThreatRadiusKey,
+    });
+
+    return {
+      radiusM,
+    };
+  }
+
+=== backend\src\shell-compatible-charges\shell-compatible-charges.service.ts:72 ===
+}
+
+private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+  this.realtimeEvents.emitMany(['reference', 'analytics', 'events'], action, {
+    entity: 'shell_compatible_charge',
+    id,
+  });
+}
+}
+
+=== backend\src\shell-compatible-fuzes\shell-compatible-fuzes.service.ts:71 ===
+  }
+
+  private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['reference', 'analytics', 'events'], action, {
+      entity: 'shell_compatible_fuze',
+      id,
+    });
+  }
+}
+
+=== backend\src\shells\shells.service.ts:56 ===
+  }
+
+  private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['reference', 'analytics', 'events'], action, {
+      entity: 'shell',
+      id,
+    });
+  }
+}
+
+=== backend\src\stock-movements\stock-movements.service.ts:123 ===
+    return manager.save(StockMovement, movement);
+  });
+
+  this.realtimeEvents.emitMany(
+  [
+    'stock',
+    'analytics',
+    'events',
+  ],
+  'moved',
+  {
+    entity: 'stock_movement',
+
+=== backend\src\stock-movements\stock-movements.service.ts:354 ===
+    return created;
+  });
+
+  this.realtimeEvents.emitMany(
+  [
+    'stock',
+    'analytics',
+    'events',
+  ],
+  'moved',
+  {
+    entity: 'stock_movement',
+
+=== backend\src\units\units.service.ts:114 ===
+      }
+    });
+
+    this.realtimeEvents.emitMany(
+      ['reference', 'users', 'stock', 'map', 'analytics', 'events'],
+      'deleted',
+      {
+        entity: 'unit',
+        id,
+        unitId: id,
+      },
+    );
+
+=== backend\src\units\units.service.ts:274 ===
+    });
+
+    const saved = await this.depotsRepository.save(depot);
+    this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], 'created', {
+      entity: 'depot',
+      id: saved.id,
+      unitId: unit.id,
+    });
+  }
+
+  private getPasDepotType(type: string): 'division_pas' | 'battery_pas' | null {
+    if (type === UnitType.DIVISION) return 'division_pas';
+
+=== backend\src\units\units.service.ts:320 ===
+    action: 'created' | 'updated' | 'deleted',
+    id: string,
+  ): void {
+    this.realtimeEvents.emitMany(
+      ['reference', 'users', 'analytics', 'events'],
+      action,
+      {
+        entity: 'unit',
+        id,
+      },
+    );
+  }
+
+=== backend\src\users\users.service.ts:154 ===
+  }
+
+  private emitUserChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['users', 'events'], action, {
+      entity: 'user',
+      id,
+    });
+  }
+}
+
+=== backend\src\weapon-models\weapon-models.service.ts:56 ===
+  }
+
+  private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['reference', 'analytics', 'events'], action, {
+      entity: 'weapon_model',
+      id,
+    });
+  }
+}
+
+=== backend\src\weapon-systems\weapon-systems.service.ts:14 ===
+import type { AuthUser } from '../auth/auth-user.types';
+import { EventLogsService } from '../event-logs/event-logs.service';
+import { FirePosition } from '../fire-positions/fire-position.entity';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { CreateWeaponSystemDto } from './dto/create-weapon-system.dto';
+import { UpdateWeaponSystemDto } from './dto/update-weapon-system.dto';
+import { AssignWeaponToFirePositionDto } from './dto/assign-weapon-to-fire-position.dto';
+import { WeaponSystem } from './weapon-system.entity';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
+
+@Injectable()
+export class WeaponSystemsService implements OnModuleInit {
+
+=== backend\src\weapon-systems\weapon-systems.service.ts:27 ===
+    @InjectRepository(WeaponSystem)
+    private readonly repository: Repository<WeaponSystem>,
+    private readonly accessScope: AccessScopeService,
+    private readonly realtime: RealtimeGateway,
+private readonly realtimeEvents: RealtimeEventsService,
+    private readonly eventLogs: EventLogsService,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.dataSource.query(`
+
+=== backend\src\weapon-systems\weapon-systems.service.ts:548 ===
+    action: 'created' | 'updated' | 'deleted' | 'moved' | 'synced' = 'moved',
+    id?: string,
+  ): void {
+    this.realtimeEvents.emitMany(
+      ['weapons', 'map', 'analytics', 'events'],
+      action,
+      {
+        entity: 'weapon_system',
+        id,
+      },
+    );
+  }
+
+=== backend\src\zones\zones.service.ts:74 ===
+  }
+
+  private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+    this.realtimeEvents.emitMany(['reference', 'analytics', 'events'], action, {
+      entity: 'zone',
+      id,
+    });
+  }
+
+  private validateRange(distanceFromM: number, distanceToM: number): void {
+    if (distanceFromM > distanceToM) {
+      throw new BadRequestException('Відстань "від" не може бути більшою за відстань "до"');
+
+=== frontend\src\app\app.component.ts:185 ===
+    );
+
+    this.subscriptions.add(
+      this.autoRefresh.watch(
+        ['all', 'missions', 'map', 'analytics', 'stock', 'threats', 'weapons'],
+        () => {
+          if (this.auth.isLoggedIn() && !this.isLoginPage) {
+            this.loadOperatorCounters();
+          }
+        },
+      ),
+    );
+
+=== frontend\src\app\app.component.ts:196 ===
+    );
+
+    this.subscriptions.add(
+      this.realtime.onAnyChanged((eventName, payload) => {
+        this.trackRealtimeEvent(eventName, payload);
+      }),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+    this.countersRequest?.unsubscribe();
+
+=== frontend\src\app\core\auto-refresh.service.ts:20 ===
+ watch(scopes: RefreshScope[], callback: (event: RefreshEvent) => void): Subscription {
+  const normalizedScopes = Array.from(new Set<RefreshScope>(['all', ...scopes]));
+
+  return this.realtime.watchMany(normalizedScopes).pipe(
+    auditTime(500),
+    map((payload) => ({
+      scope: payload.scope,
+      reason: payload.reason || payload.action || 'realtime',
+      at: this.toSafeDate(payload.at),
+    })),
+  ).subscribe((event) => callback(event));
+}
+
+=== frontend\src\app\core\auto-refresh.service.ts:40 ===
+  }
+
+  watchAll(callback: (event: RefreshEvent) => void): Subscription {
+    return this.watch(
+      [
+        'all',
+        'missions',
+        'stock',
+        'map',
+        'analytics',
+        'events',
+        'reference',
+
+=== frontend\src\app\core\event-feed.service.ts:81 ===
+  ) {
+    setTimeout(() => this.ensureLoaded());
+
+    this.unregisterRealtimeEvent = this.realtime.onEventCreated((event) => {
+      const unitId = typeof event?.['unitId'] === 'string' ? event['unitId'] : undefined;
+
+      if (!this.shouldRefreshForRealtimeUnit(unitId)) {
+        return;
+      }
+
+      this.scheduleRealtimeRefresh();
+    });
+
+=== frontend\src\app\core\event-feed.service.ts:92 ===
+    });
+
+    this.realtimeSubscription.add(
+      this.realtime.watchMany(['events', 'missions', 'stock', 'threats']).subscribe((event) => {
+        if (!this.shouldRefreshForRealtimeUnit(event.unitId)) {
+          return;
+        }
+
+        this.scheduleRealtimeRefresh();
+      }),
+    );
+  }
+
+=== frontend\src\app\core\operator-workspace.component.ts:686 ===
+
+    this.refresh();
+
+    this.realtime.onServiceOrdersChanged(() => this.refreshOrders());
+    this.realtime.onMapChanged(() => {
+      this.refreshOrders();
+      this.refreshThreats();
+    });
+    this.realtime.onStockChanged(() => this.refreshStock());
+  }
+
+  ngOnDestroy(): void {
+
+=== frontend\src\app\core\operator-workspace.component.ts:687 ===
+    this.refresh();
+
+    this.realtime.onServiceOrdersChanged(() => this.refreshOrders());
+    this.realtime.onMapChanged(() => {
+      this.refreshOrders();
+      this.refreshThreats();
+    });
+    this.realtime.onStockChanged(() => this.refreshStock());
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+
+=== frontend\src\app\core\operator-workspace.component.ts:691 ===
+      this.refreshOrders();
+      this.refreshThreats();
+    });
+    this.realtime.onStockChanged(() => this.refreshStock());
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  get canSeeWorkspace(): boolean {
+    const user = this.auth.getUser();
+
+=== frontend\src\app\core\realtime.service.ts:99 ===
+    return this.register('threat_changed', callback);
+  }
+
+  onServiceOrdersChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('service_order_changed', callback);
+  }
+
+  onFireMissionsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('fire_mission_changed', callback);
+  }
+
+  onMapChanged(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:103 ===
+    return this.register('service_order_changed', callback);
+  }
+
+  onFireMissionsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('fire_mission_changed', callback);
+  }
+
+  onMapChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('map_changed', callback);
+  }
+
+  onStockChanged(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:107 ===
+    return this.register('fire_mission_changed', callback);
+  }
+
+  onMapChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('map_changed', callback);
+  }
+
+  onStockChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('stock_changed', callback);
+  }
+
+  onEventCreated(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:111 ===
+    return this.register('map_changed', callback);
+  }
+
+  onStockChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('stock_changed', callback);
+  }
+
+  onEventCreated(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('event_created', callback);
+  }
+
+  onAnalyticsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:115 ===
+    return this.register('stock_changed', callback);
+  }
+
+  onEventCreated(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('event_created', callback);
+  }
+
+  onAnalyticsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('analytics_changed', callback);
+  }
+
+  onReferenceChanged(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:119 ===
+    return this.register('event_created', callback);
+  }
+
+  onAnalyticsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('analytics_changed', callback);
+  }
+
+  onReferenceChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('reference_changed', callback);
+  }
+
+  onUsersChanged(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:123 ===
+    return this.register('analytics_changed', callback);
+  }
+
+  onReferenceChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('reference_changed', callback);
+  }
+
+  onUsersChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('user_changed', callback);
+  }
+
+  onSettingsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:127 ===
+    return this.register('reference_changed', callback);
+  }
+
+  onUsersChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('user_changed', callback);
+  }
+
+  onSettingsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('settings_changed', callback);
+  }
+
+  onAllChanged(callback: (payload?: RealtimePayload) => void): () => void {
+
+=== frontend\src\app\core\realtime.service.ts:131 ===
+    return this.register('user_changed', callback);
+  }
+
+  onSettingsChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('settings_changed', callback);
+  }
+
+  onAllChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('all_changed', callback);
+  }
+
+  onAnyChanged(
+
+=== frontend\src\app\core\realtime.service.ts:135 ===
+    return this.register('settings_changed', callback);
+  }
+
+  onAllChanged(callback: (payload?: RealtimePayload) => void): () => void {
+    return this.register('all_changed', callback);
+  }
+
+  onAnyChanged(
+    callback: (eventName: RealtimeEventName, payload?: RealtimePayload) => void,
+  ): () => void {
+    this.anyCallbacks.add(callback);
+    return () => this.anyCallbacks.delete(callback);
+
+=== frontend\src\app\core\realtime.service.ts:139 ===
+    return this.register('all_changed', callback);
+  }
+
+  onAnyChanged(
+    callback: (eventName: RealtimeEventName, payload?: RealtimePayload) => void,
+  ): () => void {
+    this.anyCallbacks.add(callback);
+    return () => this.anyCallbacks.delete(callback);
+  }
+
+  disconnect(): void {
+    this.socket?.disconnect();
+
+=== frontend\src\app\features\air-assets\air-assets-page\air-assets-page.ts:155 ===
+        this.restoreReconAreaDraft();
+      }
+    }));
+    this.subscriptions.add(this.autoRefresh.watch(['all', 'map', 'missions'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  get filteredItems(): AirAssetPosition[] {
+    if (this.activeGroup === 'all') return this.items;
+
+=== frontend\src\app\features\air-threats\air-threats-page\air-threats-page.ts:37 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['threats', 'map'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+  }
+
+  load(): void {
+    this.loading = true;
+
+=== frontend\src\app\features\analytics\analytics-page\analytics-page.ts:88 ===
+    this.refresh(true);
+
+    this.subscriptions.add(
+      this.autoRefresh.watch(
+        ['all', 'analytics', 'missions', 'stock', 'map', 'weapons', 'threats'],
+        () => this.refresh(false),
+      ),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.analyticsRequest?.unsubscribe();
+
+=== frontend\src\app\features\audit\audit-page\audit-page.ts:30 ===
+  ) {}
+
+  ngOnInit(): void { this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['events'], () => this.load())); }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+    this.loadSubscription?.unsubscribe();
+
+=== frontend\src\app\features\charges\charges-page\charges-page.ts:41 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference', 'stock'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\depots\depots-page\depots-page.ts:55 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['stock'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\drone-logistics\drone-logistics-page.ts:77 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.subscriptions.add(this.autoRefresh.watch(['stock', 'reference', 'map', 'logistics'], () => this.load(false)));
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  load(showLoader = true): void {
+    this.loading = showLoader;
+
+=== frontend\src\app\features\event-logs\event-feed.service.ts:35 ===
+  ) {
+    this.load();
+
+    this.realtime.onEventCreated(() => {
+      this.load();
+    });
+  }
+
+  load(): void {
+    const user = this.auth.getUser();
+
+    if (!user || user.role === 'observer') {
+
+=== frontend\src\app\features\ew\ew-page\ew-page.ts:69 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.subscriptions.add(this.autoRefresh.watch(['all', 'map', 'threats'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  get readyCount(): number {
+    return this.items.filter((item) => item.readinessStatus === 'ready').length;
+
+=== frontend\src\app\features\fire-missions\fire-missions-page\fire-missions-page.ts:36 ===
+    this.load(true);
+
+    this.subscriptions.add(
+      this.autoRefresh.watch(['all', 'missions', 'stock'], () => this.load())
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+
+=== frontend\src\app\features\fire-positions\fire-positions-page\fire-positions-page.ts:84 ===
+  this.load();
+
+  this.autoRefreshSubscription.add(
+    this.autoRefresh.watch(['all', 'map', 'missions', 'weapons', 'threats'], () => this.load()),
+  );
+}
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+  }
+
+  get totalCount(): number {
+
+=== frontend\src\app\features\fuzes\fuzes-page\fuzes-page.ts:37 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\home\home-page\home-page.ts:108 ===
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(
+        ['missions', 'stock', 'map', 'analytics', 'events', 'weapons', 'threats'],
+        () => this.load(),
+      ),
+    );
+  }
+
+  async ngAfterViewInit(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) {
+
+=== frontend\src\app\features\map\map-page\map-page.ts:178 ===
+      }),
+    );
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['all', 'map', 'missions', 'threats', 'weapons'], () => {
+        this.loadMapObjects();
+        this.loadMapResults();
+        this.loadActiveOrders();
+      }),
+    );
+    this.scheduledRefreshTimer = setInterval(() => {
+      this.loadMapObjects();
+      this.loadActiveOrders();
+
+=== frontend\src\app\features\planned-trips\planned-trips-page.ts:96 ===
+  this.load();
+
+  this.subscriptions.add(
+    this.autoRefresh.watchAll(() => this.load(false)),
+  );
+}
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+ load(showLoader = true): void {
+
+=== frontend\src\app\features\primers\primers-page\primers-page.ts:37 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\recommendations\recommendations-page\recommendations-page.ts:28 ===
+  ) {}
+
+  ngOnInit(): void { this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['analytics', 'missions', 'stock', 'map', 'weapons', 'threats'], () => this.load())); }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+    this.loading = true;
+
+=== frontend\src\app\features\recon\recon-page\recon-page.ts:225 ===
+
+    this.load();
+    this.subscription.add(
+      this.autoRefresh.watch(['recon', 'map', 'analytics', 'events'], () => this.load(false)),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subscription.unsubscribe();
+    this.map?.remove();
+  }
+
+
+=== frontend\src\app\features\service-orders\service-orders-page\service-orders-page.ts:231 ===
+    });
+
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['all', 'missions', 'recon'], () => {
+        this.closeActions();
+        this.load(true);
+        this.loadPlannedPuar();
+      }),
+    );
+  }
+
+  ngOnDestroy(): void {
+
+=== frontend\src\app\features\settings\settings-page\settings-page.ts:35 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['settings'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\shell-compatible-charges\shell-compatible-charges-page\shell-compatible-charges-page.ts:45 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\shell-compatible-fuzes\shell-compatible-fuzes-page\shell-compatible-fuzes-page.ts:44 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\shells\shells-page\shells-page.ts:39 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\stock\stock-page\stock-page.ts:42 ===
+    this.load();
+
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['all', 'stock'], () => this.load()),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+
+=== frontend\src\app\features\stock-movements\stock-movements-page\stock-movements-page.ts:90 ===
+  ngOnInit(): void {
+    this.load();
+
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['all', 'stock'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\units\units-page\units-page.ts:135 ===
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['all', 'reference'], () => this.load(false)),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+    this.saveSubscription?.unsubscribe();
+    this.deleteSubscription?.unsubscribe();
+
+=== frontend\src\app\features\users\users-page\users-page.ts:51 ===
+
+  ngOnInit(): void {
+    setTimeout(() => this.load());
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['users'], () => this.load()));
+    setTimeout(() => this.loadUnits());
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\weapon-models\weapon-models-page\weapon-models-page.ts:38 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {
+
+=== frontend\src\app\features\weapon-systems\weapon-systems-page\weapon-systems-page.ts:66 ===
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['weapons', 'map', 'analytics'], () => this.load()),
+    );
+  }
+
+  get totalCount(): number {
+    return this.visibleItems.length;
+  }
+
+  get readyCount(): number {
+
+=== frontend\src\app\features\zones\zones-page\zones-page.ts:43 ===
+
+  ngOnInit(): void {
+    this.load();
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['reference'], () => this.load()));
+  }
+
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
+  }
+
+  load(): void {

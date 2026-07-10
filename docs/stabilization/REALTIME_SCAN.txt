@@ -1,0 +1,129 @@
+﻿backend\src\air-assets\air-asset-tasks.service.ts:9 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\air-assets\air-asset-tasks.service.ts:27 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\air-assets\air-assets.service.ts:7 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\air-assets\air-assets.service.ts:20 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\air-assets\air-recon-areas.service.ts:6 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\air-assets\air-recon-areas.service.ts:21 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\air-threats\air-threats.service.ts:5 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\air-threats\air-threats.service.ts:24 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\charges\charges.service.ts:8 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\charges\charges.service.ts:18 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\depot-charge-stock\depot-charge-stock.service.ts:5 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\depot-charge-stock\depot-charge-stock.service.ts:16 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\depot-fuze-stock\depot-fuze-stock.service.ts:5 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\depot-fuze-stock\depot-fuze-stock.service.ts:16 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\depot-primer-stock\depot-primer-stock.service.ts:5 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\depot-primer-stock\depot-primer-stock.service.ts:16 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\depot-shell-stock\depot-shell-stock.service.ts:5 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\depot-shell-stock\depot-shell-stock.service.ts:16 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\depots\depots.service.ts:11 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\depots\depots.service.ts:31 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\drone-logistics\drone-logistics.service.ts:6 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\drone-logistics\drone-logistics.service.ts:38 private readonly realtime: RealtimeEventsService,
+backend\src\ew\ew.service.ts:7 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\ew\ew.service.ts:19 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\fire-missions\fire-missions.service.ts:22 import { RealtimeGateway } from '../realtime/realtime.gateway';
+backend\src\fire-missions\fire-missions.service.ts:23 import { RealtimeEventsService }
+backend\src\fire-missions\fire-missions.service.ts:47 private readonly realtime: RealtimeGateway,
+backend\src\fire-missions\fire-missions.service.ts:48 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\fire-missions\fire-missions.service.ts:153 return this.saveMissionAndEmit(mission, 'sent');
+backend\src\fire-missions\fire-missions.service.ts:174 return this.saveMissionAndEmit(mission, nextStatus);
+backend\src\fire-missions\fire-missions.service.ts:185 return this.saveMissionAndEmit(mission, 'cancelled');
+backend\src\fire-missions\fire-missions.service.ts:196 return this.saveMissionAndEmit(mission, 'closed');
+backend\src\fire-missions\fire-missions.service.ts:318 private async saveMissionAndEmit(mission: FireMission, action: string): Promise<FireMission> {
+backend\src\fire-position-weapons\fire-position-weapons.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\fire-position-weapons\fire-position-weapons.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\fire-positions\fire-positions.service.ts:28 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\fire-positions\fire-positions.service.ts:40 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\fuzes\fuzes.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\fuzes\fuzes.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\modules\recon\events\recon-events.service.ts:4 import { RealtimeEventsService } from '../../../realtime/realtime-events.service';
+backend\src\modules\recon\events\recon-events.service.ts:10 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\planned-trips\planned-trips.service.ts:6 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\planned-trips\planned-trips.service.ts:59 private readonly realtime: RealtimeEventsService,
+backend\src\primers\primers.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\primers\primers.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\realtime\realtime-events.service.ts:2 import { RealtimeGateway } from './realtime.gateway';
+backend\src\realtime\realtime-events.service.ts:6 export class RealtimeEventsService {
+backend\src\realtime\realtime-events.service.ts:7 constructor(private readonly gateway: RealtimeGateway) {}
+backend\src\realtime\realtime-events.service.ts:9 emit(
+backend\src\realtime\realtime-events.service.ts:29 this.gateway.broadcastRealtimeEvent(payload);
+backend\src\realtime\realtime-events.service.ts:32 this.gateway.broadcastRealtimeEvent({
+backend\src\realtime\realtime-events.service.ts:53 this.emit(scope, action, {
+backend\src\realtime\realtime.gateway.ts:30 const realtimeLogger = new Logger('RealtimeGateway');
+backend\src\realtime\realtime.gateway.ts:90 export class RealtimeGateway {
+backend\src\realtime\realtime.gateway.ts:95 broadcastRealtimeEvent(payload: RealtimeEventPayload): void {
+backend\src\realtime\realtime.gateway.ts:96 logRealtimeEvent('realtime:event', payload);
+backend\src\realtime\realtime.gateway.ts:97 this.server?.emit('realtime:event', payload);
+backend\src\realtime\realtime.gateway.ts:101 this.emit('threat_changed', { scope: 'threats', entity: 'air_threat', ...payload });
+backend\src\realtime\realtime.gateway.ts:107 this.emit('service_order_changed', { scope: 'missions', entity: 'service_order', ...payload });
+backend\src\realtime\realtime.gateway.ts:112 this.emit('fire_mission_changed', { scope: 'missions', entity: 'fire_mission', ...payload });
+backend\src\realtime\realtime.gateway.ts:118 this.emit('map_changed', { scope: 'map', ...payload });
+backend\src\realtime\realtime.gateway.ts:122 this.emit('event_created', { scope: 'events', entity: 'event_log', ...payload });
+backend\src\realtime\realtime.gateway.ts:126 this.emit('stock_changed', { scope: 'stock', ...payload });
+backend\src\realtime\realtime.gateway.ts:131 this.emit('analytics_changed', { scope: 'analytics', ...payload });
+backend\src\realtime\realtime.gateway.ts:135 this.emit('reference_changed', { scope: 'reference', ...payload });
+backend\src\realtime\realtime.gateway.ts:140 this.emit('user_changed', { scope: 'users', entity: 'user', ...payload });
+backend\src\realtime\realtime.gateway.ts:144 this.emit('settings_changed', { scope: 'settings', entity: 'settings', ...payload });
+backend\src\realtime\realtime.gateway.ts:148 this.emit('all_changed', { scope: 'all', ...payload });
+backend\src\realtime\realtime.gateway.ts:151 private emit(eventName: RealtimeEventName, payload: Partial<RealtimePayload>): void {
+backend\src\realtime\realtime.gateway.ts:159 this.server?.emit(eventName, fullPayload);
+backend\src\realtime\realtime.gateway.ts:160 this.broadcastRealtimeEvent({
+backend\src\realtime\realtime.module.ts:2 import { RealtimeEventsService } from './realtime-events.service';
+backend\src\realtime\realtime.module.ts:3 import { RealtimeGateway } from './realtime.gateway';
+backend\src\realtime\realtime.module.ts:6 providers: [RealtimeGateway, RealtimeEventsService],
+backend\src\realtime\realtime.module.ts:7 exports: [RealtimeEventsService],
+backend\src\service-orders\service-orders.service.ts:22 import { RealtimeGateway } from '../realtime/realtime.gateway';
+backend\src\service-orders\service-orders.service.ts:30 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\service-orders\service-orders.service.ts:62 private readonly realtime: RealtimeGateway,
+backend\src\service-orders\service-orders.service.ts:63 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\service-orders\service-orders.service.ts:224 this.notifyRealtime(savedItem, 'created');
+backend\src\service-orders\service-orders.service.ts:273 this.notifyRealtime(savedItem, 'created');
+backend\src\service-orders\service-orders.service.ts:343 this.notifyRealtime(savedItem, 'updated');
+backend\src\service-orders\service-orders.service.ts:365 this.notifyRealtime(item, 'deleted');
+backend\src\service-orders\service-orders.service.ts:459 this.notifyRealtime(savedOrder, 'updated');
+backend\src\service-orders\service-orders.service.ts:517 this.notifyRealtime(saved, 'sent');
+backend\src\service-orders\service-orders.service.ts:542 this.notifyRealtime(savedOrder, 'accepted');
+backend\src\service-orders\service-orders.service.ts:583 this.notifyRealtime(savedOrder, 'rejected');
+backend\src\service-orders\service-orders.service.ts:629 this.notifyRealtime(savedOrder, 'updated');
+backend\src\service-orders\service-orders.service.ts:685 this.notifyRealtime(savedOrder, 'updated');
+backend\src\service-orders\service-orders.service.ts:723 this.notifyRealtime(savedOrder, 'started');
+backend\src\service-orders\service-orders.service.ts:951 this.notifyRealtime(savedOrder, 'completed', [
+backend\src\service-orders\service-orders.service.ts:1180 this.notifyRealtime(savedOrder, 'updated');
+backend\src\service-orders\service-orders.service.ts:1398 private notifyRealtime(
+backend\src\settings\settings.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\settings\settings.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\shell-compatible-charges\shell-compatible-charges.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\shell-compatible-charges\shell-compatible-charges.service.ts:15 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\shell-compatible-fuzes\shell-compatible-fuzes.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\shell-compatible-fuzes\shell-compatible-fuzes.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\shells\shells.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\shells\shells.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\stock-movements\stock-movements.service.ts:17 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\stock-movements\stock-movements.service.ts:41 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\units\units.service.ts:12 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\units\units.service.ts:27 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\users\users.service.ts:11 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\users\users.service.ts:19 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\weapon-models\weapon-models.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\weapon-models\weapon-models.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\weapon-systems\weapon-systems.service.ts:14 import { RealtimeGateway } from '../realtime/realtime.gateway';
+backend\src\weapon-systems\weapon-systems.service.ts:19 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\weapon-systems\weapon-systems.service.ts:27 private readonly realtime: RealtimeGateway,
+backend\src\weapon-systems\weapon-systems.service.ts:28 private readonly realtimeEvents: RealtimeEventsService,
+backend\src\zones\zones.service.ts:4 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+backend\src\zones\zones.service.ts:14 private readonly realtimeEvents: RealtimeEventsService,
+frontend\src\app\core\auto-refresh.service.ts:5 export type RefreshScope = RealtimeScope;
+frontend\src\app\core\auto-refresh.service.ts:8 scope: RefreshScope;
+frontend\src\app\core\auto-refresh.service.ts:17 watch(scopes: RefreshScope[], callback: (event: RefreshEvent) => void): Subscription {
+frontend\src\app\core\auto-refresh.service.ts:18 const normalizedScopes = Array.from(new Set<RefreshScope>(['all', ...scopes]));
+frontend\src\app\core\operator-workspace.component.ts:1084 this.notifyCriticalTaskChanges();
+frontend\src\app\core\operator-workspace.component.ts:1125 private notifyCriticalTaskChanges(): void {
+frontend\src\app\core\realtime.service.ts:86 this.socket.on('connect', () => this.zone.run(() => this.connected$.next(true)));
+frontend\src\app\core\realtime.service.ts:87 this.socket.on('disconnect', () => this.zone.run(() => this.connected$.next(false)));
+frontend\src\app\core\realtime.service.ts:88 this.socket.on('connect_error', () => this.zone.run(() => this.connected$.next(false)));
+frontend\src\app\core\realtime.service.ts:89 this.socket.on('realtime:event', (payload?: Partial<RealtimeEventPayload>) => {
+frontend\src\app\core\realtime.service.ts:139 onAnyChanged(
+frontend\src\app\core\realtime.service.ts:252 const fallbackScope = this.scopeFromEventName(eventName);
+frontend\src\app\core\realtime.service.ts:266 private scopeFromEventName(eventName: RealtimeEventName): RealtimeScope {
+frontend\src\app\app.component.ts:196 this.realtime.onAnyChanged((eventName, payload) => {

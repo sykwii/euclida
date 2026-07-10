@@ -27,6 +27,7 @@ export type RealtimeAction =
   | 'changed';
 
 export interface RealtimeEventPayload {
+  version: 1;
   scope: RealtimeScope;
   action: RealtimeAction;
   entity?: string;
