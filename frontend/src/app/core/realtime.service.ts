@@ -124,16 +124,8 @@ export class RealtimeService implements OnDestroy {
     });
   }
 
-  onThreatsChanged(callback: (payload?: RealtimePayload) => void): () => void {
-    return this.register('threat_changed', callback);
-  }
-
   onServiceOrdersChanged(callback: (payload?: RealtimePayload) => void): () => void {
     return this.register('service_order_changed', callback);
-  }
-
-  onFireMissionsChanged(callback: (payload?: RealtimePayload) => void): () => void {
-    return this.register('fire_mission_changed', callback);
   }
 
   onMapChanged(callback: (payload?: RealtimePayload) => void): () => void {
@@ -146,26 +138,6 @@ export class RealtimeService implements OnDestroy {
 
   onEventCreated(callback: (payload?: RealtimePayload) => void): () => void {
     return this.register('event_created', callback);
-  }
-
-  onAnalyticsChanged(callback: (payload?: RealtimePayload) => void): () => void {
-    return this.register('analytics_changed', callback);
-  }
-
-  onReferenceChanged(callback: (payload?: RealtimePayload) => void): () => void {
-    return this.register('reference_changed', callback);
-  }
-
-  onUsersChanged(callback: (payload?: RealtimePayload) => void): () => void {
-    return this.register('user_changed', callback);
-  }
-
-  onSettingsChanged(callback: (payload?: RealtimePayload) => void): () => void {
-    return this.register('settings_changed', callback);
-  }
-
-  onAllChanged(callback: (payload?: RealtimePayload) => void): () => void {
-    return this.register('all_changed', callback);
   }
 
   onAnyChanged(callback: AnyRealtimeCallback): () => void {
