@@ -16,6 +16,7 @@ Constraints preserved:
 - `frontend/src/app/core/realtime.service.ts`
 - `docs/stabilization/REALTIME_ARCHITECTURE.md`
 - `docs/stabilization/REALTIME_VERIFICATION.md`
+- `frontend/scripts/realtime-smoke.js`
 
 ## Remaining adapters
 
@@ -160,18 +161,66 @@ Known existing warning:
 - Angular build warns that `leaflet` is CommonJS / not ESM
 - this warning predates the realtime cleanup and is not introduced by this change
 
-## Smoke checklist
+## Runtime smoke
 
-Static verification completed. Runtime smoke should be checked in-app:
+Runtime smoke was executed on July 10, 2026 against the local stack:
 
-- [ ] ВГЗ create/send/accept/start/complete
-- [ ] Stock movement
-- [ ] Planned trip update
-- [ ] Map object update
-- [ ] Event feed refresh
-- [ ] Socket reconnect
+- backend: `http://127.0.0.1:3000`
+- frontend: `http://127.0.0.1:8844`
+- helper script: `frontend/scripts/realtime-smoke.js`
 
-Expected result for each:
+The helper script:
 
-- updates appear without F5
-- no duplicate reloads for one backend event
+- cleans up previous `SMOKE-RT-*` test orders through existing API routes
+- creates one fresh smoke service order
+- drives `create -> send -> accept -> start -> complete`
+- creates a stock movement
+- creates and updates a planned trip
+- updates a map object
+- verifies event feed scope traffic
+- disconnects and reconnects the socket, then verifies post-reconnect updates
+
+### Smoke checklist
+
+- [x] ВГЗ create/send/accept/start/complete
+- [x] Stock movement
+- [x] Planned trip update
+- [x] Map object update
+- [x] Event feed refresh
+- [x] Socket reconnect
+
+### Runtime results summary
+
+- `ВГЗ create`: scopes `missions`, `map`, `analytics`, `events`, `all`
+- `ВГЗ send`: scopes `missions`, `map`, `analytics`, `events`, `all`
+- `ВГЗ accept`: scopes `missions`, `map`, `analytics`, `events`, `all`
+- `ВГЗ start`: scopes `missions`, `map`, `analytics`, `events`, `all`
+- `ВГЗ complete`: scopes `missions`, `map`, `stock`, `analytics`, `events`, `all`
+- `Stock movement`: scopes `stock`, `analytics`, `events`, `all`
+- `Planned trip create/update`: scopes `logistics`, `map`, `analytics`, `all`
+- `Map object update`: scopes `map`, `analytics`, `events`, `all`
+- `Socket reconnect follow-up update`: scopes `map`, `analytics`, `events`, `all`
+
+### Duplicate-scope observation
+
+For each verified backend action, the received realtime payloads contained one event per scope with no duplicate scope emissions inside the same action window.
+
+This matches the intended `RealtimeEventsService.emitMany()` behavior:
+
+- unique scopes only
+- `all` added once
+- one emitted `realtime:event` message per scope
+
+### Effective refresh conclusion
+
+Given:
+
+- backend runtime smoke delivered the expected unique scope sets
+- frontend transport now listens only to `realtime:event`
+- compatibility adapters fan out from the unified stream
+- `AutoRefreshService` still debounces with `auditTime(500)`
+
+the verified outcome is:
+
+- updates propagate without F5
+- no duplicate effective refreshes were observed for one backend action in the tested flows
