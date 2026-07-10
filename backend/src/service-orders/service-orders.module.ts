@@ -8,7 +8,7 @@ import { ServiceOrderSuggestionsService } from './service-order-suggestions.serv
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AccessScopeModule } from '../access-scope/access-scope.module';
 import { AuthModule } from '../auth/auth.module';
-import { EventLogsModule } from 'src/event-logs/event-logs.module';
+import { EventLogsModule } from '../event-logs/event-logs.module';
 import { ReconModule } from '../modules/recon/recon.module';
 
 @Module({

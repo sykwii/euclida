@@ -6,7 +6,7 @@ import { EwController } from './ew.controller';
 import { EwFrequencyRange } from './ew-frequency-range.entity';
 import { EwPosition } from './ew-position.entity';
 import { EwService } from './ew.service';
-import { AuthModule } from 'src/auth/auth.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [    AuthModule,
