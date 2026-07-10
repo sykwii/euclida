@@ -1,0 +1,108 @@
+﻿=== MODULE EXPORTS ===
+
+[backend\src\access-scope\access-scope.module.ts]
+AccessScopeService
+
+[backend\src\air-assets\air-assets.module.ts]
+AirAssetsService, AirReconAreasService, AirAssetTasksService
+
+[backend\src\air-threats\air-threats.module.ts]
+AirThreatsService
+
+[backend\src\auth\auth.module.ts]
+JwtModule,
+    JwtAuthGuard,
+    HttpWriteGuard,
+    WriteAccessGuard,
+    AdminOnlyGuard,
+
+[backend\src\event-logs\event-logs.module.ts]
+EventLogsService
+
+[backend\src\ew\ew.module.ts]
+EwService
+
+[backend\src\modules\recon\recon.module.ts]
+ReconCoreIntegrationService
+
+[backend\src\operator-shifts\operator-shifts.module.ts]
+OperatorShiftsService
+
+[backend\src\realtime\realtime.module.ts]
+RealtimeGateway, RealtimeEventsService
+
+[backend\src\service-orders\service-orders.module.ts]
+ServiceOrdersService
+
+[backend\src\settings\settings.module.ts]
+SettingsService
+
+[backend\src\users\users.module.ts]
+UsersService
+
+=== CROSS-DOMAIN SERVICE IMPORTS ===
+backend\src\air-assets\air-asset-tasks.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\air-assets\air-asset-tasks.service.ts -> EventLogsService [../event-logs/event-logs.service]
+backend\src\air-assets\air-asset-tasks.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\air-assets\air-assets.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\air-assets\air-assets.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\air-assets\air-assets.service.ts -> EventLogsService [../event-logs/event-logs.service]
+backend\src\air-assets\air-recon-areas.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\air-assets\air-recon-areas.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\air-assets\air-recon-areas.service.ts -> EventLogsService [../event-logs/event-logs.service]
+backend\src\air-threats\air-threats.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\air-threats\air-threats.service.ts -> SettingsService [../settings/settings.service]
+backend\src\analytics\analytics.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\analytics\analytics.service.ts -> AirThreatsService [../air-threats/air-threats.service]
+backend\src\analytics\analytics.service.ts -> ServiceOrdersService [../service-orders/service-orders.service]
+backend\src\auth\auth.service.ts -> UsersService [../users/users.service]
+backend\src\charges\charges.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\depot-charge-stock\depot-charge-stock.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\depot-fuze-stock\depot-fuze-stock.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\depot-primer-stock\depot-primer-stock.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\depot-shell-stock\depot-shell-stock.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\depots\depots.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\depots\depots.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\drone-logistics\drone-logistics.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\event-logs\event-logs.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\ew\ew.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\ew\ew.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\fire-missions\fire-missions.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\fire-position-weapons\fire-position-weapons.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\fire-positions\fire-positions.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\fire-positions\fire-positions.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\fuzes\fuzes.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\modules\recon\events\recon-events.service.ts -> RealtimeEventsService [../../../realtime/realtime-events.service]
+backend\src\modules\recon\services\puar-proposal.service.ts -> ReconEventsService [../events/recon-events.service]
+backend\src\modules\recon\services\recon-analytics.service.ts -> ReconEventsService [../events/recon-events.service]
+backend\src\modules\recon\services\recon-analytics.service.ts -> ReconSettingsService [./recon-settings.service]
+backend\src\modules\recon\services\recon-core-integration.service.ts -> PuarProposalService [./puar-proposal.service]
+backend\src\modules\recon\services\recon-correlation.service.ts -> ReconEventsService [../events/recon-events.service]
+backend\src\modules\recon\services\recon-correlation.service.ts -> ReconSettingsService [./recon-settings.service]
+backend\src\modules\recon\services\recon-heatmap.service.ts -> ReconEventsService [../events/recon-events.service]
+backend\src\modules\recon\services\recon-processed-target.service.ts -> ReconEventsService [../events/recon-events.service]
+backend\src\modules\recon\services\recon.service.ts -> ReconEventsService [../events/recon-events.service]
+backend\src\modules\recon\services\recon.service.ts -> ReconProcessedTargetService [./recon-processed-target.service]
+backend\src\modules\recon\services\recon.service.ts -> ReconSettingsService [./recon-settings.service]
+backend\src\operator-shifts\operator-shifts.service.ts -> EventLogsService [../event-logs/event-logs.service]
+backend\src\planned-trips\planned-trips.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\planned-trips\planned-trips.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\primers\primers.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\service-orders\service-orders.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\service-orders\service-orders.service.ts -> EventLogsService [../event-logs/event-logs.service]
+backend\src\service-orders\service-orders.service.ts -> ServiceOrderSuggestionsService [./service-order-suggestions.service]
+backend\src\service-orders\service-orders.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\settings\settings.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\shell-compatible-charges\shell-compatible-charges.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\shell-compatible-fuzes\shell-compatible-fuzes.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\shells\shells.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\stock\stock.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\stock-movements\stock-movements.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\stock-movements\stock-movements.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\units\units.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\users\users.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\weapon-models\weapon-models.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\weapon-systems\weapon-systems.service.ts -> AccessScopeService [../access-scope/access-scope.service]
+backend\src\weapon-systems\weapon-systems.service.ts -> EventLogsService [../event-logs/event-logs.service]
+backend\src\weapon-systems\weapon-systems.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
+backend\src\zones\zones.service.ts -> RealtimeEventsService [../realtime/realtime-events.service]
