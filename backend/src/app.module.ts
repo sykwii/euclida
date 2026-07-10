@@ -5,7 +5,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { HttpWriteGuard } from './auth/http-write.guard';
 import { UnitsModule } from './units/units.module';
-import { UnitService } from './unit/unit.service';
 import { WeaponModelsModule } from './weapon-models/weapon-models.module';
 import { ShellsModule } from './shells/shells.module';
 import { ChargesModule } from './charges/charges.module';
@@ -100,7 +99,6 @@ PlannedTripsModule,
 ReconModule,
   ],
   providers: [
-    UnitService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

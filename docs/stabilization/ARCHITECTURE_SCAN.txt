@@ -1,0 +1,148 @@
+﻿=== UNIT DIRECTORIES ===
+C:\Users\НЗ\euclida\backend\src\unit
+C:\Users\НЗ\euclida\backend\src\units
+
+=== DIRECT REPOSITORY INJECTIONS ===
+backend\src\access-scope\access-scope.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\access-scope\access-scope.service.ts:10 @InjectRepository(Unit)
+backend\src\air-assets\air-asset-tasks.service.ts:2 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\air-assets\air-asset-tasks.service.ts:18 @InjectRepository(AirAssetTask)
+backend\src\air-assets\air-asset-tasks.service.ts:20 @InjectRepository(AirAssetPosition)
+backend\src\air-assets\air-asset-tasks.service.ts:22 @InjectRepository(AirAssetDroneStock)
+backend\src\air-assets\air-asset-tasks.service.ts:24 @InjectRepository(AirAssetWarheadStock)
+backend\src\air-assets\air-assets.service.ts:2 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\air-assets\air-assets.service.ts:17 @InjectRepository(AirAssetPosition)
+backend\src\air-assets\air-recon-areas.service.ts:2 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\air-assets\air-recon-areas.service.ts:16 @InjectRepository(AirReconArea)
+backend\src\air-assets\air-recon-areas.service.ts:18 @InjectRepository(AirAssetPosition)
+backend\src\air-threats\air-threats.service.ts:2 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\air-threats\air-threats.service.ts:14 @InjectRepository(AirThreat)
+backend\src\air-threats\air-threats.service.ts:17 @InjectRepository(FirePosition)
+backend\src\charges\charges.service.ts:6 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\charges\charges.service.ts:16 @InjectRepository(Charge)
+backend\src\depot-charge-stock\depot-charge-stock.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\depot-charge-stock\depot-charge-stock.service.ts:12 @InjectRepository(DepotChargeStock)
+backend\src\depot-charge-stock\depot-charge-stock.service.ts:14 @InjectRepository(Depot)
+backend\src\depot-fuze-stock\depot-fuze-stock.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\depot-fuze-stock\depot-fuze-stock.service.ts:12 @InjectRepository(DepotFuzeStock)
+backend\src\depot-fuze-stock\depot-fuze-stock.service.ts:14 @InjectRepository(Depot)
+backend\src\depot-primer-stock\depot-primer-stock.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\depot-primer-stock\depot-primer-stock.service.ts:12 @InjectRepository(DepotPrimerStock)
+backend\src\depot-primer-stock\depot-primer-stock.service.ts:14 @InjectRepository(Depot)
+backend\src\depot-shell-stock\depot-shell-stock.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\depot-shell-stock\depot-shell-stock.service.ts:12 @InjectRepository(DepotShellStock)
+backend\src\depot-shell-stock\depot-shell-stock.service.ts:14 @InjectRepository(Depot)
+backend\src\depots\depots.service.ts:7 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\depots\depots.service.ts:24 @InjectRepository(Depot)
+backend\src\documents\documents.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\documents\documents.service.ts:14 @InjectRepository(ServiceOrder) private readonly orders: Repository<ServiceOrder>,
+backend\src\documents\documents.service.ts:15 @InjectRepository(WeaponSystem) private readonly weapons: Repository<WeaponSystem>,
+backend\src\documents\documents.service.ts:16 @InjectRepository(FirePosition) private readonly positions: Repository<FirePosition>,
+backend\src\documents\documents.service.ts:17 @InjectRepository(DepotShellStock) private readonly shellStock: Repository<DepotShellStock>,
+backend\src\drone-logistics\drone-logistics.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\drone-logistics\drone-logistics.service.ts:30 @InjectRepository(DroneModel) private readonly droneModels: Repository<DroneModel>,
+backend\src\drone-logistics\drone-logistics.service.ts:31 @InjectRepository(DroneWarheadType) private readonly warheadTypes: Repository<DroneWarheadType>,
+backend\src\drone-logistics\drone-logistics.service.ts:32 @InjectRepository(DepotDroneStock) private readonly depotDroneStock: Repository<DepotDroneStock>,
+backend\src\drone-logistics\drone-logistics.service.ts:33 @InjectRepository(DepotDroneWarheadStock) private readonly depotWarheadStock: Repository<DepotDroneWarheadStock>,
+backend\src\drone-logistics\drone-logistics.service.ts:34 @InjectRepository(AirAssetDroneStock) private readonly airAssetDroneStock: Repository<AirAssetDroneStock>,
+backend\src\drone-logistics\drone-logistics.service.ts:35 @InjectRepository(AirAssetWarheadStock) private readonly airAssetWarheadStock: Repository<AirAssetWarheadStock>,
+backend\src\drone-logistics\drone-logistics.service.ts:36 @InjectRepository(DroneStockMovement) private readonly movements: Repository<DroneStockMovement>,
+backend\src\event-logs\event-logs.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\event-logs\event-logs.service.ts:40 @InjectRepository(EventLog)
+backend\src\ew\ew.service.ts:2 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\ew\ew.service.ts:16 @InjectRepository(EwPosition)
+backend\src\fire-missions\fire-missions.service.ts:7 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\fire-missions\fire-missions.service.ts:37 @InjectRepository(FireMission)
+backend\src\fire-missions\fire-missions.service.ts:39 @InjectRepository(Unit)
+backend\src\fire-missions\fire-missions.service.ts:41 @InjectRepository(FirePosition)
+backend\src\fire-missions\fire-missions.service.ts:43 @InjectRepository(WeaponSystem)
+backend\src\fire-position-weapons\fire-position-weapons.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\fire-position-weapons\fire-position-weapons.service.ts:12 @InjectRepository(FirePositionWeapon)
+backend\src\fire-positions\fire-positions.service.ts:7 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\fire-positions\fire-positions.service.ts:35 @InjectRepository(FirePosition)
+backend\src\fuzes\fuzes.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\fuzes\fuzes.service.ts:12 @InjectRepository(Fuze)
+backend\src\operator-shifts\operator-shifts.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\operator-shifts\operator-shifts.service.ts:11 @InjectRepository(OperatorShift)
+backend\src\planned-trips\planned-trips.service.ts:2 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\planned-trips\planned-trips.service.ts:48 @InjectRepository(PlannedRoute)
+backend\src\planned-trips\planned-trips.service.ts:50 @InjectRepository(PlannedRoutePoint)
+backend\src\planned-trips\planned-trips.service.ts:52 @InjectRepository(PlannedVehicleTrip)
+backend\src\planned-trips\planned-trips.service.ts:54 @InjectRepository(PlannedVehicleTripCheckpoint)
+backend\src\primers\primers.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\primers\primers.service.ts:12 @InjectRepository(Primer)
+backend\src\recommendations\recommendations.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\recommendations\recommendations.service.ts:13 @InjectRepository(WeaponSystem) private readonly weapons: Repository<WeaponSystem>,
+backend\src\recommendations\recommendations.service.ts:14 @InjectRepository(FirePosition) private readonly positions: Repository<FirePosition>,
+backend\src\recommendations\recommendations.service.ts:15 @InjectRepository(ServiceOrder) private readonly orders: Repository<ServiceOrder>,
+backend\src\recommendations\recommendations.service.ts:16 @InjectRepository(DepotShellStock) private readonly shellStock: Repository<DepotShellStock>,
+backend\src\service-orders\service-orders.service.ts:7 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\service-orders\service-orders.service.ts:59 @InjectRepository(ServiceOrder)
+backend\src\settings\settings.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\settings\settings.service.ts:12 @InjectRepository(AppSetting)
+backend\src\shell-compatible-charges\shell-compatible-charges.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\shell-compatible-charges\shell-compatible-charges.service.ts:13 @InjectRepository(ShellCompatibleCharge)
+backend\src\shell-compatible-fuzes\shell-compatible-fuzes.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\shell-compatible-fuzes\shell-compatible-fuzes.service.ts:12 @InjectRepository(ShellCompatibleFuze)
+backend\src\shells\shells.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\shells\shells.service.ts:12 @InjectRepository(Shell)
+backend\src\stock\stock.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\stock\stock.service.ts:15 @InjectRepository(Depot)
+backend\src\stock\stock.service.ts:18 @InjectRepository(DepotShellStock)
+backend\src\stock\stock.service.ts:21 @InjectRepository(DepotChargeStock)
+backend\src\stock\stock.service.ts:24 @InjectRepository(DepotFuzeStock)
+backend\src\stock\stock.service.ts:27 @InjectRepository(DepotPrimerStock)
+backend\src\stock-movements\stock-movements.service.ts:2 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\stock-movements\stock-movements.service.ts:35 @InjectRepository(StockMovement)
+backend\src\units\units.service.ts:6 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\units\units.service.ts:18 @InjectRepository(Unit)
+backend\src\units\units.service.ts:21 @InjectRepository(Depot)
+backend\src\users\users.service.ts:6 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\users\users.service.ts:17 @InjectRepository(User)
+backend\src\weapon-models\weapon-models.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\weapon-models\weapon-models.service.ts:12 @InjectRepository(WeaponModel)
+backend\src\weapon-systems\weapon-systems.service.ts:8 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+backend\src\weapon-systems\weapon-systems.service.ts:24 @InjectRepository(WeaponSystem)
+backend\src\zones\zones.service.ts:2 import { InjectRepository } from '@nestjs/typeorm';
+backend\src\zones\zones.service.ts:12 @InjectRepository(Zone)
+
+=== FORWARD REF USAGE ===
+
+=== ANY USAGE ===
+backend\src\analytics\analytics.service.ts:1516 clause: `AND ${expression} = ANY($${paramIndex}::uuid[])`,
+backend\src\fire-missions\fire-missions.service.ts:336 action as any,
+backend\src\modules\recon\engines\target-clustering.engine.ts:47 `SELECT target_id FROM recon_target_observations WHERE observation_id = ANY($1::uuid[]) LIMIT 1`,
+backend\src\modules\recon\services\recon-analytics.service.ts:336 AND o.status = ANY($3::varchar[])
+backend\src\modules\recon\services\recon-analytics.service.ts:351 AND i.status = ANY($3::varchar[])
+backend\src\modules\recon\services\recon-analytics.service.ts:378 AND ($3::varchar[] IS NULL OR t.status <> 'hidden' OR 'hidden' = ANY($3::varchar[]))
+backend\src\modules\recon\services\recon-analytics.service.ts:509 AND o.status = ANY($3::varchar[])
+backend\src\modules\recon\services\recon-analytics.service.ts:538 AND o.status = ANY($3::varchar[])
+backend\src\modules\recon\services\recon.service.ts:549 await this.dataSource.query(`UPDATE recon_target_observations SET target_id = $1 WHERE target_id = ANY($2::uuid[])`, [id, ids.filter((item) => item !== id)]);
+backend\src\modules\recon\services\recon.service.ts:550 await this.dataSource.query(`UPDATE recon_targets SET archived_at = now(), status = 'processed' WHERE id = ANY($1::uuid[]) AND id <> $2`, [ids, id]);
+backend\src\planned-trips\planned-trips.controller.ts:16 createRoute(@Body() body: any) {
+backend\src\planned-trips\planned-trips.controller.ts:21 updateRoute(@Param('id') id: string, @Body() body: any) {
+backend\src\planned-trips\planned-trips.controller.ts:36 createTrip(@CurrentUser() user: AuthUser, @Body() body: any) {
+backend\src\planned-trips\planned-trips.controller.ts:41 updateTrip(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: any) {
+backend\src\planned-trips\planned-trips.service.ts:285 const unitFilter = allowedUnitIds === null ? '' : 'AND t.unit_id = ANY($1)';
+backend\src\planned-trips\planned-trips.service.ts:303 return rows.map((row: any) => ({
+backend\src\units\units.service.ts:174 'UPDATE users SET is_active = false, unit_id = NULL WHERE unit_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:179 "UPDATE operator_shifts SET status = 'completed', ended_at = COALESCE(ended_at, NOW()), unit_id = NULL WHERE unit_id = ANY($1::uuid[])",
+backend\src\units\units.service.ts:184 'UPDATE event_logs SET unit_id = NULL WHERE unit_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:189 'UPDATE fire_missions SET author_unit_id = NULL WHERE author_unit_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:194 'UPDATE fire_missions SET executing_unit_id = NULL WHERE executing_unit_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:199 'UPDATE service_orders SET assigned_unit_id = NULL, assigned_scope = NULL WHERE assigned_unit_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:204 'UPDATE fire_positions SET unit_id = NULL WHERE unit_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:209 'UPDATE weapon_systems SET unit_id = NULL WHERE unit_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:220 'UPDATE fire_positions SET ammo_depot_id = NULL WHERE ammo_depot_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:225 'UPDATE depots SET parent_id = NULL WHERE parent_id = ANY($1::uuid[])',
+backend\src\units\units.service.ts:230 'UPDATE depots SET is_archived = true, unit_id = NULL, parent_id = NULL WHERE id = ANY($1::uuid[])',
+frontend\src\app\features\analytics\analytics-page\analytics-page.ts:266 .sort((a, b) => this.levelWeight((a as any).level) - this.levelWeight((b as any).level))
+frontend\src\app\features\analytics\analytics-page\analytics-page.ts:274 this.number((b as any).efficiencyPercent) - this.number((a as any).efficiencyPercent),
+frontend\src\app\features\analytics\analytics-page\analytics-page.ts:283 this.number((a as any).efficiencyPercent) - this.number((b as any).efficiencyPercent),
+frontend\src\app\features\analytics\analytics-page\analytics-page.ts:308 details: `залишок снарядів ${this.safeNumber((row as any).shellBalance)}`,
+frontend\src\app\features\analytics\analytics-page\analytics-page.ts:330 details: `${this.safeNumber((row as any).total ?? (row as any).count)} випадків`,
+frontend\src\app\features\analytics\analytics-page\analytics-page.ts:341 details: `${this.safeNumber((row as any).total ?? (row as any).count)} випадків`,
+frontend\src\app\features\analytics\analytics-page\analytics-page.ts:538 return this.number((row as any).totalQuantity ?? (row as any).deliveries ?? 0);
+frontend\src\app\features\drone-logistics\drone-logistics-page.ts:510 private fail(error: any): void {
+frontend\src\app\features\ew\ew-page\ew-page.ts:162 fail: (error) => this.fail(error, (error as any)?.error?.message || 'Не вдалося зберегти позицію РЕБ'),
+frontend\src\app\features\planned-trips\planned-trips-page.ts:514 private fail(error: any): void {
