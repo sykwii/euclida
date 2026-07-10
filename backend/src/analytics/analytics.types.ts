@@ -232,18 +232,61 @@ export interface AnalyticsV2AttentionItem {
   entityId?: string | null;
 }
 
+export interface AnalyticsV2ProblemFirePositionRow {
+  firePositionId: string;
+  firePositionName: string;
+  unitId: string | null;
+  unitName: string | null;
+  category: 'air' | 'technical' | 'ammo' | 'weapon' | 'other';
+  reason: string;
+  airSituationStatus: string | null;
+  shellBalance: number;
+  completedTasks: number;
+}
+
+
+export interface AnalyticsV2ServiceOrderSummary {
+  total: number;
+  active: number;
+  sent: number;
+  accepted: number;
+  inProgress: number;
+  completed: number;
+  rejected: number;
+  cancelled: number;
+  completionRate: number;
+  averageActualQuantity: number;
+  statuses: StatusCount[];
+}
+
+export interface AnalyticsV2LogisticsSummary {
+  deliveries: number;
+  totalQuantity: number;
+  shells: number;
+  charges: number;
+  fuzes: number;
+  primers: number;
+  lowAmmoCount: number;
+  criticalForecastCount: number;
+  warningForecastCount: number;
+}
+
 export interface OperationalAnalyticsV2 {
   timezone: 'Europe/Kyiv';
   periodDays: number;
   generatedAt: string;
   generatedAtKyiv: string;
   readiness: AnalyticsV2Readiness;
+  serviceOrders: AnalyticsV2ServiceOrderSummary;
+  shooting: ShootingAnalytics;
+  logistics: AnalyticsV2LogisticsSummary;
   deliveriesTop: AnalyticsV2DeliveryTopRow[];
   tasksTopByFirePosition: AnalyticsV2FirePositionTaskRow[];
   lowAmmoFirePositions: AnalyticsV2LowAmmoRow[];
   rotation: AnalyticsV2RotationRow[];
   ammoForecast: AnalyticsV2AmmoForecastRow[];
   threatBlockedFirePositions: AnalyticsV2ReadinessReasonRow[];
+  problemFirePositions: AnalyticsV2ProblemFirePositionRow[];
   weaponEfficiency: {
     top: AnalyticsV2WeaponEfficiencyRow[];
     bottom: AnalyticsV2WeaponEfficiencyRow[];

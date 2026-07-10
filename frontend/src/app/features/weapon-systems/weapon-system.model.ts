@@ -21,6 +21,13 @@ export interface WeaponSystem {
   unit?: Unit | null;
   readinessStatus: string;
   notReadyReason: string | null;
+  maintenanceStatus?: string | null;
+  maintenanceRequestedStartAt?: string | null;
+  maintenancePlannedEndAt?: string | null;
+  maintenanceActualEndAt?: string | null;
+  maintenanceNote?: string | null;
+  maintenanceRequestedByUserId?: string | null;
+  maintenanceApprovedByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
   locationType: string;

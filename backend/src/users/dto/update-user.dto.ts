@@ -27,13 +27,16 @@ export class UpdateUserDto {
   role?: 'admin' | 'operator' | 'observer';
 
   @IsOptional()
-  @IsIn(['main', 'division', 'battery'])
-  scope?: 'main' | 'division' | 'battery';
+  @IsIn(['main', 'division', 'battery', 'ew'])
+  scope?: 'main' | 'division' | 'battery' | 'ew';
 
   @IsOptional()
- @Transform(({ value }: { value: unknown }) =>
-  typeof value === 'string' && ['', 'null', 'undefined'].includes(value.trim()) ? null : value,
-)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' &&
+    ['', 'null', 'undefined'].includes(value.trim())
+      ? null
+      : value,
+  )
   @IsUUID('all')
   unitId?: string | null;
 

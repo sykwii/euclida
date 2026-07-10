@@ -72,19 +72,20 @@ export class AirThreatsService {
     });
   }
 
- private async recalculateFirePositionsReadiness(
-  manager: EntityManager,
-): Promise<void> {
+  private async recalculateFirePositionsReadiness(
+    manager: EntityManager,
+  ): Promise<void> {
     const { radiusM } = await this.settingsService.getAirThreatRadius();
 
     const threats: AirThreat[] = await manager.find(AirThreat, {
-  where: {
-    isActive: true,
-  },
-});
+      where: {
+        isActive: true,
+      },
+    });
 
-const positions: FirePosition[] =
-  await manager.find(FirePosition);
+    const positions: FirePosition[] = await manager.find(FirePosition);
+
+    const changedPositions: FirePosition[] = [];
 
     for (const position of positions) {
       const nearestThreat = threats.find((threat) => {
@@ -99,20 +100,32 @@ const positions: FirePosition[] =
       });
 
       if (nearestThreat) {
-        position.readinessStatus = 'not_ready';
-        position.notReadyReason = `Повітряна загроза: ${nearestThreat.threatType}`;
-      } else if (
-        position.notReadyReason?.startsWith('Повітряна загроза:')
-      ) {
+        const nextReason = `Повітряна загроза: ${nearestThreat.threatType}`;
+
+        if (
+          position.readinessStatus !== 'not_ready' ||
+          position.notReadyReason !== nextReason
+        ) {
+          position.readinessStatus = 'not_ready';
+          position.notReadyReason = nextReason;
+          changedPositions.push(position);
+        }
+      } else if (position.notReadyReason?.startsWith('Повітряна загроза:')) {
         position.readinessStatus = 'ready';
         position.notReadyReason = null;
+        changedPositions.push(position);
       }
+    }
 
-      await manager.save(FirePosition, position);
+    if (changedPositions.length > 0) {
+      await manager.save(FirePosition, changedPositions);
     }
   }
 
-  private emitThreatChanged(action: 'created' | 'deleted' | 'updated', id: string): void {
+  private emitThreatChanged(
+    action: 'created' | 'deleted' | 'updated',
+    id: string,
+  ): void {
     this.realtimeEvents.emitMany(
       ['threats', 'map', 'analytics', 'events'],
       action,

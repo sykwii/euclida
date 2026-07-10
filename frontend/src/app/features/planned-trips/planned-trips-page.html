@@ -1,0 +1,191 @@
+<main class="planned-page">
+  <header class="page-head">
+    <div>
+      <span>Логістика</span>
+      <h1>Планові поїздки</h1>
+      <p>Маршрути, контрольні точки, картки руху і середній час проходження</p>
+    </div>
+    <div class="head-actions">
+      <button type="button" (click)="openRouteModal()">+ Маршрут</button>
+      <button type="button" (click)="openTripModal()" [disabled]="routes.length === 0">+ Поїздка</button>
+      <button type="button" (click)="load()">Оновити</button>
+    </div>
+  </header>
+
+  <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+  <section class="route-list" *ngIf="routes.length">
+    <button type="button" *ngFor="let route of routes" (click)="editRoute(route)">
+      <strong>{{ route.name }}</strong>
+      <span>{{ route.points.length }} точ.</span>
+    </button>
+  </section>
+
+  <section class="trip-grid">
+    <article class="trip-card" *ngFor="let trip of trips" [class.completed]="trip.status === 'completed'">
+      <header>
+        <div>
+          <strong>{{ trip.vehicleLabel }}</strong>
+          <span>{{ trip.route?.name || 'Маршрут' }}</span>
+        </div>
+        <b class="status-pill">{{ getTripStatusLabel(trip.status) }}</b>
+      </header>
+
+      <p class="trip-meta">
+        {{ trip.driverLabel || 'Екіпаж не вказано' }}
+        <ng-container *ngIf="trip.tripPurpose"> · {{ trip.tripPurpose }}</ng-container>
+      </p>
+
+      <div class="trip-timeline">
+        <ng-container *ngFor="let point of trip.checkpoints; let i = index">
+          <button
+            type="button"
+            class="timeline-point"
+            [class.done]="point.passedAt"
+            [class.late]="isCheckpointLate(trip, i)"
+            (click)="passCheckpoint(trip, point.id)"
+            [disabled]="!!point.passedAt || trip.status === 'completed' || trip.status === 'archived'"
+            [title]="point.name"
+          >
+            <span>{{ i + 1 }}</span>
+            <b>{{ point.name }}</b>
+          </button>
+          <span
+            *ngIf="i < trip.checkpoints.length - 1"
+            class="timeline-edge"
+            [class.done]="trip.checkpoints[i + 1].passedAt"
+            [title]="getSegmentTitle(trip, i)"
+          ></span>
+        </ng-container>
+      </div>
+
+      <footer *ngIf="trip.status === 'completed'">
+        <button type="button" (click)="createReturnTrip(trip)">Зворотний шлях</button>
+        <button type="button" class="ghost" (click)="archiveTrip(trip)">В історію</button>
+      </footer>
+    </article>
+  </section>
+
+  <details class="panel analytics" *ngIf="analytics.length" [open]="analyticsOpen" (toggle)="analyticsOpen = $any($event.target).open">
+    <summary>
+      <span>Аналітика проїзду</span>
+      <strong>{{ analytics.length }}</strong>
+    </summary>
+    <div class="analytics-row" *ngFor="let row of analytics">
+      <span>{{ row.fromName }} -> {{ row.toName }}</span>
+      <strong>{{ row.avgMinutes | number: '1.0-1' }} хв</strong>
+      <em>{{ row.samples }} проїздів</em>
+    </div>
+  </details>
+
+  <section class="modal-backdrop" *ngIf="routeModalOpen" (click)="closeRouteModal()">
+    <form class="panel modal" (click)="$event.stopPropagation()" (ngSubmit)="saveRoute()">
+      <header>
+        <h2>{{ routeForm.id ? 'Редагувати маршрут' : 'Новий маршрут' }}</h2>
+        <button type="button" (click)="closeRouteModal()">x</button>
+      </header>
+
+      <label>
+        Назва маршруту
+        <input name="routeName" [(ngModel)]="routeForm.name" />
+      </label>
+
+      <label>
+        Примітка
+        <input name="routeDescription" [(ngModel)]="routeForm.description" />
+      </label>
+
+      <div class="points">
+        <div class="point-row" *ngFor="let point of routeForm.points; let i = index">
+          <input [name]="'pointName' + i" placeholder="Точка" [(ngModel)]="point.name" />
+          <input [name]="'pointLat' + i" placeholder="Lat" [(ngModel)]="point.lat" />
+          <input [name]="'pointLng' + i" placeholder="Lng" [(ngModel)]="point.lng" />
+          <label class="check"><input type="checkbox" [name]="'pointControl' + i" [(ngModel)]="point.isControl" /> КП</label>
+          <button type="button" (click)="removeRoutePoint(i)" [disabled]="routeForm.points.length <= 2">x</button>
+        </div>
+      </div>
+
+      <footer>
+        <button type="button" class="ghost" (click)="addRoutePoint()">+ Точка</button>
+        <button type="button" class="ghost" (click)="startRouteMapDrawing()">Задати на карті</button>
+        <button type="submit" [disabled]="submitting">Зберегти</button>
+      </footer>
+    </form>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="tripModalOpen" (click)="closeTripModal()">
+    <form class="panel modal compact-modal" (click)="$event.stopPropagation()" (ngSubmit)="createTrip()">
+      <header>
+        <h2>Запланувати заїзд</h2>
+        <button type="button" (click)="closeTripModal()">x</button>
+      </header>
+
+      <section class="segment-list">
+        <header>
+          <h3>Сегменти маршруту</h3>
+          <button type="button" class="ghost" (click)="addTripSegment()">+ Сегмент</button>
+        </header>
+
+        <div class="segment-row" *ngFor="let segment of tripForm.segments; let i = index">
+          <label>
+            Маршрут
+            <select
+              [name]="'segmentRoute' + i"
+              [(ngModel)]="segment.routeId"
+              (ngModelChange)="syncTripSegment(i); i === 0 ? (tripForm.routeId = segment.routeId) : null"
+            >
+              <option *ngFor="let route of routes" [value]="route.id">{{ route.name }}</option>
+            </select>
+          </label>
+          <label>
+            З точки
+            <select [name]="'segmentStart' + i" [(ngModel)]="segment.startRoutePointId">
+              <option *ngFor="let point of getRoutePoints(segment.routeId)" [value]="point.id">{{ point.name }}</option>
+            </select>
+          </label>
+          <label>
+            По точку
+            <select [name]="'segmentEnd' + i" [(ngModel)]="segment.endRoutePointId">
+              <option *ngFor="let point of getRoutePoints(segment.routeId)" [value]="point.id">{{ point.name }}</option>
+            </select>
+          </label>
+          <button type="button" (click)="removeTripSegment(i)" [disabled]="tripForm.segments.length <= 1">x</button>
+        </div>
+      </section>
+
+      <label>
+        Кінцева точка
+        <select name="tripDestination" [(ngModel)]="tripForm.destinationKey">
+          <option value="">Без окремої кінцевої точки</option>
+          <option *ngFor="let option of destinationOptions" [value]="getDestinationKey(option)">{{ option.name }}</option>
+        </select>
+      </label>
+
+      <label>
+        Мета поїздки
+        <input name="tripPurpose" [(ngModel)]="tripForm.tripPurpose" placeholder="Підвезення, евакуація, ремонт" />
+      </label>
+
+      <div class="trip-range">
+        <label>
+          Машина
+          <input name="vehicleLabel" [(ngModel)]="tripForm.vehicleLabel" placeholder="Позивний / номер" />
+        </label>
+        <label>
+          Водій / екіпаж
+          <input name="driverLabel" [(ngModel)]="tripForm.driverLabel" />
+        </label>
+      </div>
+
+      <label>
+        Плановий старт
+        <input name="plannedStartAt" type="datetime-local" [(ngModel)]="tripForm.plannedStartAt" />
+      </label>
+
+      <footer>
+        <button type="button" class="ghost" (click)="closeTripModal()">Скасувати</button>
+        <button type="submit" [disabled]="submitting || routes.length === 0">Створити картку</button>
+      </footer>
+    </form>
+  </section>
+</main>

@@ -19,6 +19,7 @@ import {
   OperationalAnalyticsV2,
   AnalyticsV2AttentionItem,
   AnalyticsV2AmmoForecastRow,
+  AnalyticsV2ProblemFirePositionRow,
   AnalyticsV2RotationRow,
 } from './analytics.types';
 
@@ -55,6 +56,7 @@ export class AnalyticsService {
 
     const weaponScope = await this.getUnitScope(user, 1, 'ws.unit_id');
     const firePositionScope = await this.getUnitScope(user, 1, 'fp.unit_id');
+    const firePositionPeriodScope = await this.getUnitScope(user, 3, 'fp.unit_id');
     const serviceOrderScope = await this.getUnitScope(user, 3, 'COALESCE(fp.unit_id, so.assigned_unit_id)');
     const stockScope = await this.getUnitScope(user, 3, 'COALESCE(fp.unit_id, d.unit_id)');
 
@@ -66,7 +68,10 @@ export class AnalyticsService {
       rotation,
       ammoForecast,
       threatBlockedFirePositions,
+      problemFirePositions,
       weaponEfficiencyRows,
+      serviceOrderSummary,
+      shooting,
     ] = await Promise.all([
       this.getOperationalReadiness(weaponScope, firePositionScope),
       this.getDeliveriesTop(period, stockScope),
@@ -75,7 +80,10 @@ export class AnalyticsService {
       this.getRotationStatus(firePositionScope),
       this.getAmmoForecast(period, serviceOrderScope),
       this.getThreatBlockedFirePositions(firePositionScope),
+      this.getProblemFirePositions(period, firePositionPeriodScope),
       this.getWeaponEfficiency(period, serviceOrderScope),
+      this.getServiceOrderOperationalSummary(period, serviceOrderScope),
+      this.getShootingAnalytics(String(days), user),
     ]);
 
     return {
@@ -84,17 +92,82 @@ export class AnalyticsService {
       generatedAt: new Date().toISOString(),
       generatedAtKyiv: this.formatKyiv(new Date()),
       readiness,
+      serviceOrders: serviceOrderSummary,
+      shooting,
+      logistics: this.buildOperationalLogisticsSummary(deliveriesTop, lowAmmoFirePositions, ammoForecast),
       deliveriesTop,
       tasksTopByFirePosition,
       lowAmmoFirePositions,
       rotation,
       ammoForecast,
       threatBlockedFirePositions,
+      problemFirePositions,
       weaponEfficiency: {
         top: weaponEfficiencyRows.slice(0, 10),
         bottom: weaponEfficiencyRows.slice(-10).reverse(),
       },
       attention: this.buildOperationalAttention(lowAmmoFirePositions, rotation, ammoForecast, readiness),
+    };
+  }
+
+
+  private async getServiceOrderOperationalSummary(period: { start: string; end: string }, unitScope: UnitScope) {
+    const rows = await this.dataSource.query<RawRow[]>(`
+      SELECT
+        so.status AS status,
+        COUNT(*)::int AS total,
+        COALESCE(SUM(so.actual_quantity)::numeric, 0) AS actual_quantity
+      FROM service_orders so
+      LEFT JOIN fire_positions fp ON fp.id = so.selected_fire_position_id
+      WHERE (COALESCE(so.completed_at, so.created_at) AT TIME ZONE '${KYIV_TIMEZONE}')::date >= $1::date
+        AND (COALESCE(so.completed_at, so.created_at) AT TIME ZONE '${KYIV_TIMEZONE}')::date < $2::date
+        ${unitScope.clause}
+      GROUP BY so.status
+      ORDER BY total DESC, status ASC
+    `, [period.start, period.end, ...unitScope.params]);
+
+    const statusValue = (status: string) => rows
+      .filter((row) => String(row.status) === status)
+      .reduce((sum, row) => sum + this.num(row.total), 0);
+    const actualQuantityTotal = rows.reduce((sum, row) => sum + this.num(row.actual_quantity), 0);
+    const total = rows.reduce((sum, row) => sum + this.num(row.total), 0);
+    const completed = statusValue('completed');
+
+    return {
+      total,
+      active: rows
+        .filter((row) => !['completed', 'cancelled', 'rejected'].includes(String(row.status)))
+        .reduce((sum, row) => sum + this.num(row.total), 0),
+      sent: statusValue('sent'),
+      accepted: statusValue('accepted'),
+      inProgress: statusValue('in_progress'),
+      completed,
+      rejected: statusValue('rejected'),
+      cancelled: statusValue('cancelled'),
+      completionRate: this.percent(completed, total),
+      averageActualQuantity: completed > 0 ? Number((actualQuantityTotal / completed).toFixed(1)) : 0,
+      statuses: rows.map((row) => ({
+        status: String(row.status ?? 'unknown'),
+        total: this.num(row.total),
+      })),
+    };
+  }
+
+  private buildOperationalLogisticsSummary(
+    deliveriesTop: Array<{ deliveries: number; totalQuantity: number; shells: number; charges: number; fuzes: number; primers: number }>,
+    lowAmmoFirePositions: Array<unknown>,
+    ammoForecast: Array<{ level: string }>,
+  ) {
+    return {
+      deliveries: deliveriesTop.reduce((sum, row) => sum + this.num(row.deliveries), 0),
+      totalQuantity: deliveriesTop.reduce((sum, row) => sum + this.num(row.totalQuantity), 0),
+      shells: deliveriesTop.reduce((sum, row) => sum + this.num(row.shells), 0),
+      charges: deliveriesTop.reduce((sum, row) => sum + this.num(row.charges), 0),
+      fuzes: deliveriesTop.reduce((sum, row) => sum + this.num(row.fuzes), 0),
+      primers: deliveriesTop.reduce((sum, row) => sum + this.num(row.primers), 0),
+      lowAmmoCount: lowAmmoFirePositions.length,
+      criticalForecastCount: ammoForecast.filter((row) => row.level === 'critical').length,
+      warningForecastCount: ammoForecast.filter((row) => row.level === 'warning').length,
     };
   }
 
@@ -438,6 +511,85 @@ export class AnalyticsService {
     return rows.map((row) => ({
       reason: String(row.reason),
       total: this.num(row.total),
+    }));
+  }
+
+  private async getProblemFirePositions(
+    period: { start: string; end: string },
+    unitScope: UnitScope,
+  ): Promise<AnalyticsV2ProblemFirePositionRow[]> {
+    const rows = await this.dataSource.query<RawRow[]>(`
+      WITH shell_balance AS (
+        SELECT depot_id, COALESCE(SUM(quantity)::numeric, 0) AS shell_balance
+        FROM depot_shell_stock
+        GROUP BY depot_id
+      ), completed AS (
+        SELECT
+          selected_fire_position_id AS fire_position_id,
+          COUNT(*)::int AS completed_tasks
+        FROM service_orders
+        WHERE status = 'completed'
+          AND completed_at IS NOT NULL
+          AND (completed_at AT TIME ZONE '${KYIV_TIMEZONE}')::date >= $1::date
+          AND (completed_at AT TIME ZONE '${KYIV_TIMEZONE}')::date < $2::date
+        GROUP BY selected_fire_position_id
+      )
+      SELECT
+        fp.id AS fire_position_id,
+        fp.name AS fire_position_name,
+        fp.unit_id,
+        COALESCE(u.name, 'Без підрозділу') AS unit_name,
+        COALESCE(NULLIF(TRIM(fp.not_ready_reason), ''), NULLIF(TRIM(fp.air_situation_status), ''), 'Причину не вказано') AS reason,
+        NULLIF(TRIM(fp.air_situation_status), '') AS air_situation_status,
+        COALESCE(sb.shell_balance, 0) AS shell_balance,
+        COALESCE(c.completed_tasks, 0) AS completed_tasks,
+        CASE
+          WHEN LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%повіт%'
+            OR LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%загроз%'
+            OR LOWER(COALESCE(fp.air_situation_status, '')) NOT IN ('', 'unknown', 'clear', 'normal', 'немає', 'відсутня')
+            THEN 'air'
+          WHEN COALESCE(sb.shell_balance, 0) <= 50
+            OR LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%бк%'
+            OR LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%снар%'
+            THEN 'ammo'
+          WHEN LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%сг%'
+            THEN 'weapon'
+          WHEN LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%ремонт%'
+            OR LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%тех%'
+            THEN 'technical'
+          ELSE 'other'
+        END AS category
+      FROM fire_positions fp
+      LEFT JOIN units u ON u.id = fp.unit_id
+      LEFT JOIN shell_balance sb ON sb.depot_id = fp.ammo_depot_id
+      LEFT JOIN completed c ON c.fire_position_id = fp.id
+      WHERE (
+          fp.readiness_status NOT IN ('ready', 'combat_ready', 'ready_for_combat', 'боєготов')
+          OR COALESCE(sb.shell_balance, 0) <= 50
+          OR LOWER(COALESCE(fp.air_situation_status, '')) NOT IN ('', 'unknown', 'clear', 'normal', 'немає', 'відсутня')
+        )
+        ${unitScope.clause}
+      ORDER BY
+        CASE
+          WHEN fp.readiness_status NOT IN ('ready', 'combat_ready', 'ready_for_combat', 'боєготов') THEN 0
+          ELSE 1
+        END,
+        COALESCE(sb.shell_balance, 0) ASC,
+        c.completed_tasks DESC,
+        fp.name ASC
+      LIMIT 40
+    `, [period.start, period.end, ...unitScope.params]);
+
+    return rows.map((row) => ({
+      firePositionId: String(row.fire_position_id),
+      firePositionName: String(row.fire_position_name ?? 'Без ВП'),
+      unitId: this.strOrNull(row.unit_id),
+      unitName: this.strOrNull(row.unit_name),
+      category: this.problemCategory(row.category),
+      reason: String(row.reason ?? 'Причину не вказано'),
+      airSituationStatus: this.strOrNull(row.air_situation_status),
+      shellBalance: this.num(row.shell_balance),
+      completedTasks: this.num(row.completed_tasks),
     }));
   }
 
@@ -1333,6 +1485,16 @@ export class AnalyticsService {
     }
 
     return String(value);
+  }
+
+  private problemCategory(value: unknown): AnalyticsV2ProblemFirePositionRow['category'] {
+    const category = String(value ?? 'other');
+
+    if (category === 'air' || category === 'technical' || category === 'ammo' || category === 'weapon') {
+      return category;
+    }
+
+    return 'other';
   }
 
   private async getUnitScope(

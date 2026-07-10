@@ -22,6 +22,13 @@ type StockEntity =
   | DepotFuzeStock
   | DepotPrimerStock;
 
+const AMMO_DEPOT_TYPES = new Set([
+  'main_pas',
+  'division_pas',
+  'battery_pas',
+  'fire_position_ammo',
+]);
+
 @Injectable()
 export class StockMovementsService {
   constructor(
@@ -60,6 +67,8 @@ export class StockMovementsService {
 }
 
   async create(data: CreateStockMovementDto, user: AuthUser): Promise<StockMovement> {
+  this.assertPositiveQuantity(data.quantity);
+
   if (!data.fromDepotId && !data.toDepotId) {
     throw new BadRequestException('Потрібно вказати fromDepotId або toDepotId');
   }
@@ -85,11 +94,14 @@ export class StockMovementsService {
       throw new BadRequestException('Склад-отримувач не знайдено');
     }
 
+    this.assertSameInventoryDomain(fromDepot, toDepot);
+
     if (!fromDepot && toDepot?.depotType !== 'main_pas') {
       throw new BadRequestException(
         'Зовнішня поставка дозволена тільки на головний ПАС',
       );
     }
+
     await this.ensureCanMoveBetweenDepots(user, fromDepot, toDepot);
 const movementType = !fromDepot ? 'external_supply' : 'transfer';
     if (data.fromDepotId) {
@@ -253,6 +265,10 @@ async createBatch(data: CreateStockMovementBatchDto, user: AuthUser): Promise<St
     throw new BadRequestException('Потрібно додати хоча б один ресурс');
   }
 
+  for (const item of data.items) {
+    this.assertPositiveQuantity(item.quantity);
+  }
+
   const normalizedItems = Array.from(
     data.items
       .filter((item) => item.itemId && Number(item.quantity) > 0)
@@ -295,6 +311,8 @@ async createBatch(data: CreateStockMovementBatchDto, user: AuthUser): Promise<St
     }
 
     await this.ensureCanMoveBetweenDepots(user, fromDepot, toDepot);
+
+    this.assertSameInventoryDomain(fromDepot, toDepot);
 
     const movementType = !fromDepot ? 'external_supply' : 'transfer';
     const created: StockMovement[] = [];
@@ -402,6 +420,30 @@ private async ensureCanMoveBetweenDepots(
     if (!depot.unitId || !visibleUnitIds.includes(depot.unitId)) {
       throw new ForbiddenException('Недостатньо прав для переміщення по цьому складу');
     }
+  }
+}
+
+private assertPositiveQuantity(quantity: number): void {
+  const value = Number(quantity);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new BadRequestException('Кількість має бути більше 0');
+  }
+}
+
+private assertSameInventoryDomain(fromDepot: Depot | null, toDepot: Depot | null): void {
+  if (fromDepot) {
+    this.assertAllowedDepotType(fromDepot);
+  }
+
+  if (toDepot) {
+    this.assertAllowedDepotType(toDepot);
+  }
+}
+
+private assertAllowedDepotType(depot: Depot): void {
+  if (!AMMO_DEPOT_TYPES.has(depot.depotType)) {
+    throw new BadRequestException('БК можна переміщувати тільки між складами БК/ПАС');
   }
 }
 

@@ -5,6 +5,7 @@
   flex-direction: column;
   gap: 18px;
   padding-right: 6px;
+  color: #e6edf3;
 }
 
 .page-header,
@@ -28,6 +29,21 @@
   color: #94a3b8;
 }
 
+.page-header {
+  padding: 18px;
+  border: 1px solid rgba(132, 255, 220, 0.14);
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(18, 29, 39, 0.96), rgba(10, 17, 24, 0.96));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -37,20 +53,54 @@
 .stat-card,
 .editor-card,
 .equipment-card {
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(18, 29, 39, 0.96), rgba(10, 17, 24, 0.96)) !important;
+  border: 1px solid rgba(132, 255, 220, 0.14) !important;
+  border-radius: 8px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
 }
 
+.equipment-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 1000);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 5, 9, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.equipment-dialog {
+  width: min(980px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+}
+
 .stat-card {
+  width: 100%;
+  min-height: 104px;
   padding: 16px;
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.stat-card:hover,
+.stat-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(46, 230, 214, 0.46) !important;
+  background: linear-gradient(145deg, rgba(21, 52, 58, 0.96), rgba(7, 21, 27, 0.96)) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36) !important;
 }
 
 .stat-card strong {
   display: block;
   color: #fff;
   font-size: 28px;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-card span {
@@ -58,15 +108,27 @@
 }
 
 .stat-card.ready {
-  border-color: rgba(34, 197, 94, 0.32);
+  border-color: rgba(34, 197, 94, 0.32) !important;
 }
 
 .stat-card.danger {
-  border-color: rgba(239, 68, 68, 0.32);
+  border-color: rgba(239, 68, 68, 0.32) !important;
 }
 
 .stat-card.repair {
-  border-color: rgba(250, 204, 21, 0.32);
+  border-color: rgba(250, 204, 21, 0.32) !important;
+}
+
+.filter-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(46, 230, 214, 0.16);
+  border-radius: 8px;
+  color: #c7f9ef;
+  background: rgba(0, 184, 173, 0.08);
 }
 
 .editor-card {
@@ -87,7 +149,7 @@
   width: 100%;
 }
 
-.equipment-form input[name="notReadyReason"] {
+.equipment-form input[name='notReadyReason'] {
   grid-column: span 2;
 }
 
@@ -264,4 +326,3 @@
   border-color: rgba(46, 230, 214, 0.24);
   background: rgba(46, 230, 214, 0.08);
 }
-

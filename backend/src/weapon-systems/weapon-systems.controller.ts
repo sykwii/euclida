@@ -92,4 +92,51 @@ moveToReserve(
   return this.service.moveToReserve(id, user);
 }
 
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/request')
+requestMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+  @Body() body: { requestedStartAt?: string; durationMinutes?: number; note?: string },
+): Promise<WeaponSystem> {
+  return this.service.requestMaintenance(id, body, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/approve')
+approveMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+): Promise<WeaponSystem> {
+  return this.service.approveMaintenance(id, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/reject')
+rejectMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+): Promise<WeaponSystem> {
+  return this.service.rejectMaintenance(id, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/extend')
+extendMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+  @Body() body: { extraMinutes?: number; note?: string },
+): Promise<WeaponSystem> {
+  return this.service.extendMaintenance(id, body, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/finish')
+finishMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+): Promise<WeaponSystem> {
+  return this.service.finishMaintenance(id, user);
+}
+
 }

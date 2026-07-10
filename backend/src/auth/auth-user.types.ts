@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'operator' | 'observer';
 
-export type UserScope = 'main' | 'division' | 'battery';
+export type UserScope = 'main' | 'division' | 'battery' | 'ew';
 
 export interface AuthUser {
   sub: string;

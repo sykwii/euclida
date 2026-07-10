@@ -1,16 +1,19 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { Unit } from '../../units/unit.model';
+import { isUnitChildOf, normalizeUnitType } from '../../units/unit-tree';
 import { UnitsService } from '../../units/units.service';
 import { FirePosition } from '../fire-position.model';
 import { FirePositionsService } from '../fire-positions.service';
-import { WeaponSystem } from '../../weapon-systems/weapon-system.model';
-import { WeaponSystemsService } from '../../weapon-systems/weapon-systems.service';
 import { AuthService } from '../../auth/auth.service';
-import { Subscription } from 'rxjs';
+import { filter, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
+
+type PositionStatusFilter = 'all' | 'ready' | 'not_ready' | 'with_sg';
+type PositionType = 'fire_position' | 'aerial_recon' | 'ew_post' | 'ew_station' | 'air_asset_crew';
+type PositionPageKind = 'fire_positions' | 'ew' | 'air_assets';
 
 @Component({
   selector: 'app-fire-positions-page',
@@ -23,13 +26,15 @@ export class FirePositionsPage implements OnInit, OnDestroy {
   private readonly autoRefreshSubscription = new Subscription();
   items: FirePosition[] = [];
   units: Unit[] = [];
-weapons: WeaponSystem[] = [];
   loading = true;
   errorMessage = '';
   editingId: string | null = null;
+  formModalOpen = false;
   returnTo: string | null = null;
-
-collapsedForeignUnits: Record<string, boolean> = {};
+  detailsPosition: FirePosition | null = null;
+  activeFilter: PositionStatusFilter = 'all';
+pageKind: PositionPageKind = 'fire_positions';
+  collapsedForeignUnits: Record<string, boolean> = {};
   pageSkeleton = Array.from({ length: 6 });
 
   form = this.getEmptyForm();
@@ -40,43 +45,134 @@ collapsedForeignUnits: Record<string, boolean> = {};
     private readonly cdr: ChangeDetectorRef,
     private readonly route: ActivatedRoute,
     private readonly router: Router,
-    private readonly weaponSystemsService: WeaponSystemsService,
     private readonly auth: AuthService,
     private readonly autoRefresh: AutoRefreshService,
   ) {}
 
   ngOnInit(): void {
-    this.route.queryParamMap.subscribe((params) => {
-      this.returnTo = params.get('returnTo');
-      const editId = params.get('editId');
+  this.syncPageKindFromUrl(this.router.url);
 
-      if (editId) this.startEdit(editId);
-    });
+  this.route.queryParamMap.subscribe((params) => {
+    this.returnTo = params.get('returnTo');
+    const editId = params.get('editId');
 
-    this.load();
-    this.autoRefreshSubscription.add(
-      this.autoRefresh.watch(['all', 'map', 'missions', 'weapons', 'threats'], () => this.load()),
-    );
-  }
+    if (editId) this.startEdit(editId);
+  });
+
+  this.autoRefreshSubscription.add(
+    this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe((event) => {
+        const previousPageKind = this.pageKind;
+
+        this.syncPageKindFromUrl(event.urlAfterRedirects);
+
+        if (previousPageKind !== this.pageKind) {
+          this.activeFilter = 'all';
+          this.formModalOpen = false;
+          this.editingId = null;
+          this.detailsPosition = null;
+          this.form = this.getEmptyForm();
+          this.load();
+        }
+      }),
+  );
+
+  this.load();
+
+  this.autoRefreshSubscription.add(
+    this.autoRefresh.watch(['all', 'map', 'missions', 'weapons', 'threats'], () => this.load()),
+  );
+}
 
   ngOnDestroy(): void {
     this.autoRefreshSubscription.unsubscribe();
   }
 
   get totalCount(): number {
-    return this.items.length;
+    return this.ownItems.length;
+  }
+
+  get isEwPage(): boolean {
+  return this.pageKind === 'ew';
+}
+
+get isAirAssetsPage(): boolean {
+  return this.pageKind === 'air_assets';
+}
+
+  get pageEyebrow(): string {
+    if (this.isAirAssetsPage) return 'ПОВІТРЯ';
+    return this.isEwPage ? 'РЕБ' : 'ВП';
+  }
+
+  get pageTitle(): string {
+    if (this.isAirAssetsPage) return 'Розрахунки повітряних засобів';
+    return this.isEwPage ? 'Позиції РЕБ' : 'Вогневі позиції';
+  }
+
+  get pageDescription(): string {
+    if (this.isAirAssetsPage) {
+      return 'Окремий облік розрахунків БпЛА, екіпажів та повітряних засобів';
+    }
+
+    return this.isEwPage
+      ? 'Аеророзвідка, пости РЕБ та станції РЕБ'
+      : 'Координати, готовність, локальний БК та прив’язка Озброєння';
+  }
+
+  get createButtonLabel(): string {
+    if (this.isAirAssetsPage) return 'Додати розрахунок';
+    return this.isEwPage ? 'Додати РЕБ' : 'Додати ВП';
+  }
+
+  get positionTypeOptions(): Array<{ value: PositionType; label: string }> {
+    if (this.isAirAssetsPage) {
+      return [{ value: 'air_asset_crew', label: 'Розрахунок повітряних засобів' }];
+    }
+
+    return this.isEwPage
+      ? [
+          { value: 'aerial_recon', label: 'Аеророзвідка' },
+          { value: 'ew_post', label: 'Пост РЕБ' },
+          { value: 'ew_station', label: 'Станція РЕБ' },
+        ]
+      : [{ value: 'fire_position', label: 'Вогнева позиція' }];
   }
 
   get readyCount(): number {
-    return this.items.filter((x) => x.readinessStatus === 'ready').length;
+    return this.ownItems.filter((x) => x.readinessStatus === 'ready').length;
   }
 
   get notReadyCount(): number {
-    return this.items.filter((x) => x.readinessStatus === 'not_ready').length;
+    return this.ownItems.filter((x) => x.readinessStatus === 'not_ready').length;
   }
 
   get withSgCount(): number {
-    return this.items.filter((x) => x.hasSg).length;
+    return this.ownItems.filter((x) => x.hasSg).length;
+  }
+
+  get filteredOwnItems(): FirePosition[] {
+    if (this.activeFilter === 'all') {
+      return this.ownItems;
+    }
+
+    if (this.activeFilter === 'with_sg') {
+      return this.ownItems.filter((item) => item.hasSg);
+    }
+
+    return this.ownItems.filter((item) => item.readinessStatus === this.activeFilter);
+  }
+
+  get activeFilterLabel(): string {
+    const labels: Record<PositionStatusFilter, string> = {
+      all: 'Всі',
+      ready: 'БГ',
+      not_ready: 'НЕ БГ',
+      with_sg: 'З Озброєнням',
+    };
+
+    return labels[this.activeFilter];
   }
 
   load(): void {
@@ -90,6 +186,14 @@ collapsedForeignUnits: Record<string, boolean> = {};
       },
       error: (error) => this.fail(error, 'Не вдалося завантажити точки'),
     });
+  }
+
+  setFilter(filter: PositionStatusFilter): void {
+    this.activeFilter = filter;
+  }
+
+  clearFilter(): void {
+    this.activeFilter = 'all';
   }
 
   private loadUnits(): void {
@@ -134,6 +238,7 @@ collapsedForeignUnits: Record<string, boolean> = {};
 
     const body = {
       name: this.form.name.trim(),
+      positionType: this.form.positionType as PositionType,
       ...(this.form.unitId ? { unitId: this.form.unitId } : {}),
 
       ...(this.form.coordinateMode === 'decimal'
@@ -146,12 +251,16 @@ collapsedForeignUnits: Record<string, boolean> = {};
             mgrs: formattedMgrs,
           }),
 
-      ...(this.form.mainDirectionUnits ? { mainDirectionUnits: Number(this.form.mainDirectionUnits) } : {}),
-      ...(this.form.traverseLeftUnits ? { traverseLeftUnits: Number(this.form.traverseLeftUnits) } : {}),
-      ...(this.form.traverseRightUnits ? { traverseRightUnits: Number(this.form.traverseRightUnits) } : {}),
-
-     
-personnelRotationDate: this.form.personnelRotationDate || undefined,
+      ...(this.form.mainDirectionUnits
+        ? { mainDirectionUnits: Number(this.form.mainDirectionUnits) }
+        : {}),
+      ...(this.form.traverseLeftUnits
+        ? { traverseLeftUnits: Number(this.form.traverseLeftUnits) }
+        : {}),
+      ...(this.form.traverseRightUnits
+        ? { traverseRightUnits: Number(this.form.traverseRightUnits) }
+        : {}),
+      personnelRotationDate: this.form.personnelRotationDate || undefined,
     };
 
     const request = this.editingId
@@ -176,25 +285,25 @@ personnelRotationDate: this.form.personnelRotationDate || undefined,
     this.service.getOne(id).subscribe({
       next: (item) => {
         this.editingId = item.id;
+        this.formModalOpen = true;
 
         this.form = {
           name: item.name,
+          positionType: this.normalizePositionType(item.positionType),
           unitId: item.unitId || '',
           coordinateMode: 'decimal',
           lat: String(item.lat),
           lng: String(item.lng),
           mgrs: this.formatMgrs(item.mgrs, ''),
-          mainDirectionUnits: item.mainDirectionUnits !== null ? String(item.mainDirectionUnits) : '',
+          mainDirectionUnits:
+            item.mainDirectionUnits !== null ? String(item.mainDirectionUnits) : '',
           traverseLeftUnits: item.traverseLeftUnits !== null ? String(item.traverseLeftUnits) : '',
-          traverseRightUnits: item.traverseRightUnits !== null ? String(item.traverseRightUnits) : '',
-          
-         
-          
+          traverseRightUnits:
+            item.traverseRightUnits !== null ? String(item.traverseRightUnits) : '',
           personnelRotationStatus: item.personnelRotationStatus || '',
-          
-personnelRotationDate: item.personnelRotationDate
-  ? item.personnelRotationDate.slice(0, 10)
-  : '',
+          personnelRotationDate: item.personnelRotationDate
+            ? item.personnelRotationDate.slice(0, 10)
+            : '',
         };
 
         this.cdr.detectChanges();
@@ -205,6 +314,7 @@ personnelRotationDate: item.personnelRotationDate
 
   cancelEdit(): void {
     this.editingId = null;
+    this.formModalOpen = false;
     this.form = this.getEmptyForm();
 
     if (this.returnTo === 'map') {
@@ -212,7 +322,16 @@ personnelRotationDate: item.personnelRotationDate
       return;
     }
 
-    void this.router.navigate(['/fire-positions']);
+    void this.router.navigate([
+      this.isAirAssetsPage ? '/air-assets' : this.isEwPage ? '/ew' : '/fire-positions',
+    ]);
+    this.cdr.detectChanges();
+  }
+
+  openCreate(): void {
+    this.editingId = null;
+    this.form = this.getEmptyForm();
+    this.formModalOpen = true;
     this.cdr.detectChanges();
   }
 
@@ -223,6 +342,13 @@ personnelRotationDate: item.personnelRotationDate
     });
   }
 
+  openDetails(item: FirePosition): void {
+    this.detailsPosition = item;
+  }
+
+  closeDetails(): void {
+    this.detailsPosition = null;
+  }
 
   onMgrsInput(value: string): void {
     this.form.mgrs = this.formatMgrs(value, '');
@@ -257,7 +383,8 @@ personnelRotationDate: item.personnelRotationDate
     return `${zone} ${square} ${easting} ${northing}`;
   }
 
-  getReadinessLabel(status: string): string {    if (status === 'ready') return 'БГ';
+  getReadinessLabel(status: string): string {
+    if (status === 'ready') return 'БГ';
     if (status === 'not_ready') return 'НЕ БГ';
     if (status === 'in_progress') return 'В роботі';
     return 'Невідомо';
@@ -270,168 +397,190 @@ personnelRotationDate: item.personnelRotationDate
     return 'unknown';
   }
 
-  private getEmptyForm() {
-    return {
-      name: '',
-      unitId: '',
-      coordinateMode: 'decimal',
-      lat: '',
-      lng: '',
-      mgrs: '',
-      mainDirectionUnits: '',
-      traverseLeftUnits: '',
-      traverseRightUnits: '',
-      personnelRotationStatus: '',
-personnelRotationDate: '',
-    };
+private getEmptyForm(): {
+  name: string;
+  positionType: PositionType;
+  unitId: string;
+  coordinateMode: 'decimal' | 'mgrs';
+  lat: string;
+  lng: string;
+  mgrs: string;
+  mainDirectionUnits: string;
+  traverseLeftUnits: string;
+  traverseRightUnits: string;
+  personnelRotationStatus: string;
+  personnelRotationDate: string;
+} {
+  return {
+    name: '',
+    positionType:
+      this.pageKind === 'air_assets'
+        ? 'air_asset_crew'
+        : this.pageKind === 'ew'
+          ? 'ew_post'
+          : 'fire_position',
+    unitId: '',
+    coordinateMode: 'decimal',
+    lat: '',
+    lng: '',
+    mgrs: '',
+    mainDirectionUnits: '',
+    traverseLeftUnits: '',
+    traverseRightUnits: '',
+    personnelRotationStatus: '',
+    personnelRotationDate: '',
+  };
+}
+
+private syncPageKindFromUrl(url: string): void {
+  const cleanUrl = url.split('?')[0];
+
+  if (cleanUrl.startsWith('/air-assets')) {
+    this.pageKind = 'air_assets';
+    return;
+  }
+
+  if (cleanUrl.startsWith('/ew')) {
+    this.pageKind = 'ew';
+    return;
+  }
+
+  this.pageKind = 'fire_positions';
+}
+
+
+  private normalizePositionType(value: string | null | undefined): PositionType {
+    const allowed = this.positionTypeOptions.map((option) => option.value);
+
+    if (value && allowed.includes(value as PositionType)) {
+      return value as PositionType;
+    }
+
+    return this.isAirAssetsPage ? 'air_asset_crew' : this.isEwPage ? 'ew_post' : 'fire_position';
   }
 
   private fail(error: unknown, message: string): void {
-        this.errorMessage = message;
+    this.errorMessage = message;
     this.loading = false;
     this.cdr.detectChanges();
   }
 
   getWeaponReadinessLabel(status: string | undefined): string {
-  if (status === 'ready') return 'СГ БГ';
-  if (status === 'not_ready') return 'СГ НЕ БГ';
-  if (status === 'repair') return 'СГ ремонт';
-  return 'СГ невідомо';
-}
-
-getWeaponReadinessClass(status: string | undefined): string {
-  if (status === 'ready') return 'ready';
-  if (status === 'not_ready') return 'danger';
-  if (status === 'repair') return 'repair';
-  return 'unknown';
-}
-
-
-get availableWeapons(): WeaponSystem[] {
-  const user = this.auth.getUser();
-
-  if (!user) {
-    return [];
+    if (status === 'ready') return 'СГ БГ';
+    if (status === 'not_ready') return 'СГ НЕ БГ';
+    if (status === 'repair') return 'СГ ремонт';
+    return 'СГ невідомо';
   }
 
-  return this.weapons.filter((weapon) => {
-    if (
-      weapon.locationType === 'fire_position' &&
-      weapon.firePositionId !== this.editingId
-    ) {
-      return false;
+  getWeaponReadinessClass(status: string | undefined): string {
+    if (status === 'ready') return 'ready';
+    if (status === 'not_ready') return 'danger';
+    if (status === 'repair') return 'repair';
+    return 'unknown';
+  }
+
+  getRotationDays(date: string | null): string {
+    if (!date) return '—';
+
+    const rotationTime = new Date(date).getTime();
+    const now = Date.now();
+    const days = Math.floor((now - rotationTime) / 86_400_000);
+
+    return `${Math.max(0, days)} дн.`;
+  }
+
+  get availableUnits() {
+    const user = this.auth.getUser();
+
+    if (!user) {
+      return [];
     }
 
-    if (user.role === 'admin' || user.scope === 'main') {
-      if (this.form.unitId && weapon.unitId && weapon.unitId !== this.form.unitId) {
-        return false;
-      }
+    const positionUnits = this.units.filter((unit) => ['battery', 'platoon', 'squad'].includes(normalizeUnitType(unit)));
 
-      return true;
+    if (user.role === 'admin' || user.scope === 'main') {
+      return positionUnits;
+    }
+
+    if (!user.unitId) {
+      return [];
     }
 
     if (user.scope === 'battery') {
-      return weapon.unitId === user.unitId;
+      return positionUnits.filter((unit) => unit.id === user.unitId || unit.parentId === user.unitId);
     }
 
     if (user.scope === 'division') {
-      return this.availableUnits.some((unit) => unit.id === weapon.unitId);
+      return positionUnits.filter((unit) => unit.parentId === user.unitId || isUnitChildOf(this.units, unit.id, user.unitId!));
     }
 
-    return false;
-  });
-}
-
-getRotationDays(date: string | null): string {
-  if (!date) return '—';
-
-  const rotationTime = new Date(date).getTime();
-  const now = Date.now();
-
-  const days = Math.floor((now - rotationTime) / 86_400_000);
-
-  return `${Math.max(0, days)} дн.`;
-}
-
-get availableUnits() {
-  const user = this.auth.getUser();
-
-  if (!user) {
     return [];
   }
 
-  if (user.role === 'admin' || user.scope === 'main') {
-    return this.units;
+  get ownItems(): FirePosition[] {
+    return this.items.filter((item) => !item.publicViewOnly && this.matchesPageType(item));
   }
 
-  if (!user.unitId) {
-    return [];
+  get foreignItems(): FirePosition[] {
+    return this.items.filter((item) => item.publicViewOnly && this.matchesPageType(item));
   }
 
-  if (user.scope === 'battery') {
-    return this.units.filter((unit) => unit.id === user.unitId);
+  private matchesPageType(item: FirePosition): boolean {
+    const positionType = item.positionType || 'fire_position';
+
+    if (this.isAirAssetsPage) {
+      return positionType === 'air_asset_crew';
+    }
+
+    if (this.isEwPage) {
+      return ['aerial_recon', 'ew_post', 'ew_station'].includes(positionType);
+    }
+
+    return positionType === 'fire_position';
   }
 
-  if (user.scope === 'division') {
-    return this.units.filter(
-      (unit) => unit.id === user.unitId || unit.parentId === user.unitId,
-    );
-  }
-
-  return [];
-}
-
-get ownItems(): FirePosition[] {
-  return this.items.filter((item) => !item.publicViewOnly);
-}
-
-get foreignItems(): FirePosition[] {
-  return this.items.filter((item) => item.publicViewOnly);
-}
-
-get foreignGroups(): Array<{
-  unitId: string;
-  unitName: string;
-  items: FirePosition[];
-}> {
-  const groups = new Map<string, {
+  get foreignGroups(): Array<{
     unitId: string;
     unitName: string;
     items: FirePosition[];
-  }>();
+  }> {
+    const groups = new Map<
+      string,
+      {
+        unitId: string;
+        unitName: string;
+        items: FirePosition[];
+      }
+    >();
 
-  for (const item of this.foreignItems) {
-    const unitId = item.unit?.id ?? item.unitId ?? 'unknown';
-    const unitName = item.unit?.name ?? 'Без підрозділу';
+    for (const item of this.foreignItems) {
+      const unitId = item.unit?.id ?? item.unitId ?? 'unknown';
+      const unitName = item.unit?.name ?? 'Без підрозділу';
+      const existingGroup = groups.get(unitId);
 
-    const existingGroup = groups.get(unitId);
-
-    if (existingGroup) {
-      existingGroup.items.push(item);
-    } else {
-      groups.set(unitId, {
-        unitId,
-        unitName,
-        items: [item],
-      });
+      if (existingGroup) {
+        existingGroup.items.push(item);
+      } else {
+        groups.set(unitId, {
+          unitId,
+          unitName,
+          items: [item],
+        });
+      }
     }
+
+    return Array.from(groups.values()).sort((a, b) => a.unitName.localeCompare(b.unitName));
   }
 
-  return Array.from(groups.values()).sort((a, b) =>
-    a.unitName.localeCompare(b.unitName),
-  );
-}
+  isForeignGroupOpen(unitId: string): boolean {
+    return this.collapsedForeignUnits[unitId] ?? false;
+  }
 
-isForeignGroupOpen(unitId: string): boolean {
-  return this.collapsedForeignUnits[unitId] ?? false;
-}
+  toggleForeignGroup(unitId: string): void {
+    this.collapsedForeignUnits[unitId] = !this.isForeignGroupOpen(unitId);
+  }
 
-toggleForeignGroup(unitId: string): void {
-  this.collapsedForeignUnits[unitId] = !this.isForeignGroupOpen(unitId);
-}
-
-isPositionAvailableForTransfer(item: FirePosition): boolean {
-  return !item.hasSg;
-}
-
+  isPositionAvailableForTransfer(item: FirePosition): boolean {
+    return !item.hasSg;
+  }
 }

@@ -1,4 +1,10 @@
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { Charge } from '../charges/charge.entity';
 import { Depot } from '../depots/depot.entity';
 
@@ -21,6 +27,6 @@ export class DepotChargeStock {
   @JoinColumn({ name: 'charge_id' })
   charge!: Charge;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2, default: 0 })
+  @Column({ type: 'numeric', precision: 18, scale: 3, default: 0 })
   quantity!: number;
 }

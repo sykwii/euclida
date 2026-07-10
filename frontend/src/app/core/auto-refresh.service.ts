@@ -14,16 +14,18 @@ export interface RefreshEvent {
 export class AutoRefreshService {
   constructor(private readonly realtime: RealtimeService) {}
 
-  watch(scopes: RefreshScope[], callback: (event: RefreshEvent) => void): Subscription {
-    return this.realtime.watchMany(scopes).pipe(
-      auditTime(500),
-      map((payload) => ({
-        scope: payload.scope,
-        reason: payload.reason || payload.action || 'realtime',
-        at: this.toSafeDate(payload.at),
-      })),
-    ).subscribe((event) => callback(event));
-  }
+ watch(scopes: RefreshScope[], callback: (event: RefreshEvent) => void): Subscription {
+  const normalizedScopes = Array.from(new Set<RefreshScope>(['all', ...scopes]));
+
+  return this.realtime.watchMany(normalizedScopes).pipe(
+    auditTime(500),
+    map((payload) => ({
+      scope: payload.scope,
+      reason: payload.reason || payload.action || 'realtime',
+      at: this.toSafeDate(payload.at),
+    })),
+  ).subscribe((event) => callback(event));
+}
 
   private toSafeDate(value?: string): Date {
     if (!value) {
@@ -47,7 +49,9 @@ export class AutoRefreshService {
         'users',
         'settings',
         'weapons',
+        'recon',
         'threats',
+        'logistics',
       ],
       callback,
     );

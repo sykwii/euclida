@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../auth.service';
 
 @Component({
@@ -19,6 +19,7 @@ export class LoginPage {
 
   constructor(
     private readonly auth: AuthService,
+    private readonly route: ActivatedRoute,
     private readonly router: Router,
   ) {}
 
@@ -35,12 +36,22 @@ export class LoginPage {
     this.auth.login(this.login.trim(), this.password).subscribe({
       next: () => {
         this.loading = false;
-        void this.router.navigate(['/map']);
+        void this.router.navigateByUrl(this.getReturnUrl());
       },
       error: () => {
         this.loading = false;
         this.error = 'Невірний логін або пароль. Перевірте введені дані.';
       },
     });
+  }
+
+  private getReturnUrl(): string {
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+
+    if (!returnUrl || !returnUrl.startsWith('/') || returnUrl.startsWith('//')) {
+      return '/map';
+    }
+
+    return returnUrl;
   }
 }

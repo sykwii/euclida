@@ -55,6 +55,9 @@ export class EventLog {
   @Column({ type: 'jsonb', nullable: true })
   metadata!: Record<string, unknown> | null;
 
+  @Column({ name: 'read_at', type: 'timestamptz', nullable: true })
+  readAt!: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

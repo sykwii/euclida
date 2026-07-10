@@ -7,7 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "serve:ssr:frontend": "node dist/frontend/server/server.mjs"
+    "start:stable": "ng serve --host 0.0.0.0 --port 8844"
   },
   "private": true,
   "packageManager": "npm@11.12.1",
@@ -24,6 +24,7 @@
     "@angular/ssr": "^21.2.11",
     "express": "^5.1.0",
     "leaflet": "^1.9.4",
+    "milsymbol": "^3.0.4",
     "rxjs": "~7.8.0",
     "socket.io-client": "^4.8.3",
     "tslib": "^2.3.0"

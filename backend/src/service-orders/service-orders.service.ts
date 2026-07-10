@@ -1,13 +1,20 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
-import { latLngToMgrs, mgrsToLatLng, normalizeMgrs } from '../common/geo/mgrs.util';
+import { Charge } from '../charges/charge.entity';
+import {
+  latLngToMgrs,
+  mgrsToLatLng,
+  normalizeMgrs,
+} from '../common/geo/mgrs.util';
 import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entity';
 import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { EventLogsService } from '../event-logs/event-logs.service';
@@ -18,9 +25,11 @@ import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { SendServiceOrderDto } from './dto/send-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
 import { ServiceOrder } from './service-order.entity';
+import { ServiceOrderActualAmmo } from './service-order-actual-ammo.entity';
 import { ServiceOrderSuggestionsService } from './service-order-suggestions.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
-
+import { ShellCompatibleCharge } from '../shell-compatible-charges/shell-compatible-charge.entity';
+import { StockMovement } from '../stock-movements/stock-movement.entity';
 
 export interface ServiceOrderMapResult {
   id: string;
@@ -44,6 +53,8 @@ export interface ServiceOrderMapResult {
 
 @Injectable()
 export class ServiceOrdersService {
+  private readonly logger = new Logger(ServiceOrdersService.name);
+
   constructor(
     @InjectRepository(ServiceOrder)
     private readonly repository: Repository<ServiceOrder>,
@@ -71,6 +82,11 @@ export class ServiceOrdersService {
         selectedShell: true,
         selectedCharge: true,
         selectedZone: true,
+        selectedAirAssetPosition: {
+          unit: true,
+        },
+        selectedDroneModel: true,
+        selectedWarheadType: true,
       },
       order: {
         createdAt: 'DESC',
@@ -125,6 +141,11 @@ export class ServiceOrdersService {
         selectedShell: true,
         selectedCharge: true,
         selectedZone: true,
+        selectedAirAssetPosition: {
+          unit: true,
+        },
+        selectedDroneModel: true,
+        selectedWarheadType: true,
       },
     });
 
@@ -139,9 +160,18 @@ export class ServiceOrdersService {
     return item;
   }
 
-  async create(data: CreateServiceOrderDto, user: AuthUser): Promise<ServiceOrder> {
+  async create(
+    data: CreateServiceOrderDto,
+    user: AuthUser,
+  ): Promise<ServiceOrder> {
     if (user.role === 'observer') {
       throw new BadRequestException('Спостерігач не може створювати заявки');
+    }
+
+    if (user.scope === 'ew') {
+      throw new BadRequestException(
+        'Оператор РЕБ може працювати з картою та повітряними загрозами, але не створює ВГЗ',
+      );
     }
 
     let targetLat = data.targetLat;
@@ -152,7 +182,9 @@ export class ServiceOrdersService {
       try {
         targetMgrs = normalizeMgrs(targetMgrs);
       } catch {
-        throw new BadRequestException('Некоректний MGRS. Формат: 36U XB 11111 22222');
+        throw new BadRequestException(
+          'Некоректний MGRS. Формат: 36U XB 11111 22222',
+        );
       }
     }
 
@@ -189,8 +221,61 @@ export class ServiceOrdersService {
 
     await this.writeOrderEvent(savedItem, user, 'created', 'Створено заявку');
 
-    this.notifyRealtime(savedItem.id, 'created');
+    this.notifyRealtime(savedItem, 'created');
 
+    return savedItem;
+  }
+
+  async createFromReconPuar(
+    proposal: {
+      id: string;
+      targetId: string | null;
+      observationId: string | null;
+      payload: Record<string, unknown>;
+      comments?: string | null;
+    },
+    user: AuthUser,
+  ): Promise<ServiceOrder> {
+    const source = (proposal.payload['target'] || proposal.payload['observation']) as
+      | {
+          lat?: number;
+          lng?: number;
+          mgrs?: string | null;
+          targetType?: string;
+        }
+      | undefined;
+
+    if (!source?.lat || !source?.lng) {
+      throw new BadRequestException('У пропозиції ПУАР немає координат');
+    }
+
+    const orderNumber = `PUAR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${proposal.id.slice(0, 8)}`;
+    const item = this.repository.create({
+      orderNumber,
+      status: 'draft',
+      targetLat: Number(source.lat),
+      targetLng: Number(source.lng),
+      targetMgrs: source.mgrs || latLngToMgrs(Number(source.lat), Number(source.lng)),
+      targetSettlement: proposal.comments || null,
+      taskType: source.targetType || 'service',
+      plannedQuantity: 1,
+      createdByUserId: user.sub,
+      reconSnapshot: proposal.payload,
+      sourceReconTargetId: proposal.targetId,
+      sourceReconObservationId: proposal.observationId,
+      sourcePuarProposalId: proposal.id,
+      reconSnapshotUpdatedAt: new Date(),
+      reconLinkCheckedAt: new Date(),
+    });
+
+    const savedItem = await this.repository.save(item);
+    await this.writeOrderEvent(savedItem, user, 'created', 'Створено чернетку ВГЗ з ПУАР');
+    this.notifyRealtime(savedItem, 'created');
+    this.realtimeEvents.emitMany(['missions', 'recon', 'events'], 'created', {
+      entity: 'service_order',
+      id: savedItem.id,
+      reason: 'recon:core-puar-accepted',
+    });
     return savedItem;
   }
 
@@ -217,7 +302,9 @@ export class ServiceOrdersService {
       try {
         targetMgrs = normalizeMgrs(data.targetMgrs);
       } catch {
-        throw new BadRequestException('Некоректний MGRS. Формат: 36U XB 11111 22222');
+        throw new BadRequestException(
+          'Некоректний MGRS. Формат: 36U XB 11111 22222',
+        );
       }
     }
 
@@ -253,7 +340,7 @@ export class ServiceOrdersService {
 
     await this.writeOrderEvent(savedItem, user, 'updated', 'Оновлено заявку');
 
-    this.notifyRealtime(savedItem.id, 'updated');
+    this.notifyRealtime(savedItem, 'updated');
 
     return savedItem;
   }
@@ -275,7 +362,7 @@ export class ServiceOrdersService {
 
     await this.writeOrderEvent(item, user, 'deleted', 'Видалено чернетку');
 
-    this.notifyRealtime(item.id, 'deleted');
+    this.notifyRealtime(item, 'deleted');
   }
 
   async getSuggestions(id: string, user: AuthUser) {
@@ -314,8 +401,8 @@ export class ServiceOrdersService {
       );
     }
 
-    if (order.status !== 'draft') {
-      throw new BadRequestException('Вибір точки можливий тільки для чернетки');
+    if (!['draft', 'proposed', 'rejected'].includes(order.status)) {
+      throw new BadRequestException('Вибір виконавця можливий тільки для чернетки, пропозиції або відхиленої заявки');
     }
 
     const activeStatuses = [
@@ -335,25 +422,43 @@ export class ServiceOrdersService {
       .andWhere('order.status IN (:...statuses)', {
         statuses: activeStatuses,
       })
+      .andWhere('order.id <> :orderId', { orderId: order.id })
       .getOne();
 
     if (activeOrder) {
       throw new BadRequestException('На цю точку вже є активне завдання');
     }
 
+    order.executorType = 'fire_position';
     order.selectedFirePositionId = body.firePositionId;
     order.selectedShellId = body.shellId;
     order.selectedChargeId = body.chargeId;
     order.selectedZoneId = body.zoneId;
+    order.selectedAirAssetPositionId = null;
+    order.selectedDroneModelId = null;
+    order.selectedWarheadTypeId = null;
+    order.linkedAirTaskId = null;
+    order.assignedUnitId = null;
+    order.assignedScope = null;
+    order.sentByUserId = null;
+    order.acceptedByUserId = null;
+    order.rejectionReason = null;
+    order.rejectedByUnitName = null;
+    order.rejectedAt = null;
     order.status = 'proposed';
 
     const savedOrder = await this.repository.save(order);
 
-    await this.writeOrderEvent(savedOrder, user, 'updated', 'Обрано ВП для заявки');
+    await this.writeOrderEvent(
+      savedOrder,
+      user,
+      'updated',
+      'Обрано ВП для заявки',
+    );
 
-    this.notifyRealtime(savedOrder.id, 'updated');
+    this.notifyRealtime(savedOrder, 'updated');
 
-    return savedOrder;
+    return this.findOne(savedOrder.id, user);
   }
 
   async sendToUnit(
@@ -365,24 +470,36 @@ export class ServiceOrdersService {
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'Надсилати заявку на ПУВБ може тільки головний оператор або адміністратор',
+        'Надсилати заявку виконавцю може тільки головний оператор або адміністратор',
       );
     }
 
     if (item.status !== 'proposed') {
       throw new BadRequestException(
-        'Надіслати можна тільки заявку, для якої вже обрано ВП',
+        'Надіслати можна тільки заявку, для якої вже обрано виконавця',
       );
     }
 
-    if (!item.selectedFirePositionId || !item.selectedFirePosition?.unitId) {
-      throw new BadRequestException(
-        'Передача можлива тільки після вибору ВП. Оператор батареї та оператор дивізіону визначаються автоматично',
-      );
+    if (item.executorType === 'air_asset_position') {
+      if (!item.selectedAirAssetPositionId || !item.selectedAirAssetPosition?.unitId) {
+        throw new BadRequestException(
+          'Передача можлива тільки після вибору виконавця. Підрозділ виконавця визначається автоматично',
+        );
+      }
+
+      item.assignedScope = 'battery';
+      item.assignedUnitId = item.selectedAirAssetPosition.unitId;
+    } else {
+      if (!item.selectedFirePositionId || !item.selectedFirePosition?.unitId) {
+        throw new BadRequestException(
+          'Передача можлива тільки після вибору виконавця. Оператор підрозділу виконавця визначається автоматично',
+        );
+      }
+
+      item.assignedScope = 'battery';
+      item.assignedUnitId = item.selectedFirePosition.unitId;
     }
 
-    item.assignedScope = 'battery';
-    item.assignedUnitId = item.selectedFirePosition.unitId;
     item.sentByUserId = user.sub;
     item.status = 'sent';
 
@@ -392,14 +509,15 @@ export class ServiceOrdersService {
       saved,
       user,
       'sent',
-      `Заявку передано на ПУВБ за ВП ${item.selectedFirePosition.name}. Оператори батареї та дивізіону отримують її автоматично`,
+      item.executorType === 'air_asset_position'
+        ? `Заявку передано виконавцю ${item.selectedAirAssetPosition?.callsign || item.selectedAirAssetPosition?.name || ''}. Оператор підрозділу виконавця отримує її автоматично`
+        : `Заявку передано на ПУВБ за ВП ${item.selectedFirePosition?.name || ''}. Оператор підрозділу виконавця отримує її автоматично`,
     );
 
-    this.notifyRealtime(saved.id, 'sent');
+    this.notifyRealtime(saved, 'sent');
 
     return saved;
   }
-
   async accept(id: string, user: AuthUser): Promise<ServiceOrder> {
     const order = await this.findOne(id, user);
 
@@ -421,7 +539,7 @@ export class ServiceOrdersService {
 
     await this.writeOrderEvent(savedOrder, user, 'accepted', 'Заявку прийнято');
 
-    this.notifyRealtime(savedOrder.id, 'accepted');
+    this.notifyRealtime(savedOrder, 'accepted');
 
     return savedOrder;
   }
@@ -450,15 +568,19 @@ export class ServiceOrdersService {
 
     order.status = 'rejected';
     order.rejectionReason = reason.trim();
-    order.rejectedByUnitName =
-      order.selectedFirePosition?.unit?.name ?? null;
+    order.rejectedByUnitName = order.selectedFirePosition?.unit?.name ?? null;
     order.rejectedAt = new Date();
 
     const savedOrder = await this.repository.save(order);
 
-    await this.writeOrderEvent(savedOrder, user, 'rejected', 'Заявку відхилено');
+    await this.writeOrderEvent(
+      savedOrder,
+      user,
+      'rejected',
+      'Заявку відхилено',
+    );
 
-    this.notifyRealtime(savedOrder.id, 'rejected');
+    this.notifyRealtime(savedOrder, 'rejected');
 
     return savedOrder;
   }
@@ -488,23 +610,83 @@ export class ServiceOrdersService {
     order.selectedShellId = null;
     order.selectedChargeId = null;
     order.selectedZoneId = null;
+    order.executorType = null;
+order.selectedAirAssetPositionId = null;
+order.selectedDroneModelId = null;
+order.selectedWarheadTypeId = null;
+order.linkedAirTaskId = null;
     order.rejectionReason = null;
     order.rejectedByUnitName = null;
     order.rejectedAt = null;
 
     const savedOrder = await this.repository.save(order);
-
     await this.writeOrderEvent(
       savedOrder,
       user,
       'reopened',
       'Заявку повернуто на повторний підбір',
     );
-
-    this.notifyRealtime(savedOrder.id, 'updated');
-
+    this.notifyRealtime(savedOrder, 'updated');
     return savedOrder;
   }
+
+async selectAirAsset(
+  id: string,
+  body: {
+    airAssetPositionId: string;
+    droneModelId: string;
+    warheadTypeId: string;
+  },
+  user: AuthUser,
+): Promise<ServiceOrder> {
+  const order = await this.findOne(id, user);
+
+  if (user.role !== 'admin' && user.scope !== 'main') {
+    throw new BadRequestException(
+      'Обирати бойовий БпЛА для заявки може тільки ОКП або адміністратор',
+    );
+  }
+
+  if (!['draft', 'proposed', 'rejected'].includes(order.status)) {
+      throw new BadRequestException('Вибір виконавця можливий тільки для чернетки, пропозиції або відхиленої заявки');
+    }
+
+  order.executorType = 'air_asset_position';
+
+  order.assignedUnitId = null;
+  order.assignedScope = null;
+  order.sentByUserId = null;
+  order.acceptedByUserId = null;
+  order.rejectionReason = null;
+  order.rejectedByUnitName = null;
+  order.rejectedAt = null;
+
+  order.selectedFirePositionId = null;
+  order.selectedShellId = null;
+  order.selectedChargeId = null;
+  order.selectedZoneId = null;
+
+  order.selectedAirAssetPositionId = body.airAssetPositionId;
+  order.selectedDroneModelId = body.droneModelId;
+  order.selectedWarheadTypeId = body.warheadTypeId;
+  order.linkedAirTaskId = null;
+
+  order.status = 'proposed';
+
+  const savedOrder = await this.repository.save(order);
+
+  await this.writeOrderEvent(
+    savedOrder,
+    user,
+    'updated',
+    'Обрано бойовий БпЛА для заявки',
+  );
+
+  this.notifyRealtime(savedOrder, 'updated');
+
+  return this.findOne(savedOrder.id, user);
+}
+
 
   async start(id: string, user: AuthUser): Promise<ServiceOrder> {
     const order = await this.findOne(id, user);
@@ -515,32 +697,33 @@ export class ServiceOrdersService {
       throw new BadRequestException('Почати можна тільки прийняте завдання');
     }
 
-    if (!order.selectedFirePositionId) {
-      throw new BadRequestException('Неможливо почати завдання без обраної точки');
+    if (order.executorType === 'air_asset_position') {
+      if (!order.selectedAirAssetPositionId) {
+        throw new BadRequestException('Неможливо почати завдання без обраного виконавця');
+      }
+    } else if (!order.selectedFirePositionId) {
+      throw new BadRequestException('Неможливо почати завдання без обраного виконавця');
     }
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       order.status = 'in_progress';
       order.startedAt = new Date();
 
-      await manager.update(
-        FirePosition,
-        order.selectedFirePositionId!,
-        {
+      if (order.executorType !== 'air_asset_position') {
+        await manager.update(FirePosition, order.selectedFirePositionId!, {
           readinessStatus: 'in_progress',
-        },
-      );
+        });
+      }
 
       return manager.save(ServiceOrder, order);
     });
 
     await this.writeOrderEvent(savedOrder, user, 'started', 'Заявку розпочато');
 
-    this.notifyRealtime(savedOrder.id, 'started');
+    this.notifyRealtime(savedOrder, 'started');
 
     return savedOrder;
   }
-
   async complete(
     id: string,
     body: CompleteServiceOrderDto,
@@ -563,20 +746,19 @@ export class ServiceOrdersService {
       this.assertCanEdit(order);
     }
 
-    if (
-      !order.selectedFirePositionId ||
-      !order.selectedShellId ||
-      !order.selectedChargeId
-    ) {
+    if (!order.selectedFirePositionId) {
       throw new BadRequestException(
-        'Неможливо завершити завдання без обраної ВП та ресурсів A+B',
+        'Неможливо завершити завдання без обраної ВП',
       );
     }
 
     const startedAt = new Date(body.startedAt);
     const completedAt = new Date(body.completedAt);
 
-    if (Number.isNaN(startedAt.getTime()) || Number.isNaN(completedAt.getTime())) {
+    if (
+      Number.isNaN(startedAt.getTime()) ||
+      Number.isNaN(completedAt.getTime())
+    ) {
       throw new BadRequestException('Некоректна дата початку або завершення');
     }
 
@@ -586,11 +768,35 @@ export class ServiceOrdersService {
       );
     }
 
-    const nextActualQuantity = Number(body.actualQuantity);
+    const legacyActualQuantity = Number(body.actualQuantity);
+    const requestedActualAmmo = body.actualAmmoItems?.length
+      ? body.actualAmmoItems.map((item) => ({
+          shellId: item.shellId,
+          chargeId: item.chargeId,
+          quantity: Number(item.quantity),
+          chargeModulesPerShot: item.chargeModulesPerShot,
+        }))
+      : [
+          {
+            shellId: body.actualShellId ?? order.selectedShellId,
+            chargeId: body.actualChargeId ?? order.selectedChargeId,
+            quantity: legacyActualQuantity,
+            chargeModulesPerShot: body.chargeModulesPerShot,
+          },
+        ];
 
-    if (nextActualQuantity <= 0 || !Number.isInteger(nextActualQuantity)) {
+    if (
+      requestedActualAmmo.length === 0 ||
+      requestedActualAmmo.some(
+        (item) =>
+          !item.shellId ||
+          !item.chargeId ||
+          item.quantity <= 0 ||
+          !Number.isInteger(item.quantity),
+      )
+    ) {
       throw new BadRequestException(
-        'Фактична витрата має бути цілим числом більше 0',
+        'Неможливо завершити завдання без фактичного снаряда та заряду',
       );
     }
 
@@ -603,74 +809,126 @@ export class ServiceOrdersService {
         throw new BadRequestException('У вибраної ВП немає локального БК');
       }
 
-      const shellStock = await manager.findOne(DepotShellStock, {
-        where: {
-          depotId: firePosition.ammoDepotId,
-          shellId: order.selectedShellId!,
-        },
-        lock: {
-          mode: 'pessimistic_write',
-        },
-      });
+      const shellAdjustments = new Map<string, number>();
+      const chargeAdjustments = new Map<string, number>();
+      const actualAmmoRows: Array<Partial<ServiceOrderActualAmmo>> = [];
 
-      const chargeStock = await manager.findOne(DepotChargeStock, {
-        where: {
-          depotId: firePosition.ammoDepotId,
-          chargeId: order.selectedChargeId!,
-        },
-        lock: {
-          mode: 'pessimistic_write',
-        },
-      });
+      if (isEditingCompleted) {
+        const previousAmmo = await manager.find(ServiceOrderActualAmmo, {
+          where: { serviceOrderId: order.id },
+        });
 
-      if (!shellStock) {
-        throw new BadRequestException(
-          'На локальному БК ВП немає обраного ресурсу A',
-        );
-      }
-
-      if (!chargeStock) {
-        throw new BadRequestException(
-          'На локальному БК ВП немає обраного ресурсу B',
-        );
-      }
-
-      const previousActualQuantity = Number(order.actualQuantity ?? 0);
-      const quantityDiff = isEditingCompleted
-        ? nextActualQuantity - previousActualQuantity
-        : nextActualQuantity;
-
-      if (quantityDiff > 0) {
-        if (Number(shellStock.quantity) < quantityDiff) {
-          throw new BadRequestException(
-            `Недостатньо ресурсу A на локальному БК ВП. Потрібно додатково: ${quantityDiff}`,
+        if (previousAmmo.length > 0) {
+          for (const item of previousAmmo) {
+            this.addStockAdjustment(shellAdjustments, item.shellId, Number(item.shotQuantity ?? 0));
+            this.addStockAdjustment(chargeAdjustments, item.chargeId, Number(item.chargeQuantity ?? 0));
+          }
+        } else {
+          this.addStockAdjustment(
+            shellAdjustments,
+            order.selectedShellId,
+            Number(order.actualQuantity ?? 0),
+          );
+          this.addStockAdjustment(
+            chargeAdjustments,
+            order.selectedChargeId,
+            Number(order.actualChargeQuantity ?? order.actualQuantity ?? 0),
           );
         }
 
-        if (Number(chargeStock.quantity) < quantityDiff) {
+        await manager.delete(ServiceOrderActualAmmo, { serviceOrderId: order.id });
+      }
+
+      for (const item of requestedActualAmmo) {
+        const compatiblePair = await manager.findOne(ShellCompatibleCharge, {
+          where: {
+            shellId: item.shellId!,
+            chargeId: item.chargeId!,
+          },
+        });
+
+        if (!compatiblePair) {
           throw new BadRequestException(
-            `Недостатньо ресурсу B на локальному БК ВП. Потрібно додатково: ${quantityDiff}`,
+            'Фактичний снаряд і заряд не мають налаштованої сумісності',
           );
         }
+
+        const actualCharge = await manager.findOne(Charge, {
+          where: { id: item.chargeId! },
+        });
+
+        if (!actualCharge) {
+          throw new BadRequestException(
+            'Фактичний заряд не знайдено в довіднику',
+          );
+        }
+
+        const chargeUsage = this.calculateActualChargeUsage(
+          actualCharge,
+          item.quantity,
+          item.chargeModulesPerShot,
+          compatiblePair.usableModules,
+        );
+
+        this.addStockAdjustment(shellAdjustments, item.shellId, -item.quantity);
+        this.addStockAdjustment(chargeAdjustments, item.chargeId, -chargeUsage.actualChargeQuantity);
+        actualAmmoRows.push({
+          serviceOrderId: order.id,
+          shellId: item.shellId!,
+          chargeId: item.chargeId!,
+          shotQuantity: item.quantity,
+          chargeQuantity: chargeUsage.actualChargeQuantity,
+          chargeModulesPerShot: chargeUsage.modulesPerShot,
+        });
       }
 
-      if (quantityDiff !== 0) {
-        shellStock.quantity = Number(shellStock.quantity) - quantityDiff;
-        chargeStock.quantity = Number(chargeStock.quantity) - quantityDiff;
+      await this.applyShellStockAdjustments(
+        manager,
+        firePosition.ammoDepotId,
+        shellAdjustments,
+      );
+      await this.applyChargeStockAdjustments(
+        manager,
+        firePosition.ammoDepotId,
+        chargeAdjustments,
+      );
 
-        await manager.save(DepotShellStock, shellStock);
-        await manager.save(DepotChargeStock, chargeStock);
+      if (isFirstCompletion) {
+        await this.writeCompletionStockMovements(
+          manager,
+          firePosition.ammoDepotId,
+          order.id,
+          actualAmmoRows,
+        );
       }
+
+      const totalShotQuantity = requestedActualAmmo.reduce((sum, item) => sum + item.quantity, 0);
+      const totalChargeQuantity = actualAmmoRows.reduce(
+        (sum, item) => this.roundStockQuantity(sum + Number(item.chargeQuantity ?? 0)),
+        0,
+      );
+      const firstAmmo = actualAmmoRows[0];
+      const sameModules = actualAmmoRows.every(
+        (item) => item.chargeModulesPerShot === firstAmmo.chargeModulesPerShot,
+      );
 
       order.status = 'completed';
       order.startedAt = startedAt;
       order.completedAt = completedAt;
-      order.actualQuantity = nextActualQuantity;
+      order.actualQuantity = totalShotQuantity;
+      order.actualChargeQuantity = totalChargeQuantity;
+      order.actualChargeModulesPerShot = sameModules ? firstAmmo.chargeModulesPerShot ?? null : null;
+      order.selectedShellId = firstAmmo.shellId!;
+      order.selectedChargeId = firstAmmo.chargeId!;
       order.resultType = body.resultType;
       order.resultComment = body.resultComment?.trim() || null;
       order.completedByUserId = user.sub;
 
       const saved = await manager.save(ServiceOrder, order);
+      await manager.save(
+        ServiceOrderActualAmmo,
+        actualAmmoRows.map((item) => ({ ...item, serviceOrderId: saved.id })),
+      );
 
       if (isFirstCompletion) {
         firePosition.readinessStatus = 'ready';
@@ -683,11 +941,203 @@ export class ServiceOrdersService {
       return saved;
     });
 
-    await this.writeOrderEvent(savedOrder, user, 'completed', 'Заявку завершено');
+    await this.writeOrderEvent(
+      savedOrder,
+      user,
+      'completed',
+      'Заявку завершено',
+    );
 
-    this.notifyRealtime(savedOrder.id, 'completed', ['missions', 'map', 'stock', 'analytics', 'events']);
+    this.notifyRealtime(savedOrder, 'completed', [
+      'missions',
+      'map',
+      'stock',
+      'analytics',
+      'events',
+    ]);
 
     return savedOrder;
+  }
+
+  private calculateActualChargeUsage(
+    charge: Charge,
+    shotQuantity: number,
+    requestedModulesPerShot?: number,
+    compatibleUsableModules?: number | null,
+  ): { actualChargeQuantity: number; modulesPerShot: number | null } {
+    if (charge.chargeKind !== 'modular') {
+      return {
+        actualChargeQuantity: shotQuantity,
+        modulesPerShot: null,
+      };
+    }
+
+    const modulesPerCharge = Number(charge.modulesPerCharge ?? 0);
+
+    if (!Number.isInteger(modulesPerCharge) || modulesPerCharge <= 0) {
+      throw new BadRequestException(
+        'Для модульного заряду не налаштована кількість модулів у повному заряді',
+      );
+    }
+
+    const maxUsableModules = Number(
+      compatibleUsableModules ?? charge.maxUsableModules ?? modulesPerCharge,
+    );
+    const modulesPerShot = Number(requestedModulesPerShot ?? maxUsableModules);
+
+    if (
+      !Number.isInteger(modulesPerShot) ||
+      modulesPerShot <= 0 ||
+      modulesPerShot > modulesPerCharge ||
+      modulesPerShot > maxUsableModules
+    ) {
+      throw new BadRequestException(
+        `Некоректна кількість модулів заряду. Доступно: 1-${Math.min(
+          modulesPerCharge,
+          maxUsableModules,
+        )}`,
+      );
+    }
+
+    return {
+      actualChargeQuantity: this.roundStockQuantity(
+        (shotQuantity * modulesPerShot) / modulesPerCharge,
+      ),
+      modulesPerShot,
+    };
+  }
+
+  private addStockAdjustment(
+    adjustments: Map<string, number>,
+    itemId: string | null | undefined,
+    delta: number,
+  ): void {
+    if (!itemId || delta === 0) return;
+    adjustments.set(
+      itemId,
+      this.roundStockQuantity((adjustments.get(itemId) ?? 0) + delta),
+    );
+  }
+
+  private async applyShellStockAdjustments(
+    manager: EntityManager,
+    depotId: string,
+    adjustments: Map<string, number>,
+  ): Promise<void> {
+    for (const [shellId, delta] of adjustments) {
+      if (delta === 0) continue;
+
+      const stock = await manager.findOne(DepotShellStock, {
+        where: { depotId, shellId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!stock) {
+        throw new BadRequestException(
+          'На локальному БК ВП немає фактичного снаряда',
+        );
+      }
+
+      const nextQuantity = this.roundStockQuantity(
+        Number(stock.quantity) + delta,
+      );
+
+      if (nextQuantity < 0) {
+        throw new BadRequestException(
+          `Недостатньо фактичних снарядів на локальному БК ВП. Потрібно додатково: ${this.roundStockQuantity(
+            Math.abs(nextQuantity),
+          )}`,
+        );
+      }
+
+      stock.quantity = nextQuantity;
+      await manager.save(DepotShellStock, stock);
+    }
+  }
+
+  private async applyChargeStockAdjustments(
+    manager: EntityManager,
+    depotId: string,
+    adjustments: Map<string, number>,
+  ): Promise<void> {
+    for (const [chargeId, delta] of adjustments) {
+      if (delta === 0) continue;
+
+      const stock = await manager.findOne(DepotChargeStock, {
+        where: { depotId, chargeId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!stock) {
+        throw new BadRequestException(
+          'На локальному БК ВП немає фактичного заряду',
+        );
+      }
+
+      const nextQuantity = this.roundStockQuantity(
+        Number(stock.quantity) + delta,
+      );
+
+      if (nextQuantity < 0) {
+        throw new BadRequestException(
+          `Недостатньо фактичних зарядів на локальному БК ВП. Потрібно додатково: ${this.roundStockQuantity(
+            Math.abs(nextQuantity),
+          )}`,
+        );
+      }
+
+      stock.quantity = nextQuantity;
+      await manager.save(DepotChargeStock, stock);
+    }
+  }
+
+  private async writeCompletionStockMovements(
+    manager: EntityManager,
+    depotId: string,
+    serviceOrderId: string,
+    actualAmmoRows: Array<Partial<ServiceOrderActualAmmo>>,
+  ): Promise<void> {
+    const movementGroupId = randomUUID();
+    const documentNumber = `VGZ-${serviceOrderId.slice(0, 8)}`;
+    const movements: Array<Partial<StockMovement>> = [];
+
+    for (const item of actualAmmoRows) {
+      if (item.shellId && Number(item.shotQuantity ?? 0) > 0) {
+        movements.push({
+          fromDepotId: depotId,
+          toDepotId: null,
+          itemType: 'shell',
+          itemId: item.shellId,
+          quantity: Number(item.shotQuantity),
+          movementType: 'write_off',
+          movementGroupId,
+          documentNumber,
+          comment: `Списання за ВГЗ ${serviceOrderId}`,
+        });
+      }
+
+      if (item.chargeId && Number(item.chargeQuantity ?? 0) > 0) {
+        movements.push({
+          fromDepotId: depotId,
+          toDepotId: null,
+          itemType: 'charge',
+          itemId: item.chargeId,
+          quantity: Number(item.chargeQuantity),
+          movementType: 'write_off',
+          movementGroupId,
+          documentNumber,
+          comment: `Списання за ВГЗ ${serviceOrderId}`,
+        });
+      }
+    }
+
+    if (movements.length > 0) {
+      await manager.save(StockMovement, movements.map((item) => manager.create(StockMovement, item)));
+    }
+  }
+
+  private roundStockQuantity(value: number): number {
+    return Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
   }
 
   async cancel(
@@ -708,12 +1158,11 @@ export class ServiceOrdersService {
     }
 
     if (order.status === 'in_progress' && order.selectedFirePositionId) {
-      await this.dataSource.getRepository(FirePosition).update(
-        order.selectedFirePositionId,
-        {
+      await this.dataSource
+        .getRepository(FirePosition)
+        .update(order.selectedFirePositionId, {
           readinessStatus: 'ready',
-        },
-      );
+        });
     }
 
     order.status = 'cancelled';
@@ -721,9 +1170,14 @@ export class ServiceOrdersService {
 
     const savedOrder = await this.repository.save(order);
 
-    await this.writeOrderEvent(savedOrder, user, 'cancelled', 'Заявку скасовано');
+    await this.writeOrderEvent(
+      savedOrder,
+      user,
+      'cancelled',
+      'Заявку скасовано',
+    );
 
-    this.notifyRealtime(savedOrder.id, 'updated');
+    this.notifyRealtime(savedOrder, 'updated');
 
     return savedOrder;
   }
@@ -754,33 +1208,40 @@ export class ServiceOrdersService {
         selectedShell: true,
         selectedCharge: true,
         selectedZone: true,
+        selectedAirAssetPosition: {
+          unit: true,
+        },
+        selectedDroneModel: true,
+        selectedWarheadType: true,
       },
       order: {
         completedAt: 'DESC',
       },
     });
 
-    return items.map((item): ServiceOrderMapResult => ({
-      id: item.id,
-      orderNumber: item.orderNumber,
-      targetLat: item.targetLat,
-      targetLng: item.targetLng,
-      targetMgrs: item.targetMgrs,
-      targetSettlement: item.targetSettlement,
-      taskType: item.taskType,
-      resultType: item.resultType,
-      resultComment: item.resultComment,
-      completedAt: item.completedAt,
-      plannedQuantity: item.plannedQuantity,
-      actualQuantity: item.actualQuantity,
-      firePositionName: item.selectedFirePosition?.name ?? null,
-      unitName: item.selectedFirePosition?.unit?.name ?? null,
-      shellMarking: item.selectedShell?.marking ?? null,
-      chargeMarking: item.selectedCharge?.marking ?? null,
-      zoneName: item.selectedZone
-        ? `Зона ${item.selectedZone.zoneNumber} (${item.selectedZone.distanceFromM}-${item.selectedZone.distanceToM} м)`
-        : null,
-    }));
+    return items.map(
+      (item): ServiceOrderMapResult => ({
+        id: item.id,
+        orderNumber: item.orderNumber,
+        targetLat: item.targetLat,
+        targetLng: item.targetLng,
+        targetMgrs: item.targetMgrs,
+        targetSettlement: item.targetSettlement,
+        taskType: item.taskType,
+        resultType: item.resultType,
+        resultComment: item.resultComment,
+        completedAt: item.completedAt,
+        plannedQuantity: item.plannedQuantity,
+        actualQuantity: item.actualQuantity,
+        firePositionName: item.selectedFirePosition?.name ?? null,
+        unitName: item.selectedFirePosition?.unit?.name ?? null,
+        shellMarking: item.selectedShell?.marking ?? null,
+        chargeMarking: item.selectedCharge?.marking ?? null,
+        zoneName: item.selectedZone
+          ? `Зона ${item.selectedZone.zoneNumber} (${item.selectedZone.distanceFromM}-${item.selectedZone.distanceToM} м)`
+          : null,
+      }),
+    );
   }
 
   private assertCanEdit(item: ServiceOrder): void {
@@ -818,7 +1279,10 @@ export class ServiceOrdersService {
     throw new BadRequestException('Немає доступу до цієї заявки');
   }
 
-  private async canViewOrder(order: ServiceOrder, user: AuthUser): Promise<boolean> {
+  private async canViewOrder(
+    order: ServiceOrder,
+    user: AuthUser,
+  ): Promise<boolean> {
     if (user.role === 'admin' || user.scope === 'main') {
       return true;
     }
@@ -868,65 +1332,97 @@ export class ServiceOrdersService {
   ): Promise<void> {
     if (user.role !== 'operator') {
       throw new BadRequestException(
-        'Адміністратор і спостерігач не виконують заявку. Виконавчі дії доступні тільки оператору батареї цієї ВП',
+        'Виконавчі дії доступні тільки оператору підрозділу виконавця',
       );
     }
 
     if (user.scope === 'main' || user.scope === 'division') {
       throw new BadRequestException(
-        'Головний пункт і дивізіон тільки контролюють виконання. Приймати, починати, завершувати і редагувати звіт може оператор батареї цієї ВП',
+        'Головний пункт і дивізіон тільки контролюють виконання. Приймати, починати, завершувати і редагувати звіт може оператор підрозділу виконавця',
       );
     }
 
     if (user.scope !== 'battery') {
       throw new BadRequestException(
-        'Виконавчі дії доступні тільки оператору батареї, якій належить вибрана ВП',
+        'Виконавчі дії доступні тільки оператору підрозділу виконавця',
       );
     }
 
     if (!user.unitId) {
-      throw new BadRequestException('Для оператора батареї не визначено підрозділ');
+      throw new BadRequestException(
+        'Для оператора підрозділу виконавця не визначено підрозділ',
+      );
     }
 
     if (!order.assignedUnitId) {
-      throw new BadRequestException('Заявка ще не надіслана на ПУВБ');
+      throw new BadRequestException('Заявка ще не надіслана виконавцю');
     }
 
     if (order.assignedUnitId !== user.unitId) {
       throw new BadRequestException(
-        'Ця заявка належить іншій батареї і недоступна для виконання',
+        'Ця заявка належить іншому підрозділу виконавця і недоступна для виконання',
       );
     }
   }
-
   private async writeOrderEvent(
     order: ServiceOrder,
     user: AuthUser,
     action: string,
     title: string,
   ): Promise<void> {
-    await this.eventLogs.create({
-      eventType: 'service_order',
-      action,
-      actor: user,
-      unitId: order.assignedUnitId ?? order.selectedFirePosition?.unitId ?? null,
-      unitName: order.selectedFirePosition?.unit?.name ?? null,
-      entityType: 'service_order',
-      entityId: order.id,
-      entityName: order.orderNumber,
-      title,
-      details: `${user.fullName || user.login}: ${title} ${order.orderNumber}`,
-    });
+    try {
+      await this.eventLogs.create({
+        eventType: 'service_order',
+        action,
+        actor: user,
+        unitId:
+          order.assignedUnitId ??
+          order.selectedFirePosition?.unitId ??
+          user.unitId ??
+          null,
+        unitName: order.selectedFirePosition?.unit?.name ?? null,
+        entityType: 'service_order',
+        entityId: order.id,
+        entityName: order.orderNumber,
+        title,
+        details: `${user.fullName || user.login}: ${title} ${order.orderNumber}`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to write service order event ${order.id}: ${message}`,
+      );
+    }
   }
 
   private notifyRealtime(
-    orderId?: string,
-    action: 'created' | 'updated' | 'deleted' | 'sent' | 'accepted' | 'rejected' | 'started' | 'completed' | 'changed' = 'updated',
-    scopes: Array<'missions' | 'map' | 'stock' | 'analytics' | 'events'> = ['missions', 'map', 'analytics', 'events'],
+    orderOrId?: ServiceOrder | string,
+    action:
+      | 'created'
+      | 'updated'
+      | 'deleted'
+      | 'sent'
+      | 'accepted'
+      | 'rejected'
+      | 'started'
+      | 'completed'
+      | 'changed' = 'updated',
+    scopes: Array<'missions' | 'map' | 'stock' | 'analytics' | 'events'> = [
+      'missions',
+      'map',
+      'analytics',
+      'events',
+    ],
   ): void {
+    const order = typeof orderOrId === 'string' ? null : orderOrId;
+    const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId?.id;
+    const unitId =
+      order?.assignedUnitId ?? order?.selectedFirePosition?.unitId ?? undefined;
+
     this.realtimeEvents.emitMany(scopes, action, {
       entity: 'service_order',
       id: orderId,
+      unitId,
     });
   }
 }

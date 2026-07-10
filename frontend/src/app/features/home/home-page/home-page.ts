@@ -1,9 +1,20 @@
-import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
+import {
+  AfterViewInit,
+  ChangeDetectorRef,
+  Component,
+  Inject,
+  OnDestroy,
+  OnInit,
+  PLATFORM_ID,
+} from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { formatKyivDateTime, minutesSince } from '../../../core/kyiv-time.util';
 import { AirThreat } from '../../air-threats/air-threat.model';
 import { AirThreatsService } from '../../air-threats/air-threats.service';
+import { FirePosition } from '../../fire-positions/fire-position.model';
+import { FirePositionsService } from '../../fire-positions/fire-positions.service';
+import type * as Leaflet from 'leaflet';
 import { AuthService } from '../../auth/auth.service';
 import { ServiceOrder } from '../../service-orders/service-order.model';
 import { ServiceOrdersService } from '../../service-orders/service-orders.service';
@@ -12,7 +23,6 @@ import { AnalyticsService } from '../../analytics/analytics.service';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 import { catchError, finalize } from 'rxjs/operators';
-
 
 interface CommandDashboardCard {
   label: string;
@@ -38,6 +48,14 @@ interface DashboardActionItem {
   hotkey?: string;
 }
 
+interface OperatorQueueItem {
+  label: string;
+  hint: string;
+  action: string;
+  route: string;
+  tone: 'danger' | 'warning' | 'success' | 'info';
+  queryParams?: Record<string, string>;
+}
 
 interface MissionTimelineStep {
   key: string;
@@ -53,32 +71,55 @@ interface MissionTimelineStep {
   templateUrl: './home-page.html',
   styleUrl: './home-page.css',
 })
-export class HomePage implements OnInit, OnDestroy {
+export class HomePage implements OnInit, AfterViewInit, OnDestroy {
+  private L?: typeof Leaflet;
+  private dashboardMap?: Leaflet.Map;
+  private dashboardMapLayer?: Leaflet.LayerGroup;
+  private dashboardMapTileLayer?: Leaflet.TileLayer;
   private readonly autoRefreshSubscription = new Subscription();
   private dashboardRequest?: Subscription;
   private refreshQueued = false;
   orders: ServiceOrder[] = [];
   threats: AirThreat[] = [];
+  firePositions: FirePosition[] = [];
   dashboard: AnalyticsDashboard | null = null;
   loading = true;
   refreshing = false;
   errorMessage = '';
   lastSyncLabel = '—';
+  miniMapFallback = false;
   readonly dashboardSkeleton = Array.from({ length: 8 });
 
   constructor(
     private readonly ordersService: ServiceOrdersService,
     private readonly threatsService: AirThreatsService,
+    private readonly firePositionsService: FirePositionsService,
     private readonly analytics: AnalyticsService,
     private readonly auth: AuthService,
     private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
     private readonly autoRefresh: AutoRefreshService,
+    @Inject(PLATFORM_ID) private readonly platformId: object,
   ) {}
 
   ngOnInit(): void {
     this.load();
-    this.autoRefreshSubscription.add(this.autoRefresh.watch(['missions', 'stock', 'map', 'analytics', 'events', 'weapons', 'threats'], () => this.load()));
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(
+        ['missions', 'stock', 'map', 'analytics', 'events', 'weapons', 'threats'],
+        () => this.load(),
+      ),
+    );
+  }
+
+  async ngAfterViewInit(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    this.L = await import('leaflet');
+    queueMicrotask(() => this.initDashboardMap());
+    setTimeout(() => this.initDashboardMap(), 120);
   }
 
   get user() {
@@ -92,7 +133,6 @@ export class HomePage implements OnInit, OnDestroy {
     if (scope === 'battery') return 'Батарея';
     return 'Робоче місце';
   }
-
 
   get commandCards(): CommandDashboardCard[] {
     return [
@@ -161,17 +201,100 @@ export class HomePage implements OnInit, OnDestroy {
 
   get quickActions(): DashboardActionItem[] {
     return [
-      { label: 'Створити ВГЗ', hint: 'нове вогневе завдання', route: '/service-orders', queryParams: { create: 'true', view: 'cards' }, hotkey: 'N' },
+      {
+        label: 'Створити ВГЗ',
+        hint: 'нове вогневе завдання',
+        route: '/service-orders',
+        queryParams: { create: 'true', view: 'cards' },
+        hotkey: 'N',
+      },
       { label: 'Карта обстановки', hint: 'ВП, загрози, склади', route: '/map', hotkey: 'M' },
-      { label: 'Передача БК', hint: 'уніфікована логістика', route: '/stock-movements', hotkey: 'L' },
+      {
+        label: 'Передача БК',
+        hint: 'уніфікована логістика',
+        route: '/stock-movements',
+        hotkey: 'L',
+      },
       { label: 'Аналітика', hint: 'готовність і витрати', route: '/analytics', hotkey: 'A' },
     ];
+  }
+
+  get operatorQueue(): OperatorQueueItem[] {
+    const queue: OperatorQueueItem[] = [];
+
+    if (this.attentionOrders.length > 0) {
+      queue.push({
+        label: `${this.attentionOrders.length} ВГЗ потребують дії`,
+        hint: 'Підібрати ВП, прийняти або закрити відхилення',
+        action: 'Відкрити ВГЗ',
+        route: '/service-orders',
+        queryParams: { filter: 'needs_action', view: 'list' },
+        tone: 'danger',
+      });
+    }
+
+    if (this.activeThreats.length > 0) {
+      queue.push({
+        label: `${this.activeThreats.length} активних загроз`,
+        hint: 'Перевірити карту та ВП у зоні ризику',
+        action: 'На карту',
+        route: '/map',
+        tone: 'danger',
+      });
+    }
+
+    if (this.criticalAmmoWarnings > 0) {
+      queue.push({
+        label: `${this.criticalAmmoWarnings} ризиків по БК`,
+        hint: 'Подивитись прогноз залишків і підготувати передачу',
+        action: 'Аналітика',
+        route: '/analytics',
+        tone: 'warning',
+      });
+    }
+
+    if (this.notReadyFirePositions > 0) {
+      queue.push({
+        label: `${this.notReadyFirePositions} ВП не БГ`,
+        hint: 'Перевірити причини та активні ВГЗ по цих позиціях',
+        action: 'Відкрити ВП',
+        route: '/fire-positions',
+        tone: 'warning',
+      });
+    }
+
+    if (this.workOrders.length > 0) {
+      queue.push({
+        label: `${this.workOrders.length} ВГЗ у роботі`,
+        hint: 'Контролювати початок, виконання і завершення',
+        action: 'Контроль',
+        route: '/service-orders',
+        queryParams: { filter: 'in_progress', view: 'list' },
+        tone: 'info',
+      });
+    }
+
+    if (queue.length === 0) {
+      queue.push({
+        label: 'Критичних дій немає',
+        hint: 'Тримай відкритою карту та слідкуй за push-повідомленнями',
+        action: 'Карта',
+        route: '/map',
+        tone: 'success',
+      });
+    }
+
+    return queue.slice(0, 4);
   }
 
   get recentActivity(): DashboardActivityItem[] {
     const orderItems = this.orders
       .slice()
-      .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt).getTime() -
+          new Date(a.updatedAt || a.createdAt).getTime(),
+      )
       .slice(0, 6)
       .map((order) => ({
         time: this.shortTime(order.updatedAt || order.createdAt),
@@ -198,7 +321,9 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   get totalFirePositions(): number {
-    return this.dashboard?.firePositions?.total ?? (this.readyFirePositions + this.notReadyFirePositions);
+    return (
+      this.dashboard?.firePositions?.total ?? this.readyFirePositions + this.notReadyFirePositions
+    );
   }
 
   get readyWeapons(): number {
@@ -206,12 +331,21 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   get totalWeapons(): number {
-    return this.dashboard?.weapons?.total ?? (this.readyWeapons + this.notReadyWeapons);
+    return this.dashboard?.weapons?.total ?? this.readyWeapons + this.notReadyWeapons;
   }
 
   get activeOrders(): ServiceOrder[] {
     return this.orders.filter((item) =>
-      ['draft', 'proposed', 'sent', 'sent_to_division', 'sent_to_battery', 'accepted', 'in_progress', 'rejected'].includes(item.status),
+      [
+        'draft',
+        'proposed',
+        'sent',
+        'sent_to_division',
+        'sent_to_battery',
+        'accepted',
+        'in_progress',
+        'rejected',
+      ].includes(item.status),
     );
   }
 
@@ -255,7 +389,12 @@ export class HomePage implements OnInit, OnDestroy {
 
   get situationalTone(): 'danger' | 'warning' | 'success' {
     if (this.activeThreats.length > 0 || this.criticalAmmoWarnings > 0) return 'danger';
-    if (this.attentionOrders.length > 0 || this.notReadyFirePositions > 0 || this.notReadyWeapons > 0) return 'warning';
+    if (
+      this.attentionOrders.length > 0 ||
+      this.notReadyFirePositions > 0 ||
+      this.notReadyWeapons > 0
+    )
+      return 'warning';
     return 'success';
   }
 
@@ -268,14 +407,15 @@ export class HomePage implements OnInit, OnDestroy {
 
   get workOrders(): ServiceOrder[] {
     return this.orders.filter((item) =>
-      ['sent', 'sent_to_division', 'sent_to_battery', 'accepted', 'in_progress'].includes(item.status),
+      ['sent', 'sent_to_division', 'sent_to_battery', 'accepted', 'in_progress'].includes(
+        item.status,
+      ),
     );
   }
 
   get draftOrders(): ServiceOrder[] {
     return this.orders.filter((item) => item.status === 'draft' || item.status === 'proposed');
   }
-
 
   get readyFirePositions(): number {
     return this.dashboard?.firePositions?.ready ?? 0;
@@ -286,16 +426,20 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   get criticalAmmoWarnings(): number {
-    return (this.dashboard?.warnings || []).filter((warning) =>
-      warning.toLowerCase().includes('бк') ||
-      warning.toLowerCase().includes('боєприп') ||
-      warning.toLowerCase().includes('ammo'),
+    return (this.dashboard?.warnings || []).filter(
+      (warning) =>
+        warning.toLowerCase().includes('бк') ||
+        warning.toLowerCase().includes('боєприп') ||
+        warning.toLowerCase().includes('ammo'),
     ).length;
   }
 
   get completedToday(): number {
     const today = new Date().toISOString().slice(0, 10);
-    return this.orders.filter((item) => item.status === 'completed' && (item.completedAt || item.updatedAt || '').startsWith(today)).length;
+    return this.orders.filter(
+      (item) =>
+        item.status === 'completed' && (item.completedAt || item.updatedAt || '').startsWith(today),
+    ).length;
   }
 
   get activeThreats(): AirThreat[] {
@@ -305,6 +449,7 @@ export class HomePage implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.dashboardRequest?.unsubscribe();
     this.autoRefreshSubscription.unsubscribe();
+    this.dashboardMap?.remove();
   }
 
   load(): void {
@@ -317,22 +462,39 @@ export class HomePage implements OnInit, OnDestroy {
     this.loading = firstLoad;
     this.refreshing = !firstLoad;
     this.errorMessage = '';
+    let loadHadError = false;
 
     this.dashboardRequest = forkJoin({
       orders: this.ordersService.getAll().pipe(
         catchError(() => {
+          loadHadError = true;
           this.errorMessage = 'Не вдалося завантажити вогневі завдання';
           return of(this.orders);
         }),
       ),
-      threats: this.threatsService.getAll().pipe(catchError(() => of(this.threats))),
-      dashboard: this.analytics.getDashboard().pipe(catchError(() => of(this.dashboard))),
+      threats: this.threatsService.getAll().pipe(
+        catchError(() => {
+          loadHadError = true;
+          return of(this.threats);
+        }),
+      ),
+      firePositions: this.firePositionsService.getAllForMap().pipe(
+        catchError(() => {
+          loadHadError = true;
+          return of(this.firePositions);
+        }),
+      ),
+      dashboard: this.analytics.getDashboard().pipe(
+        catchError(() => {
+          loadHadError = true;
+          return of(this.dashboard);
+        }),
+      ),
     })
       .pipe(
         finalize(() => {
           this.loading = false;
           this.refreshing = false;
-          this.lastSyncLabel = this.shortTime(new Date());
           this.cdr.detectChanges();
 
           if (this.refreshQueued) {
@@ -341,10 +503,15 @@ export class HomePage implements OnInit, OnDestroy {
           }
         }),
       )
-      .subscribe(({ orders, threats, dashboard }) => {
+      .subscribe(({ orders, threats, firePositions, dashboard }) => {
         this.orders = orders ?? [];
         this.threats = threats ?? [];
+        this.firePositions = firePositions ?? [];
         this.dashboard = dashboard;
+        queueMicrotask(() => this.renderDashboardMap());
+        if (!loadHadError) {
+          this.lastSyncLabel = this.shortTime(new Date());
+        }
       });
   }
 
@@ -401,7 +568,6 @@ export class HomePage implements OnInit, OnDestroy {
     return map[type] || type;
   }
 
-
   missionTimeline(order: ServiceOrder): MissionTimelineStep[] {
     const currentRank = this.timelineRank(order.status);
     const isRejected = order.status === 'rejected';
@@ -410,21 +576,38 @@ export class HomePage implements OnInit, OnDestroy {
 
     const baseSteps = [
       { key: 'created', label: 'Створено', rank: 1, time: order.createdAt },
-      { key: 'selected', label: 'ВП підібрано', rank: 2, time: order.selectedFirePosition ? order.updatedAt : null },
+      {
+        key: 'selected',
+        label: 'ВП підібрано',
+        rank: 2,
+        time: order.selectedFirePosition ? order.updatedAt : null,
+      },
       { key: 'sent', label: 'Надіслано', rank: 3, time: currentRank >= 3 ? order.updatedAt : null },
-      { key: 'accepted', label: 'Прийнято', rank: 4, time: currentRank >= 4 ? order.updatedAt : null },
-      { key: 'progress', label: 'Виконується', rank: 5, time: order.startedAt || (currentRank >= 5 ? order.updatedAt : null) },
+      {
+        key: 'accepted',
+        label: 'Прийнято',
+        rank: 4,
+        time: currentRank >= 4 ? order.updatedAt : null,
+      },
+      {
+        key: 'progress',
+        label: 'Виконується',
+        rank: 5,
+        time: order.startedAt || (currentRank >= 5 ? order.updatedAt : null),
+      },
       { key: 'completed', label: 'Завершено', rank: 6, time: order.completedAt },
     ];
 
     if (isRejected || isCancelled) {
       return [
-        ...baseSteps.filter((step) => step.rank < Math.max(currentRank, 3)).map((step) => ({
-          key: step.key,
-          label: step.label,
-          time: this.timelineTime(step.time),
-          state: 'done' as const,
-        })),
+        ...baseSteps
+          .filter((step) => step.rank < Math.max(currentRank, 3))
+          .map((step) => ({
+            key: step.key,
+            label: step.label,
+            time: this.timelineTime(step.time),
+            state: 'done' as const,
+          })),
         {
           key: order.status,
           label: isRejected ? 'Відхилено' : 'Скасовано',
@@ -438,7 +621,12 @@ export class HomePage implements OnInit, OnDestroy {
       key: step.key,
       label: step.label,
       time: this.timelineTime(step.time),
-      state: step.rank < currentRank ? 'done' as const : step.rank === currentRank ? 'current' as const : 'pending' as const,
+      state:
+        step.rank < currentRank
+          ? ('done' as const)
+          : step.rank === currentRank
+            ? ('current' as const)
+            : ('pending' as const),
     }));
   }
 
@@ -475,6 +663,235 @@ export class HomePage implements OnInit, OnDestroy {
     return `${item.time}-${item.title}`;
   }
 
+  trackByOrder(_: number, item: ServiceOrder): string {
+    return item.id;
+  }
+
+  get mapReadyFirePositions(): FirePosition[] {
+    return this.firePositions.filter((item) => item.readinessStatus === 'ready');
+  }
+
+  get mapNotReadyFirePositions(): FirePosition[] {
+    return this.firePositions.filter((item) => item.readinessStatus === 'not_ready');
+  }
+
+  private initDashboardMap(): void {
+    if (!this.L || this.dashboardMap) {
+      return;
+    }
+
+    const container = document.getElementById('dashboard-mini-map');
+    if (!container) {
+      return;
+    }
+
+    if (container.clientWidth === 0 || container.clientHeight === 0) {
+      setTimeout(() => this.initDashboardMap(), 120);
+      return;
+    }
+
+    this.dashboardMap = this.L.map(container, {
+      zoomControl: false,
+      attributionControl: false,
+      dragging: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false,
+      preferCanvas: true,
+    }).setView([50.45, 34.8], 8);
+
+    this.dashboardMapTileLayer = this.L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      {
+        maxZoom: 19,
+        crossOrigin: true,
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+      },
+    );
+    this.dashboardMapTileLayer.on('tileerror', () => {
+      this.miniMapFallback = true;
+      this.cdr.detectChanges();
+    });
+    this.dashboardMapTileLayer.on('load', () => {
+      this.miniMapFallback = false;
+      this.cdr.detectChanges();
+    });
+    this.dashboardMapTileLayer.addTo(this.dashboardMap);
+
+    this.dashboardMapLayer = this.L.layerGroup().addTo(this.dashboardMap);
+    this.scheduleDashboardMapResize();
+    this.renderDashboardMap();
+  }
+
+  private renderDashboardMap(): void {
+    if (
+      !isPlatformBrowser(this.platformId) ||
+      !this.L ||
+      !this.dashboardMap ||
+      !this.dashboardMapLayer
+    ) {
+      return;
+    }
+
+    this.dashboardMapLayer.clearLayers();
+    const bounds: Leaflet.LatLngExpression[] = [];
+
+    this.firePositions
+      .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+      .forEach((position) => {
+        const tone =
+          position.readinessStatus === 'not_ready'
+            ? 'danger'
+            : position.readinessStatus === 'in_progress'
+              ? 'info'
+              : 'ready';
+        const marker = this.L!.marker([position.lat, position.lng], {
+          icon: this.L!.divIcon({
+            className: `cc-live-marker cc-live-marker--${tone}`,
+            html: `<span></span><em>ВП</em>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          }),
+        });
+        marker.bindTooltip(position.name, { direction: 'top', opacity: 0.9 });
+        marker.addTo(this.dashboardMapLayer!);
+        bounds.push([position.lat, position.lng]);
+
+        const sector = this.buildDashboardSector(position);
+        if (sector.length > 0) {
+          this.L!.polygon(sector, {
+            color: position.readinessStatus === 'not_ready' ? '#ff5f6d' : '#9d7cff',
+            weight: 1,
+            opacity: 0.58,
+            fillColor: position.readinessStatus === 'not_ready' ? '#ff5f6d' : '#8b5cf6',
+            fillOpacity: 0.1,
+            interactive: false,
+          }).addTo(this.dashboardMapLayer!);
+        }
+      });
+
+    this.activeThreats
+      .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+      .forEach((threat) => {
+        this.L!.marker([threat.lat, threat.lng], {
+          icon: this.L!.divIcon({
+            className: 'cc-live-marker cc-live-marker--threat',
+            html: `<span></span><em>!</em>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          }),
+        }).addTo(this.dashboardMapLayer!);
+        bounds.push([threat.lat, threat.lng]);
+      });
+
+    const origin = bounds[0];
+    if (origin) {
+      this.activeThreats
+        .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+        .slice(0, 4)
+        .forEach((threat) => {
+          this.L!.polyline([origin, [threat.lat, threat.lng]], {
+            color: '#2de7d6',
+            weight: 1,
+            opacity: 0.42,
+            dashArray: '4 7',
+            interactive: false,
+          }).addTo(this.dashboardMapLayer!);
+        });
+    }
+
+    this.scheduleDashboardMapResize();
+
+    if (bounds.length > 0) {
+      this.dashboardMap.fitBounds(this.L.latLngBounds(bounds), { padding: [28, 28], maxZoom: 11 });
+    } else {
+      this.dashboardMap.setView([50.45, 34.8], 7);
+    }
+
+    this.scheduleDashboardMapResize();
+  }
+
+  private scheduleDashboardMapResize(): void {
+    setTimeout(() => this.dashboardMap?.invalidateSize({ animate: false }), 0);
+    setTimeout(() => this.dashboardMap?.invalidateSize({ animate: false }), 180);
+  }
+
+  private buildDashboardSector(position: FirePosition): Leaflet.LatLngExpression[] {
+    if (
+      !Number.isFinite(position.lat) ||
+      !Number.isFinite(position.lng) ||
+      position.sectorLeftDegrees === null ||
+      position.sectorRightDegrees === null
+    ) {
+      return [];
+    }
+
+    const radiusM =
+      position.maxSectorDistanceM && position.maxSectorDistanceM > 0
+        ? position.maxSectorDistanceM
+        : 3000;
+
+    return this.buildSectorPoints(
+      position.lat,
+      position.lng,
+      position.sectorLeftDegrees,
+      position.sectorRightDegrees,
+      radiusM,
+    );
+  }
+
+  private buildSectorPoints(
+    lat: number,
+    lng: number,
+    leftDeg: number,
+    rightDeg: number,
+    radiusM: number,
+  ): Leaflet.LatLngExpression[] {
+    const points: Leaflet.LatLngExpression[] = [[lat, lng]];
+    let start = leftDeg;
+    let end = rightDeg;
+
+    if (end < start) {
+      end += 360;
+    }
+
+    for (let angle = start; angle <= end; angle += 3) {
+      points.push(this.destinationPoint(lat, lng, angle % 360, radiusM));
+    }
+
+    points.push(this.destinationPoint(lat, lng, end % 360, radiusM));
+    points.push([lat, lng]);
+
+    return points;
+  }
+
+  private destinationPoint(
+    lat: number,
+    lng: number,
+    bearingDeg: number,
+    distanceM: number,
+  ): Leaflet.LatLngExpression {
+    const earthRadiusM = 6371000;
+    const bearing = (bearingDeg * Math.PI) / 180;
+    const lat1 = (lat * Math.PI) / 180;
+    const lng1 = (lng * Math.PI) / 180;
+    const angularDistance = distanceM / earthRadiusM;
+
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(angularDistance) +
+        Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing),
+    );
+
+    const lng2 =
+      lng1 +
+      Math.atan2(
+        Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+        Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2),
+      );
+
+    return [(lat2 * 180) / Math.PI, (lng2 * 180) / Math.PI];
+  }
 
   private timelineRank(status: string): number {
     const ranks: Record<string, number> = {
@@ -510,8 +927,13 @@ export class HomePage implements OnInit, OnDestroy {
     if (order.status === 'proposed') return true;
     if (order.status === 'rejected') return true;
     if (!order.selectedFirePosition) return true;
-    if (order.status === 'in_progress' && this.minutes(order.startedAt || order.updatedAt) > 180) return true;
-    if (['sent', 'sent_to_division', 'sent_to_battery'].includes(order.status) && this.minutes(order.updatedAt || order.createdAt) > 90) return true;
+    if (order.status === 'in_progress' && this.minutes(order.startedAt || order.updatedAt) > 180)
+      return true;
+    if (
+      ['sent', 'sent_to_division', 'sent_to_battery'].includes(order.status) &&
+      this.minutes(order.updatedAt || order.createdAt) > 90
+    )
+      return true;
     return false;
   }
 

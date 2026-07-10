@@ -27,7 +27,7 @@ export class User {
   role!: 'admin' | 'operator' | 'observer';
 
   @Column({ type: 'varchar', length: 50, default: 'main' })
-  scope!: 'main' | 'division' | 'battery';
+  scope!: 'main' | 'division' | 'battery' | 'ew';
 
   @Column({ name: 'unit_id', type: 'uuid', nullable: true })
   unitId!: string | null;

@@ -13,6 +13,8 @@ import { AuthService } from '../../auth/auth.service';
 import { forkJoin, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 
+type WeaponStatusFilter = 'all' | 'ready' | 'not_ready' | 'repair';
+
 @Component({
   selector: 'app-weapon-systems-page',
   standalone: true,
@@ -34,6 +36,8 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   loading = true;
   errorMessage = '';
   editingId: string | null = null;
+  formModalOpen = false;
+  activeFilter: WeaponStatusFilter = 'all';
 
   form = {
     weaponModelId: '',
@@ -43,7 +47,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     readinessStatus: 'unknown',
     notReadyReason: '',
     locationType: 'reserve',
-firePositionId: '',
+    firePositionId: '',
   };
 
   constructor(
@@ -58,23 +62,44 @@ firePositionId: '',
 
   ngOnInit(): void {
     this.load();
-    this.autoRefreshSubscription.add(this.autoRefresh.watch(['weapons', 'map', 'analytics'], () => this.load()));
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['weapons', 'map', 'analytics'], () => this.load()),
+    );
   }
 
   get totalCount(): number {
-    return this.items.length;
+    return this.visibleItems.length;
   }
 
   get readyCount(): number {
-    return this.items.filter((x) => x.readinessStatus === 'ready').length;
+    return this.visibleItems.filter((x) => x.readinessStatus === 'ready').length;
   }
 
   get notReadyCount(): number {
-    return this.items.filter((x) => x.readinessStatus === 'not_ready').length;
+    return this.visibleItems.filter((x) => x.readinessStatus === 'not_ready').length;
   }
 
   get repairCount(): number {
-    return this.items.filter((x) => x.readinessStatus === 'repair').length;
+    return this.visibleItems.filter((x) => x.readinessStatus === 'repair').length;
+  }
+
+  get filteredItems(): WeaponSystem[] {
+    if (this.activeFilter === 'all') {
+      return this.visibleItems;
+    }
+
+    return this.visibleItems.filter((item) => item.readinessStatus === this.activeFilter);
+  }
+
+  get activeFilterLabel(): string {
+    const labels: Record<WeaponStatusFilter, string> = {
+      all: 'Всі',
+      ready: 'БГ',
+      not_ready: 'НЕ БГ',
+      repair: 'Ремонт',
+    };
+
+    return labels[this.activeFilter];
   }
 
   ngOnDestroy(): void {
@@ -105,6 +130,14 @@ firePositionId: '',
     });
   }
 
+  setFilter(filter: WeaponStatusFilter): void {
+    this.activeFilter = filter;
+  }
+
+  clearFilter(): void {
+    this.activeFilter = 'all';
+  }
+
   save(): void {
     if (this.saving) {
       return;
@@ -123,28 +156,26 @@ firePositionId: '',
     }
 
     const body = {
-  weaponModelId: this.form.weaponModelId,
-  serialNumber: this.form.serialNumber.trim() || undefined,
-  callsign: this.form.callsign.trim() || undefined,
+      weaponModelId: this.form.weaponModelId,
+      serialNumber: this.form.serialNumber.trim() || undefined,
+      callsign: this.form.callsign.trim() || undefined,
 
-  locationType: this.form.locationType,
+      locationType: this.form.locationType,
 
-  unitId:
-    this.form.locationType === 'reserve'
-      ? this.form.unitId || undefined
-      : this.form.unitId || undefined,
+      unitId:
+        this.form.locationType === 'reserve'
+          ? this.form.unitId || undefined
+          : this.form.unitId || undefined,
 
-  firePositionId:
-    this.form.locationType === 'fire_position'
-      ? this.form.firePositionId || undefined
-      : null,
+      firePositionId:
+        this.form.locationType === 'fire_position' ? this.form.firePositionId || undefined : null,
 
-  readinessStatus: this.form.readinessStatus,
-  notReadyReason:
-    this.form.readinessStatus === 'ready'
-      ? undefined
-      : this.form.notReadyReason.trim() || undefined,
-};
+      readinessStatus: this.form.readinessStatus,
+      notReadyReason:
+        this.form.readinessStatus === 'ready'
+          ? undefined
+          : this.form.notReadyReason.trim() || undefined,
+    };
 
     const currentItem = this.editingId
       ? this.items.find((item) => item.id === this.editingId)
@@ -183,36 +214,43 @@ firePositionId: '',
 
   startEdit(item: WeaponSystem): void {
     this.editingId = item.id;
+    this.formModalOpen = true;
 
     this.form = {
-  weaponModelId: item.weaponModelId || '',
-  serialNumber: item.serialNumber || '',
-  callsign: item.callsign || '',
-  unitId: item.unitId || '',
-  locationType: item.locationType || 'reserve',
-  firePositionId: item.firePositionId || '',
-  readinessStatus: item.readinessStatus || 'unknown',
-  notReadyReason: item.notReadyReason || '',
-};
+      weaponModelId: item.weaponModelId || '',
+      serialNumber: item.serialNumber || '',
+      callsign: item.callsign || '',
+      unitId: item.unitId || '',
+      locationType: item.locationType || 'reserve',
+      firePositionId: item.firePositionId || '',
+      readinessStatus: item.readinessStatus || 'unknown',
+      notReadyReason: item.notReadyReason || '',
+    };
 
     this.cdr.detectChanges();
   }
 
   cancelEdit(): void {
     this.editingId = null;
+    this.formModalOpen = false;
 
-   this.form = {
-  weaponModelId: '',
-  serialNumber: '',
-  callsign: '',
-  unitId: '',
-  locationType: 'reserve',
-  firePositionId: '',
-  readinessStatus: 'unknown',
-  notReadyReason: '',
-};
+    this.form = {
+      weaponModelId: '',
+      serialNumber: '',
+      callsign: '',
+      unitId: '',
+      locationType: 'reserve',
+      firePositionId: '',
+      readinessStatus: 'unknown',
+      notReadyReason: '',
+    };
 
     this.cdr.detectChanges();
+  }
+
+  openCreate(): void {
+    this.cancelEdit();
+    this.formModalOpen = true;
   }
 
   remove(id: string): void {
@@ -249,172 +287,167 @@ firePositionId: '',
   }
 
   private fail(error: unknown, message: string): void {
-        this.errorMessage = message;
+    this.errorMessage = message;
     this.loading = false;
     this.cdr.detectChanges();
   }
   getAvailableFirePositions(): FirePosition[] {
-  const occupiedIds = this.items
-    .filter((item) => item.locationType === 'fire_position' && item.firePositionId)
-    .map((item) => item.firePositionId);
+    const occupiedIds = this.items
+      .filter((item) => item.locationType === 'fire_position' && item.firePositionId)
+      .map((item) => item.firePositionId);
 
-  return this.firePositions.filter((position) => {
-    if (this.editingId && this.form.firePositionId === position.id) {
+    return this.firePositions.filter((position) => {
+      if (this.editingId && this.form.firePositionId === position.id) {
+        return true;
+      }
+
+      return !occupiedIds.includes(position.id);
+    });
+  }
+  onLocationTypeChange(nextLocationType?: string): void {
+    this.form.locationType = nextLocationType || this.form.locationType;
+    this.form.unitId = '';
+    this.form.firePositionId = '';
+
+    if (this.form.locationType === 'fire_position') {
+      this.form.readinessStatus = 'ready';
+      this.form.notReadyReason = '';
+    }
+  }
+
+  get visibleItems() {
+    const user = this.auth.getUser();
+
+    if (!user) {
+      return [];
+    }
+
+    if (user.role === 'admin' || user.scope === 'main') {
+      return this.items;
+    }
+
+    if (!user.unitId) {
+      return [];
+    }
+
+    if (user.scope === 'battery') {
+      return this.items.filter((item) => item.unitId === user.unitId);
+    }
+
+    if (user.scope === 'division') {
+      return this.items.filter((item) =>
+        this.units.some(
+          (unit) =>
+            unit.id === item.unitId && (unit.id === user.unitId || unit.parentId === user.unitId),
+        ),
+      );
+    }
+
+    return [];
+  }
+
+  get availableUnits() {
+    const user = this.auth.getUser();
+
+    if (!user) {
+      return [];
+    }
+
+    if (user.role === 'admin' || user.scope === 'main') {
+      return this.units;
+    }
+
+    if (!user.unitId) {
+      return [];
+    }
+
+    if (user.scope === 'battery') {
+      return this.units.filter((unit) => unit.id === user.unitId);
+    }
+
+    if (user.scope === 'division') {
+      return this.units.filter((unit) => unit.id === user.unitId || unit.parentId === user.unitId);
+    }
+
+    return [];
+  }
+
+  canEditWeapon(item: { unitId: string | null }): boolean {
+    const user = this.auth.getUser();
+
+    if (!user) {
+      return false;
+    }
+
+    if (user.role === 'admin' || user.scope === 'main') {
       return true;
     }
 
-    return !occupiedIds.includes(position.id);
-  });
-}
-onLocationTypeChange(nextLocationType?: string): void {
-  this.form.locationType = nextLocationType || this.form.locationType;
-  this.form.unitId = '';
-  this.form.firePositionId = '';
+    if (!user.unitId || !item.unitId) {
+      return false;
+    }
 
-  if (this.form.locationType === 'fire_position') {
-    this.form.readinessStatus = 'ready';
-    this.form.notReadyReason = '';
-  }
-}
+    if (user.scope === 'battery') {
+      return item.unitId === user.unitId;
+    }
 
-get visibleItems() {
-  const user = this.auth.getUser();
-
-  if (!user) {
-    return [];
-  }
-
-  if (user.role === 'admin' || user.scope === 'main') {
-    return this.items;
-  }
-
-  if (!user.unitId) {
-    return [];
-  }
-
-  if (user.scope === 'battery') {
-    return this.items.filter((item) => item.unitId === user.unitId);
-  }
-
-  if (user.scope === 'division') {
-    return this.items.filter((item) =>
-      this.units.some(
+    if (user.scope === 'division') {
+      return this.units.some(
         (unit) =>
-          unit.id === item.unitId &&
-          (unit.id === user.unitId || unit.parentId === user.unitId),
-      ),
-    );
-  }
+          unit.id === item.unitId && (unit.id === user.unitId || unit.parentId === user.unitId),
+      );
+    }
 
-  return [];
-}
-
-get availableUnits() {
-  const user = this.auth.getUser();
-
-  if (!user) {
-    return [];
-  }
-
-  if (user.role === 'admin' || user.scope === 'main') {
-    return this.units;
-  }
-
-  if (!user.unitId) {
-    return [];
-  }
-
-  if (user.scope === 'battery') {
-    return this.units.filter((unit) => unit.id === user.unitId);
-  }
-
-  if (user.scope === 'division') {
-    return this.units.filter(
-      (unit) => unit.id === user.unitId || unit.parentId === user.unitId,
-    );
-  }
-
-  return [];
-}
-
-canEditWeapon(item: { unitId: string | null }): boolean {
-  const user = this.auth.getUser();
-
-  if (!user) {
     return false;
   }
 
-  if (user.role === 'admin' || user.scope === 'main') {
-    return true;
+  canCreateWeapon(): boolean {
+    const user = this.auth.getUser();
+
+    return !!user && (user.role === 'admin' || user.role === 'operator');
   }
 
-  if (!user.unitId || !item.unitId) {
-    return false;
+  syncFirePositionStates(): void {
+    if (this.syncing) {
+      return;
+    }
+
+    this.syncing = true;
+
+    this.service.syncFirePositionStates().subscribe({
+      next: () => {
+        this.syncing = false;
+        this.errorMessage = '';
+        this.load();
+      },
+      error: (error) => {
+        this.syncing = false;
+        this.fail(error, 'Не вдалося синхронізувати стан ВП');
+      },
+    });
   }
 
-  if (user.scope === 'battery') {
-    return item.unitId === user.unitId;
+  moveToReserve(item: WeaponSystem): void {
+    if (this.movingId || !confirm(`Зняти ${item.callsign || item.serialNumber || 'СГ'} з ВП?`)) {
+      return;
+    }
+
+    this.movingId = item.id;
+
+    this.service.moveToReserve(item.id).subscribe({
+      next: () => {
+        this.movingId = '';
+
+        if (this.editingId === item.id) {
+          this.cancelEdit();
+        }
+
+        this.load();
+      },
+      error: (error) => {
+        this.movingId = '';
+        this.fail(error, 'Не вдалося зняти СГ з ВП');
+      },
+    });
   }
-
-  if (user.scope === 'division') {
-    return this.units.some(
-      (unit) =>
-        unit.id === item.unitId &&
-        (unit.id === user.unitId || unit.parentId === user.unitId),
-    );
-  }
-
-  return false;
-}
-
-canCreateWeapon(): boolean {
-  const user = this.auth.getUser();
-
-  return !!user && (user.role === 'admin' || user.role === 'operator');
-}
-
-syncFirePositionStates(): void {
-  if (this.syncing) {
-    return;
-  }
-
-  this.syncing = true;
-
-  this.service.syncFirePositionStates().subscribe({
-    next: () => {
-      this.syncing = false;
-      this.errorMessage = '';
-      this.load();
-    },
-    error: (error) => {
-      this.syncing = false;
-      this.fail(error, 'Не вдалося синхронізувати стан ВП');
-    },
-  });
-}
-
-moveToReserve(item: WeaponSystem): void {
-  if (this.movingId || !confirm(`Зняти ${item.callsign || item.serialNumber || 'СГ'} з ВП?`)) {
-    return;
-  }
-
-  this.movingId = item.id;
-
-  this.service.moveToReserve(item.id).subscribe({
-    next: () => {
-      this.movingId = '';
-
-      if (this.editingId === item.id) {
-        this.cancelEdit();
-      }
-
-      this.load();
-    },
-    error: (error) => {
-      this.movingId = '';
-      this.fail(error, 'Не вдалося зняти СГ з ВП');
-    },
-  });
-}
-
 }

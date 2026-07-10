@@ -3,6 +3,7 @@ export interface Unit {
   name: string;
   type: string;
   parentId: string | null;
+  parent?: Unit | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;

@@ -1,10 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { forkJoin, Subscription } from 'rxjs';
+import { forkJoin, of, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 import { Charge } from '../../charges/charge.model';
 import { ChargesService } from '../../charges/charges.service';
+import { AMMO_DEPOT_TYPES } from '../../depots/depot-tree';
 import { Depot } from '../../depots/depot.model';
 import { DepotsService } from '../../depots/depots.service';
 import { Fuze } from '../../fuzes/fuze.model';
@@ -20,6 +21,7 @@ import { StockMovementsService } from '../stock-movements.service';
 
 type ResourceOption = { id: string; marking: string };
 type MovementFormItem = { itemType: string; itemId: string; quantity: number };
+type MovementBoardTab = 'active' | 'completed' | 'cancelled' | 'history';
 
 @Component({
   selector: 'app-stock-movements-page',
@@ -31,6 +33,7 @@ type MovementFormItem = { itemType: string; itemId: string; quantity: number };
 export class StockMovementsPage implements OnInit, OnDestroy {
   private readonly autoRefreshSubscription = new Subscription();
   private loadSubscription?: Subscription;
+  private referencesLoaded = false;
   items: StockMovementGroup[] = [];
   depots: Depot[] = [];
   shells: Shell[] = [];
@@ -45,18 +48,20 @@ export class StockMovementsPage implements OnInit, OnDestroy {
   transferFormOpen = false;
   modalSubmitting = false;
 
-filterVisible = false;
+  filterVisible = false;
+  activeTab: MovementBoardTab = 'active';
+  searchTerm = '';
 
-currentPage = 1;
-pageSize = 50;
+  currentPage = 1;
+  pageSize = 50;
 
-filters = {
-  dateFrom: '',
-  dateTo: '',
-  fromDepotId: '',
-  toDepotId: '',
-  movementKind: '',
-};
+  filters = {
+    dateFrom: '',
+    dateTo: '',
+    fromDepotId: '',
+    toDepotId: '',
+    movementKind: '',
+  };
 
   form = {
     fromDepotId: '',
@@ -82,9 +87,7 @@ filters = {
   ngOnInit(): void {
     this.load();
 
-    this.autoRefreshSubscription.add(
-      this.autoRefresh.watch(['all', 'stock'], () => this.load()),
-    );
+    this.autoRefreshSubscription.add(this.autoRefresh.watch(['all', 'stock'], () => this.load()));
   }
 
   ngOnDestroy(): void {
@@ -102,35 +105,48 @@ filters = {
     }
 
     this.errorMessage = '';
+    const referencesRequest = this.referencesLoaded
+      ? of({
+          depots: this.depots,
+          shells: this.shells,
+          charges: this.charges,
+          fuzes: this.fuzes,
+          primers: this.primers,
+        })
+      : forkJoin({
+          depots: this.depotsService.getAll(),
+          shells: this.shellsService.getAll(),
+          charges: this.chargesService.getAll(),
+          fuzes: this.fuzesService.getAll(),
+          primers: this.primersService.getAll(),
+        });
 
     this.loadSubscription = forkJoin({
       items: this.service.getGrouped(),
-      depots: this.depotsService.getAll(),
-      shells: this.shellsService.getAll(),
-      charges: this.chargesService.getAll(),
-      fuzes: this.fuzesService.getAll(),
-      primers: this.primersService.getAll(),
+      references: referencesRequest,
       stock: this.stockService.getByDepots(),
     }).subscribe({
-      next: ({ items, depots, shells, charges, fuzes, primers, stock }) => {
+      next: ({ items, references, stock }) => {
         this.items = items;
-        this.depots = depots;
-        this.shells = shells;
-        this.charges = charges;
-        this.fuzes = fuzes;
-        this.primers = primers;
+        this.depots = references.depots;
+        this.shells = references.shells;
+        this.charges = references.charges;
+        this.fuzes = references.fuzes;
+        this.primers = references.primers;
         this.stockByDepots = stock;
+        this.referencesLoaded = true;
         this.currentPage = Math.min(this.currentPage, this.totalPages);
         this.loading = false;
         this.refreshing = false;
         this.cdr.detectChanges();
       },
-      error: (error) => this.fail(
-        error,
-        this.items.length > 0
-          ? 'Передачі БК не вдалося оновити. Показані останні доступні дані.'
-          : 'Не вдалося завантажити передачі БК',
-      ),
+      error: (error) =>
+        this.fail(
+          error,
+          this.items.length > 0
+            ? 'Передачі БК не вдалося оновити. Показані останні доступні дані.'
+            : 'Не вдалося завантажити передачі БК',
+        ),
     });
   }
 
@@ -185,6 +201,10 @@ filters = {
     return this.stockByDepots.find((item) => item.depot.id === depotId) || null;
   }
 
+  get ammoDepots(): Depot[] {
+    return this.depots.filter((depot) => this.isAmmoDepot(depot));
+  }
+
   getFilteredStock(depotId: string, itemType: string): StockResource[] {
     const stock = this.getDepotStock(depotId);
     if (!stock) return [];
@@ -206,9 +226,9 @@ filters = {
       return Number.POSITIVE_INFINITY;
     }
 
-    const resource = this
-      .getFilteredStock(this.form.fromDepotId, item.itemType)
-      .find((candidate) => candidate.id === item.itemId);
+    const resource = this.getFilteredStock(this.form.fromDepotId, item.itemType).find(
+      (candidate) => candidate.id === item.itemId,
+    );
 
     return Number(resource?.quantity ?? 0);
   }
@@ -286,7 +306,21 @@ filters = {
       return;
     }
 
-    if (this.form.fromDepotId && this.form.toDepotId && this.form.fromDepotId === this.form.toDepotId) {
+    if (this.form.fromDepotId && !this.isAmmoDepotId(this.form.fromDepotId)) {
+      this.errorMessage = 'Оберіть склад БК або ПАС як відправника';
+      return;
+    }
+
+    if (this.form.toDepotId && !this.isAmmoDepotId(this.form.toDepotId)) {
+      this.errorMessage = 'Оберіть склад БК або ПАС як отримувача';
+      return;
+    }
+
+    if (
+      this.form.fromDepotId &&
+      this.form.toDepotId &&
+      this.form.fromDepotId === this.form.toDepotId
+    ) {
       this.errorMessage = 'Склад-відправник і склад-отримувач не можуть бути однаковими';
       return;
     }
@@ -316,23 +350,25 @@ filters = {
 
     this.modalSubmitting = true;
 
-    this.service.createBatch({
-      ...(this.form.fromDepotId ? { fromDepotId: this.form.fromDepotId } : {}),
-      ...(this.form.toDepotId ? { toDepotId: this.form.toDepotId } : {}),
-      comment: this.form.comment.trim() || undefined,
-      items: validItems,
-    }).subscribe({
-      next: () => {
-        this.modalSubmitting = false;
-        this.resetMovementForm();
-        this.transferFormOpen = false;
-        this.load();
-      },
-      error: (error) => {
-        this.modalSubmitting = false;
-        this.fail(error, error?.error?.message || 'Не вдалося створити передачу');
-      },
-    });
+    this.service
+      .createBatch({
+        ...(this.form.fromDepotId ? { fromDepotId: this.form.fromDepotId } : {}),
+        ...(this.form.toDepotId ? { toDepotId: this.form.toDepotId } : {}),
+        comment: this.form.comment.trim() || undefined,
+        items: validItems,
+      })
+      .subscribe({
+        next: () => {
+          this.modalSubmitting = false;
+          this.resetMovementForm();
+          this.closeTransferForm();
+          this.load();
+        },
+        error: (error) => {
+          this.modalSubmitting = false;
+          this.fail(error, error?.error?.message || 'Не вдалося створити передачу');
+        },
+      });
   }
 
   toggleGroup(groupId: string): void {
@@ -345,74 +381,165 @@ filters = {
     this.refreshing = false;
     this.cdr.detectChanges();
   }
-  
-toggleFilter(): void {
-  this.filterVisible = !this.filterVisible;
-}
 
-onFiltersChanged(): void {
-  this.currentPage = 1;
-}
+  private isAmmoDepot(depot: Depot): boolean {
+    return AMMO_DEPOT_TYPES.includes(depot.depotType as (typeof AMMO_DEPOT_TYPES)[number]);
+  }
 
-resetFilters(): void {
-  this.filters = {
-    dateFrom: '',
-    dateTo: '',
-    fromDepotId: '',
-    toDepotId: '',
-    movementKind: '',
-  
-  };
+  private isAmmoDepotId(id: string): boolean {
+    return this.ammoDepots.some((depot) => depot.id === id);
+  }
+
+  setActiveTab(tab: MovementBoardTab): void {
+    this.activeTab = tab;
     this.currentPage = 1;
-}
+    this.expandedGroupId = null;
+  }
 
-get filteredItems(): StockMovementGroup[] {
-  return this.items.filter((group) => {
-    const date = new Date(group.movementDatetime);
+  toggleFilter(): void {
+    this.filterVisible = !this.filterVisible;
+  }
 
-    if (this.filters.dateFrom) {
-      const from = new Date(this.filters.dateFrom);
-      if (date < from) return false;
+  onFiltersChanged(): void {
+    this.currentPage = 1;
+  }
+
+  resetFilters(): void {
+    this.filters = {
+      dateFrom: '',
+      dateTo: '',
+      fromDepotId: '',
+      toDepotId: '',
+      movementKind: '',
+    };
+    this.searchTerm = '';
+    this.currentPage = 1;
+  }
+
+  get activeItems(): StockMovementGroup[] {
+    return this.items;
+  }
+
+  get completedItems(): StockMovementGroup[] {
+    return [];
+  }
+
+  get cancelledItems(): StockMovementGroup[] {
+    return [];
+  }
+
+  get historyItems(): StockMovementGroup[] {
+    return this.items;
+  }
+
+  get tabItems(): StockMovementGroup[] {
+    if (this.activeTab === 'completed') return this.completedItems;
+    if (this.activeTab === 'cancelled') return this.cancelledItems;
+    if (this.activeTab === 'history') return this.historyItems;
+    return this.activeItems;
+  }
+
+  get filteredItems(): StockMovementGroup[] {
+    const search = this.searchTerm.trim().toLowerCase();
+
+    return this.tabItems.filter((group) => {
+      const date = new Date(group.movementDatetime);
+
+      if (this.filters.dateFrom) {
+        const from = new Date(this.filters.dateFrom);
+        if (date < from) return false;
+      }
+
+      if (this.filters.dateTo) {
+        const to = new Date(this.filters.dateTo);
+        to.setHours(23, 59, 59, 999);
+        if (date > to) return false;
+      }
+
+      if (this.filters.fromDepotId && group.fromDepot?.id !== this.filters.fromDepotId) {
+        return false;
+      }
+
+      if (this.filters.toDepotId && group.toDepot?.id !== this.filters.toDepotId) {
+        return false;
+      }
+
+      if (this.filters.movementKind === 'external' && group.fromDepot) {
+        return false;
+      }
+
+      if (this.filters.movementKind === 'internal' && !group.fromDepot) {
+        return false;
+      }
+
+      if (!search) return true;
+
+      const haystack = [
+        group.documentNumber,
+        group.fromDepot?.name,
+        group.toDepot?.name,
+        group.comment,
+        ...group.items.flatMap((item) => [
+          this.getItemTypeLabel(item.itemType),
+          this.getResourceName(item.itemType, item.itemId),
+          String(item.quantity),
+        ]),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(search);
+    });
+  }
+
+  get emptyStateTitle(): string {
+    if (this.activeTab === 'completed') return 'Завершені передачі не ведуться окремо';
+    if (this.activeTab === 'cancelled') return 'Скасованих передач немає';
+    if (this.activeTab === 'history') return 'Історія передач БК відсутня';
+    return 'Документи передачі відсутні';
+  }
+
+  get emptyStateHint(): string {
+    if (this.activeTab === 'completed') {
+      return 'У поточній моделі даних немає окремого статусу завершення. Проведені документи дивись у вкладці Історія.';
     }
 
-    if (this.filters.dateTo) {
-      const to = new Date(this.filters.dateTo);
-      to.setHours(23, 59, 59, 999);
-      if (date > to) return false;
+    if (this.activeTab === 'cancelled') {
+      return 'Коли для передач БК зʼявиться статус скасування, такі документи будуть зібрані тут.';
     }
 
-    if (this.filters.fromDepotId && group.fromDepot?.id !== this.filters.fromDepotId) {
-      return false;
+    if (this.searchTerm || Object.values(this.filters).some(Boolean)) {
+      return 'Зміни пошук або скинь фільтри, щоб побачити всі документи.';
     }
 
-    if (this.filters.toDepotId && group.toDepot?.id !== this.filters.toDepotId) {
-      return false;
-    }
+    return 'Після першої передачі БК історія зʼявиться тут.';
+  }
 
-    if (this.filters.movementKind === 'external' && group.fromDepot) {
-      return false;
-    }
+  getGroupStatusLabel(): string {
+    if (this.activeTab === 'history') return 'проведено';
+    if (this.activeTab === 'completed') return 'завершено';
+    if (this.activeTab === 'cancelled') return 'скасовано';
+    return 'в роботі';
+  }
 
-    if (this.filters.movementKind === 'internal' && !group.fromDepot) {
-      return false;
-    }
+  getGroupStatusClass(): string {
+    if (this.activeTab === 'history' || this.activeTab === 'completed') return 'done';
+    if (this.activeTab === 'cancelled') return 'cancelled';
+    return 'in-progress';
+  }
 
-    return true;
-  });
-}
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredItems.length / this.pageSize));
+  }
 
-get totalPages(): number {
-  return Math.max(1, Math.ceil(this.filteredItems.length / this.pageSize));
-}
+  get pagedItems(): StockMovementGroup[] {
+    const safePage = Math.min(Math.max(this.currentPage, 1), this.totalPages);
+    const start = (safePage - 1) * this.pageSize;
+    return this.filteredItems.slice(start, start + this.pageSize);
+  }
 
-get pagedItems(): StockMovementGroup[] {
-  const safePage = Math.min(Math.max(this.currentPage, 1), this.totalPages);
-  const start = (safePage - 1) * this.pageSize;
-  return this.filteredItems.slice(start, start + this.pageSize);
-}
-
-goToPage(page: number): void {
-  this.currentPage = Math.min(Math.max(page, 1), this.totalPages);
-}
-
+  goToPage(page: number): void {
+    this.currentPage = Math.min(Math.max(page, 1), this.totalPages);
+  }
 }

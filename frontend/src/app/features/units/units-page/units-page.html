@@ -1,40 +1,163 @@
-<h1>Підрозділи</h1>
+<section class="units-page">
+  <header class="units-head">
+    <div>
+      <span>Довідники</span>
+      <h1>Підрозділи</h1>
+      <p>Ієрархія підрозділів для доступу, ПАСів і маршрутизації ВГЗ.</p>
+    </div>
 
-<div class="ui-skeleton-grid" *ngIf="loading">
-  <div class="ui-skeleton-card" *ngFor="let item of [1, 2, 3]">
-    <span class="ui-skeleton-line medium"></span>
-    <span class="ui-skeleton-line long"></span>
-    <span class="ui-skeleton-line short"></span>
+    <div class="units-actions">
+      <button type="button" class="ghost-button" (click)="load()">Оновити</button>
+      <button type="button" class="primary-button" (click)="openCreate()">Додати підрозділ</button>
+    </div>
+  </header>
+
+  <div class="ui-skeleton-grid" *ngIf="loading">
+    <div class="ui-skeleton-card" *ngFor="let item of [1, 2, 3]">
+      <span class="ui-skeleton-line medium"></span>
+      <span class="ui-skeleton-line long"></span>
+      <span class="ui-skeleton-line short"></span>
+    </div>
   </div>
+
+  <div class="ui-state error" *ngIf="!loading && errorMessage">
+    <span class="ui-state-icon">!</span>
+    <strong>{{ errorMessage }}</strong>
+    <small>Перевірте дані або повторіть дію.</small>
+    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
+  </div>
+
+  <div class="units-empty" *ngIf="!loading && !errorMessage && units.length === 0">
+    <strong>Підрозділи ще не додані</strong>
+    <span>Створіть дивізіон або батарею. Для них ПАС створиться автоматично.</span>
+    <button type="button" class="primary-button" (click)="openCreate()">Додати перший</button>
+  </div>
+
+  <section class="units-layout" *ngIf="!loading && units.length > 0">
+    <aside class="units-summary">
+      <article>
+        <span>Усього</span>
+        <strong>{{ units.length }}</strong>
+      </article>
+      <article>
+        <span>Дивізіони</span>
+        <strong>{{ divisionCount }}</strong>
+      </article>
+      <article>
+        <span>Батареї</span>
+        <strong>{{ batteryCount }}</strong>
+      </article>
+    </aside>
+
+    <main class="units-tree">
+      <article
+        class="unit-row"
+        *ngFor="let node of flatTree; trackBy: trackNode"
+        [style.--level]="node.level"
+      >
+        <div class="unit-main">
+          <i aria-hidden="true"></i>
+          <div>
+            <strong>{{ node.unit.name }}</strong>
+            <span>{{ unitTypeLabel(node.unit.type) }} · {{ parentName(node.unit.parentId) }}</span>
+          </div>
+        </div>
+
+        <div class="unit-meta">
+          <span>№ {{ node.unit.sortOrder }}</span>
+          <b *ngIf="node.unit.type === 'division'">ПАС дивізіону</b>
+          <b *ngIf="node.unit.type === 'battery'">ПАС батареї</b>
+        </div>
+
+        <div class="unit-actions">
+          <button
+            type="button"
+            class="icon-button"
+            title="Додати дочірній"
+            (click)="openCreate(node.unit.id)"
+          >
+            +
+          </button>
+          <button type="button" class="ghost-button" (click)="openEdit(node.unit)">
+            Редагувати
+          </button>
+          <button
+            type="button"
+            class="danger-button"
+            [disabled]="hasChildren(node.unit.id) || deletingId === node.unit.id"
+            (click)="remove(node.unit)"
+          >
+            {{ deletingId === node.unit.id ? 'Видалення...' : 'Видалити' }}
+          </button>
+          <button
+            type="button"
+            class="danger-button cascade"
+            [disabled]="deletingId === node.unit.id"
+            (click)="removeWithRelated(node.unit)"
+          >
+            {{
+              deletingId === node.unit.id
+                ? 'Видалення...'
+                : cascadeConfirmId === node.unit.id
+                  ? 'Підтвердити'
+                  : 'Видалити з пов’язаним'
+            }}
+          </button>
+        </div>
+      </article>
+    </main>
+  </section>
+</section>
+
+<div class="units-modal" *ngIf="formOpen" (click)="closeForm()">
+  <section class="units-dialog" (click)="$event.stopPropagation()">
+    <header>
+      <div>
+        <span>{{ formMode === 'edit' ? 'Редагування' : 'Новий підрозділ' }}</span>
+        <h2>{{ formMode === 'edit' ? 'Змінити підрозділ' : 'Додати підрозділ' }}</h2>
+      </div>
+      <button type="button" class="icon-button" (click)="closeForm()">×</button>
+    </header>
+
+    <form (ngSubmit)="save()">
+      <label>
+        <span>Назва</span>
+        <input name="name" [(ngModel)]="form.name" required maxlength="255" autocomplete="off" />
+      </label>
+
+      <label>
+        <span>Тип</span>
+        <select name="type" [(ngModel)]="form.type">
+          <option *ngFor="let type of unitTypes" [value]="type.value">{{ type.label }}</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Батьківський підрозділ</span>
+        <select name="parentId" [(ngModel)]="form.parentId">
+          <option value="">Без батьківського</option>
+          <option *ngFor="let unit of parentOptions; trackBy: trackUnit" [value]="unit.id">
+            {{ unit.name }} · {{ unitTypeLabel(unit.type) }}
+          </option>
+        </select>
+      </label>
+
+      <label>
+        <span>Порядок</span>
+        <input name="sortOrder" type="number" min="0" step="1" [(ngModel)]="form.sortOrder" />
+      </label>
+
+      <p class="units-hint" *ngIf="form.type === 'division' || form.type === 'battery'">
+        Після збереження система автоматично створить
+        {{ form.type === 'division' ? 'ПАС дивізіону' : 'ПАС батареї' }}.
+      </p>
+
+      <footer>
+        <button type="button" class="ghost-button" (click)="closeForm()">Скасувати</button>
+        <button type="submit" class="primary-button" [disabled]="saving">
+          {{ saving ? 'Збереження...' : 'Зберегти' }}
+        </button>
+      </footer>
+    </form>
+  </section>
 </div>
-
-<div class="ui-state error" *ngIf="!loading && errorMessage">
-  <span class="ui-state-icon">!</span>
-  <strong>{{ errorMessage }}</strong>
-  <small>Перевірте з'єднання із сервером або повторіть запит.</small>
-  <button type="button" class="ghost-button" (click)="load()">Повторити</button>
-</div>
-
-<div class="ui-state" *ngIf="!loading && !errorMessage && units.length === 0">
-  <span class="ui-state-icon">∅</span>
-  <strong>Підрозділи ще не додані</strong>
-  <small>Створіть підрозділи для маршрутизації ВГЗ та обмеження видимості.</small>
-</div>
-
-<table *ngIf="!loading && !errorMessage && units.length > 0">
-  <thead>
-    <tr>
-      <th>Назва</th>
-      <th>Тип</th>
-      <th>Порядок</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    <tr *ngFor="let unit of units">
-      <td>{{ unit.name }}</td>
-      <td>{{ unit.type }}</td>
-      <td>{{ unit.sortOrder }}</td>
-    </tr>
-  </tbody>
-</table>

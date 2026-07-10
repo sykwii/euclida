@@ -23,13 +23,16 @@ export class CreateUserDto {
   @IsIn(['admin', 'operator', 'observer'])
   role!: 'admin' | 'operator' | 'observer';
 
-  @IsIn(['main', 'division', 'battery'])
-  scope!: 'main' | 'division' | 'battery';
+  @IsIn(['main', 'division', 'battery', 'ew'])
+  scope!: 'main' | 'division' | 'battery' | 'ew';
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
-  typeof value === 'string' && ['', 'null', 'undefined'].includes(value.trim()) ? null : value,
-)
+    typeof value === 'string' &&
+    ['', 'null', 'undefined'].includes(value.trim())
+      ? null
+      : value,
+  )
   @IsUUID('all')
   unitId?: string | null;
 

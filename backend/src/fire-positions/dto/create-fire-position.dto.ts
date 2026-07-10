@@ -15,13 +15,18 @@ export class CreateFirePositionDto {
   name!: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  positionType?: string;
+
+  @IsOptional()
   @IsUUID()
   unitId?: string;
 
-@IsOptional()
-@IsUUID()
-assignedWeaponId?: string;
-  
+  @IsOptional()
+  @IsUUID()
+  assignedWeaponId?: string;
+
   @IsOptional()
   @IsNumber()
   lat?: number;
@@ -75,9 +80,9 @@ assignedWeaponId?: string;
   @IsNumber()
   traverseRightUnits?: number;
 
-@IsOptional()
-@IsString()
-personnelRotationDate?: string;
+  @IsOptional()
+  @IsString()
+  personnelRotationDate?: string;
 
   @IsOptional()
   @IsUUID()

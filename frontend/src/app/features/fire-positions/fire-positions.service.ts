@@ -8,7 +8,7 @@ import { FirePositionCard } from './fire-position-card.model';
 export interface CreateFirePositionRequest {
   name: string;
   unitId?: string;
-
+positionType?: 'fire_position' | 'aerial_recon' | 'ew_post' | 'ew_station' | 'air_asset_crew';
   lat?: number;
   lng?: number;
   mgrs?: string;

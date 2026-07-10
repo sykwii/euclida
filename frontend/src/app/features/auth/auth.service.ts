@@ -1,11 +1,12 @@
 import { Inject, Injectable, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 import { tap } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 
 export type UserRole = 'admin' | 'operator' | 'observer';
-export type UserScope = 'main' | 'division' | 'battery';
+export type UserScope = 'main' | 'division' | 'battery' | 'ew';
 
 export interface LoginResponse {
   accessToken: string;
@@ -25,12 +26,17 @@ export interface LoginResponse {
 export class AuthService {
   private readonly tokenKey = 'euclida_access_token';
   private readonly userKey = 'euclida_user';
+  private readonly currentUserSubject = new BehaviorSubject<LoginResponse['user'] | null>(null);
+
+  readonly currentUser$ = this.currentUserSubject.asObservable();
 
   constructor(
     private readonly api: ApiService,
     private readonly router: Router,
     @Inject(PLATFORM_ID) private readonly platformId: object,
-  ) {}
+  ) {
+    this.syncCurrentUser();
+  }
 
   private get isBrowser(): boolean {
     return isPlatformBrowser(this.platformId);
@@ -48,15 +54,11 @@ export class AuthService {
             return;
           }
 
-          localStorage.setItem(
-            this.tokenKey,
-            response.accessToken,
-          );
+          localStorage.setItem(this.tokenKey, response.accessToken);
 
-          localStorage.setItem(
-            this.userKey,
-            JSON.stringify(response.user),
-          );
+          localStorage.setItem(this.userKey, JSON.stringify(response.user));
+
+          this.currentUserSubject.next(response.user);
         }),
       );
   }
@@ -67,6 +69,7 @@ export class AuthService {
       localStorage.removeItem(this.userKey);
     }
 
+    this.currentUserSubject.next(null);
     void this.router.navigate(['/login']);
   }
 
@@ -90,6 +93,10 @@ export class AuthService {
     }
 
     return JSON.parse(raw) as LoginResponse['user'];
+  }
+
+  syncCurrentUser(): void {
+    this.currentUserSubject.next(this.getUser());
   }
 
   isLoggedIn(): boolean {

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 
 export type UserRole = 'admin' | 'operator' | 'observer';
-export type UserScope = 'main' | 'division' | 'battery';
+export type UserScope = 'main' | 'division' | 'battery' | 'ew';
 
 export interface ManagedUser {
   id: string;

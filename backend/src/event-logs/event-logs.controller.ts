@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import type { AuthUser } from '../auth/auth-user.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -33,5 +28,13 @@ export class EventLogsController {
     };
 
     return this.service.findAll(user, filters);
+  }
+
+  @Post('mark-read')
+  markRead(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { ids?: string[] } = {},
+  ): Promise<{ updated: number }> {
+    return this.service.markRead(user, body.ids);
   }
 }

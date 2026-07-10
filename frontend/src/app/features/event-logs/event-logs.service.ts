@@ -32,6 +32,7 @@ export interface EventLog {
   details: string | null;
   metadata: Record<string, unknown> | null;
 
+  readAt: string | null;
   createdAt: string;
 }
 
@@ -53,5 +54,9 @@ export class EventLogsService {
     const query = params.toString();
 
     return this.api.get<EventLog[]>(`/event-logs${query ? `?${query}` : ''}`);
+  }
+
+  markRead(ids?: string[]) {
+    return this.api.post<{ updated: number }>('/event-logs/mark-read', { ids });
   }
 }

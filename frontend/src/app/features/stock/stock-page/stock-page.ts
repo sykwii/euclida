@@ -22,6 +22,7 @@ export class StockPage implements OnInit, OnDestroy {
   loading = true;
   refreshing = false;
   errorMessage = '';
+  lastSyncLabel = '—';
   searchTerm = '';
   expandedDepotId: string | null = null;
   statsPanelOpen = true;
@@ -63,6 +64,10 @@ export class StockPage implements OnInit, OnDestroy {
         this.items = data;
         this.loading = false;
         this.refreshing = false;
+        this.lastSyncLabel = new Date().toLocaleTimeString('uk-UA', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
         this.cdr.detectChanges();
       },
       error: () => {
@@ -74,6 +79,18 @@ export class StockPage implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       },
     });
+  }
+
+  get hasBlockingError(): boolean {
+    return !!this.errorMessage && this.items.length === 0;
+  }
+
+  get expandedDepotItem(): StockByDepot | null {
+    if (this.expandedDepotId) {
+      return this.filteredItems.find((item) => item.depot.id === this.expandedDepotId) ?? null;
+    }
+
+    return this.filteredItems[0] ?? null;
   }
 
   toggleDepot(id: string): void {

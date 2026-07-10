@@ -55,12 +55,12 @@ export class EventFeedService implements OnDestroy {
   private readonly legacyItemsSubject = new BehaviorSubject<EventFeedItem[]>([]);
   private readonly loadingSubject = new BehaviorSubject<boolean>(false);
   private readonly errorSubject = new BehaviorSubject<string | null>(null);
-  private lastSeenNotificationAt = this.readLastSeenNotificationAt();
   private loaded = false;
   private lastLoadedAt = 0;
   private loadQueued = false;
   private loadSubscription?: Subscription;
   private realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly realtimeSubscription = new Subscription();
   private readonly unregisterRealtimeEvent: () => void;
 
   readonly events$ = this.eventsSubject.asObservable();
@@ -76,11 +76,27 @@ export class EventFeedService implements OnDestroy {
     private readonly eventLogs: EventLogsService,
     private readonly realtime: RealtimeService,
   ) {
-    this.ensureLoaded();
+    setTimeout(() => this.ensureLoaded());
 
-    this.unregisterRealtimeEvent = this.realtime.onEventCreated(() => {
+    this.unregisterRealtimeEvent = this.realtime.onEventCreated((event) => {
+      const unitId = typeof event?.['unitId'] === 'string' ? event['unitId'] : undefined;
+
+      if (!this.shouldRefreshForRealtimeUnit(unitId)) {
+        return;
+      }
+
       this.scheduleRealtimeRefresh();
     });
+
+    this.realtimeSubscription.add(
+      this.realtime.watchMany(['events', 'missions', 'stock', 'threats']).subscribe((event) => {
+        if (!this.shouldRefreshForRealtimeUnit(event.unitId)) {
+          return;
+        }
+
+        this.scheduleRealtimeRefresh();
+      }),
+    );
   }
 
   ensureLoaded(): void {
@@ -94,9 +110,27 @@ export class EventFeedService implements OnDestroy {
     this.load();
   }
 
+  reset(): void {
+    this.loadSubscription?.unsubscribe();
+    this.snapshot = [];
+    this.eventsSubject.next([]);
+    this.legacyItemsSubject.next([]);
+    this.loadingSubject.next(false);
+    this.errorSubject.next(null);
+    this.loaded = false;
+    this.lastLoadedAt = 0;
+    this.loadQueued = false;
+
+    if (this.realtimeRefreshTimer) {
+      clearTimeout(this.realtimeRefreshTimer);
+      this.realtimeRefreshTimer = null;
+    }
+  }
+
   ngOnDestroy(): void {
     this.unregisterRealtimeEvent?.();
     this.loadSubscription?.unsubscribe();
+    this.realtimeSubscription.unsubscribe();
 
     if (this.realtimeRefreshTimer) {
       clearTimeout(this.realtimeRefreshTimer);
@@ -167,9 +201,25 @@ export class EventFeedService implements OnDestroy {
     }, 500);
   }
 
-  add(
-    item: Omit<EventFeedItem, 'id' | 'createdAt'> & Partial<EventFeedItem>,
-  ): void {
+  private shouldRefreshForRealtimeUnit(unitId?: string): boolean {
+    if (!unitId) {
+      return true;
+    }
+
+    const user = this.auth.getUser();
+
+    if (!user || user.role === 'admin' || user.scope === 'main') {
+      return true;
+    }
+
+    if (user.scope === 'battery') {
+      return unitId === user.unitId;
+    }
+
+    return true;
+  }
+
+  add(item: Omit<EventFeedItem, 'id' | 'createdAt'> & Partial<EventFeedItem>): void {
     const nextItem: EventFeedItem = {
       id: item.id || crypto.randomUUID(),
       type: item.type || 'info',
@@ -182,10 +232,7 @@ export class EventFeedService implements OnDestroy {
       createdAt: item.createdAt || new Date().toISOString(),
     };
 
-    this.legacyItemsSubject.next([
-      nextItem,
-      ...this.legacyItemsSubject.value,
-    ].slice(0, 50));
+    this.legacyItemsSubject.next([nextItem, ...this.legacyItemsSubject.value].slice(0, 50));
   }
 
   clear(): void {
@@ -200,15 +247,30 @@ export class EventFeedService implements OnDestroy {
     return this.errorSubject.value;
   }
 
-  markNotificationsSeen(): void {
-    const newest = this.getNotificationEvents()[0];
-    this.lastSeenNotificationAt = newest?.createdAt || new Date().toISOString();
-
-    try {
-      localStorage.setItem('euclida.notifications.lastSeenAt', this.lastSeenNotificationAt);
-    } catch {
-      // localStorage can be unavailable in SSR/private modes. Counter still works in memory.
+  get lastSyncedLabel(): string {
+    if (!this.lastLoadedAt) {
+      return '—';
     }
+
+    return new Date(this.lastLoadedAt).toLocaleTimeString('uk-UA', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  markNotificationsSeen(): void {
+    const ids = this.getNotificationEvents()
+      .filter((event) => this.isUnread(event))
+      .map((event) => event.id);
+
+    if (!ids.length) {
+      return;
+    }
+
+    this.eventLogs.markRead(ids).subscribe({
+      next: () => this.load(),
+      error: () => this.load(),
+    });
   }
 
   getGroups(mode: EventFeedMode = 'notifications'): EventGroup[] {
@@ -253,15 +315,12 @@ export class EventFeedService implements OnDestroy {
       .map((group) => ({
         ...group,
         items: group.items
-          .sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() -
-              new Date(a.createdAt).getTime(),
-          )
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .slice(0, mode === 'journal' ? 40 : 12),
       }))
       .sort((a, b) => {
-        const priorityDelta = this.getPriorityWeight(b.priority) - this.getPriorityWeight(a.priority);
+        const priorityDelta =
+          this.getPriorityWeight(b.priority) - this.getPriorityWeight(a.priority);
         if (priorityDelta !== 0 && mode === 'notifications') return priorityDelta;
 
         return new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime();
@@ -282,19 +341,19 @@ export class EventFeedService implements OnDestroy {
   }
 
   isUnread(event: EventLog): boolean {
-    const seenAt = new Date(this.lastSeenNotificationAt || 0).getTime();
-
-    return new Date(event.createdAt).getTime() > seenAt;
+    return !event.readAt;
   }
 
   getStats(): EventFeedStats {
     const notifications = this.getNotificationEvents();
+    const unreadNotifications = notifications.filter((event) => this.isUnread(event));
 
     return {
-      unread: notifications.filter((event) => this.isUnread(event)).length,
-      notifications: notifications.length,
-      critical: notifications.filter((event) => this.getPriority(event) === 'critical').length,
-      high: notifications.filter((event) => this.getPriority(event) === 'high').length,
+      unread: unreadNotifications.length,
+      notifications: unreadNotifications.length,
+      critical: unreadNotifications.filter((event) => this.getPriority(event) === 'critical')
+        .length,
+      high: unreadNotifications.filter((event) => this.getPriority(event) === 'high').length,
       today: this.getVisibleEvents('today').length,
       journal: this.getVisibleEvents('journal').length,
     };
@@ -321,7 +380,7 @@ export class EventFeedService implements OnDestroy {
         .slice(0, 160);
     }
 
-    return this.getNotificationEvents();
+    return this.getNotificationEvents().filter((event) => this.isUnread(event));
   }
 
   private getNotificationEvents(): EventLog[] {
@@ -334,6 +393,10 @@ export class EventFeedService implements OnDestroy {
   private isNotificationEvent(event: EventLog): boolean {
     if (event.eventType === 'air_threat' || event.entityType === 'air_threat') {
       return true;
+    }
+
+    if (event.eventType === 'air_asset' || event.eventType === 'air_recon_area' || event.eventType === 'air_asset_task') {
+      return ['created', 'updated', 'deleted'].includes(event.action);
     }
 
     if (event.eventType === 'service_order') {
@@ -391,18 +454,19 @@ export class EventFeedService implements OnDestroy {
       return [event.eventType, event.action, event.unitId || 'none'].join('|');
     }
 
-    return [
-      event.eventType,
-      event.action,
-      event.unitId || 'none',
-      event.entityType || 'none',
-    ].join('|');
+    return [event.eventType, event.action, event.unitId || 'none', event.entityType || 'none'].join(
+      '|',
+    );
   }
 
   private getGroupTitle(event: EventLog): string {
     if (event.eventType === 'service_order') return `ВГЗ · ${this.getActionLabel(event.action)}`;
     if (event.eventType === 'stock') return `Логістика · ${this.getActionLabel(event.action)}`;
-    if (event.eventType === 'air_threat' || event.entityType === 'air_threat') return `Повітряні загрози · ${this.getActionLabel(event.action)}`;
+    if (event.eventType === 'air_threat' || event.entityType === 'air_threat')
+      return `Повітряні загрози · ${this.getActionLabel(event.action)}`;
+    if (event.eventType === 'air_asset') return `Повітряні розрахунки · ${this.getActionLabel(event.action)}`;
+    if (event.eventType === 'air_recon_area') return `Райони розвідки · ${this.getActionLabel(event.action)}`;
+    if (event.eventType === 'air_asset_task') return `Повітряні задачі · ${this.getActionLabel(event.action)}`;
     if (event.eventType === 'fire_position') return `ВП · ${this.getActionLabel(event.action)}`;
     if (event.eventType === 'weapon') return `СГ · ${this.getActionLabel(event.action)}`;
     if (event.eventType === 'operator_shift') return `Зміна · ${this.getActionLabel(event.action)}`;
@@ -456,13 +520,12 @@ export class EventFeedService implements OnDestroy {
     if (event.eventType === 'fire_position') return '/fire-positions';
     if (event.eventType === 'stock') return '/stock';
     if (event.eventType === 'air_threat') return '/map';
+    if (event.eventType === 'air_asset' || event.eventType === 'air_recon_area' || event.eventType === 'air_asset_task') return '/air-assets';
 
     return undefined;
   }
 
-  private getQueryParams(
-    event: EventLog,
-  ): Record<string, string | number | boolean> | undefined {
+  private getQueryParams(event: EventLog): Record<string, string | number | boolean> | undefined {
     if (!event.entityId) return undefined;
 
     if (event.eventType === 'service_order') {
@@ -504,13 +567,5 @@ export class EventFeedService implements OnDestroy {
     }
 
     return 'info';
-  }
-
-  private readLastSeenNotificationAt(): string {
-    try {
-      return localStorage.getItem('euclida.notifications.lastSeenAt') || '';
-    } catch {
-      return '';
-    }
   }
 }

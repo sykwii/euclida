@@ -20,7 +20,7 @@ export class AccessScopeService {
       return [];
     }
 
-    if (user.scope === 'battery') {
+    if (user.scope === 'battery' || user.scope === 'ew') {
       return [user.unitId];
     }
 
@@ -31,10 +31,7 @@ export class AccessScopeService {
         },
       });
 
-      return [
-        user.unitId,
-        ...childUnits.map((unit) => unit.id),
-      ];
+      return [user.unitId, ...childUnits.map((unit) => unit.id)];
     }
 
     return [];

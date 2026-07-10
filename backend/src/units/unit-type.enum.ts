@@ -5,6 +5,8 @@ export enum UnitType {
 
   BATTERY = 'battery',
 
+  EW = 'ew',
+
   COMMAND = 'command',
 
   DUTY_SHIFT = 'duty_shift',

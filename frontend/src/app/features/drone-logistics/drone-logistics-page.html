@@ -1,0 +1,308 @@
+﻿<main class="drone-logistics-page">
+  <header class="page-head">
+    <div>
+      <span>Логістика</span>
+      <h1>Склади БпЛА</h1>
+      <p>Борти, бойові частини, складські залишки і передача на повітряні розрахунки</p>
+    </div>
+    <div class="head-actions">
+      <button type="button" (click)="openModal('depot')">+ Склад БпЛА</button>
+      <button type="button" (click)="openModal('model')">+ Борт</button>
+      <button type="button" (click)="openModal('warhead')">+ БЧ</button>
+      <button type="button" (click)="load()">Оновити</button>
+    </div>
+  </header>
+
+  <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+  <section class="quick-grid">
+    <article>
+      <span>Бортів на складі</span>
+      <strong>{{ totalDrones }}</strong>
+    </article>
+    <article>
+      <span>БЧ на складі</span>
+      <strong>{{ totalWarheads }}</strong>
+    </article>
+    <article>
+      <span>Моделей</span>
+      <strong>{{ models.length }}</strong>
+    </article>
+    <article>
+      <span>Типів БЧ</span>
+      <strong>{{ warheadTypes.length }}</strong>
+    </article>
+  </section>
+
+  <section class="layout">
+    <aside class="depot-tree-panel">
+      <header>
+        <div>
+          <span>Дерево складів</span>
+          <h2>Склади БпЛА</h2>
+        </div>
+        <button type="button" (click)="openModal('depot')">Створити склад</button>
+      </header>
+
+      <ng-template #depotNode let-node>
+        <div
+          class="depot-tree-row"
+          role="button"
+          tabindex="0"
+          [class.active]="activeDepotId === node.depot.id"
+          [style.--level]="node.level"
+          (click)="selectDepot(node.depot)"
+          (keydown.enter)="selectDepot(node.depot)"
+        >
+          <span class="tree-indent"></span>
+          <button
+            type="button"
+            class="tree-toggle"
+            *ngIf="node.children.length > 0"
+            (click)="toggleDepot(node.depot.id, $event)"
+            [attr.aria-label]="isDepotExpanded(node.depot.id) ? 'Згорнути склад' : 'Розгорнути склад'"
+          >
+            {{ isDepotExpanded(node.depot.id) ? '▾' : '▸' }}
+          </button>
+          <span class="tree-toggle-spacer" *ngIf="node.children.length === 0"></span>
+          <span class="tree-main">
+            <strong>{{ node.depot.name }}</strong>
+            <small>{{ getDepotTypeLabel(node.depot.depotType) }} · {{ getDepotUnitName(node.depot.unitId) }}</small>
+          </span>
+        </div>
+
+        <ng-container *ngIf="node.children.length > 0 && isDepotExpanded(node.depot.id)">
+          <ng-container
+            *ngFor="let child of node.children"
+            [ngTemplateOutlet]="depotNode"
+            [ngTemplateOutletContext]="{ $implicit: child }"
+          ></ng-container>
+        </ng-container>
+      </ng-template>
+
+      <ng-container *ngFor="let node of depotTree">
+        <ng-container [ngTemplateOutlet]="depotNode" [ngTemplateOutletContext]="{ $implicit: node }"></ng-container>
+      </ng-container>
+
+      <p class="empty" *ngIf="depots.length === 0">Створіть перший склад</p>
+    </aside>
+
+    <section class="stock-panel">
+      <article class="selected-depot-card">
+        <header>
+          <div>
+            <span>{{ getDepotTypeLabel(selectedDepot?.depotType || '') }}</span>
+            <h2>{{ selectedDepot?.name || 'Склад не обрано' }}</h2>
+          </div>
+          <div class="head-actions">
+            <button type="button" (click)="openModal('add-drone')" [disabled]="!isSelectedDroneDepot">Додати борт</button>
+            <button type="button" (click)="openModal('add-warhead')" [disabled]="!isSelectedDroneDepot">Додати БЧ</button>
+            <button type="button" (click)="openModal('transfer-drone')" [disabled]="!isSelectedDroneDepot">Передати борт</button>
+            <button type="button" (click)="openModal('transfer-warhead')" [disabled]="!isSelectedDroneDepot">Передати БЧ</button>
+          </div>
+        </header>
+
+        <div class="depot-meta">
+          <p><span>Підрозділ</span><strong>{{ getDepotUnitName(selectedDepot?.unitId) }}</strong></p>
+          <p><span>Батьківський склад</span><strong>{{ getDepotParentName(selectedDepot?.parentId) }}</strong></p>
+        </div>
+      </article>
+
+      <div class="stock-columns">
+        <section>
+          <h3>Остатки БпЛА</h3>
+          <div class="stock-row" *ngFor="let row of filteredDroneStock">
+            <span>{{ row.droneModel?.name || getModelName(row.droneModelId) }}</span>
+            <b>{{ row.quantity }}</b>
+          </div>
+          <p class="empty" *ngIf="filteredDroneStock.length === 0">Немає залишків по бортах</p>
+        </section>
+
+        <section>
+          <h3>Остатки БЧ</h3>
+          <div class="stock-row" *ngFor="let row of filteredWarheadStock">
+            <span>{{ row.warheadType?.name || getWarheadName(row.warheadTypeId) }}</span>
+            <b>{{ getWarheadQuantityLabel(row.quantity, row.warheadType) }}</b>
+          </div>
+          <p class="empty" *ngIf="filteredWarheadStock.length === 0">Немає залишків по БЧ</p>
+        </section>
+      </div>
+
+      <section class="movement-panel selected-movement-panel">
+        <header><h3>Рухи складу</h3></header>
+        <div class="movement-row" *ngFor="let item of selectedMovements">
+          <span>{{ item.itemType === 'drone' ? 'Борт' : 'БЧ' }}</span>
+          <strong>{{ item.droneModel?.name || item.warheadType?.name || 'Номенклатура' }}</strong>
+          <b>{{ item.itemType === 'warhead' ? getWarheadQuantityLabel(item.quantity, item.warheadType) : item.quantity }}</b>
+          <small>{{ item.comment || item.movementType }}</small>
+        </div>
+        <p class="empty" *ngIf="selectedMovements.length === 0">Рухів по складу немає</p>
+      </section>
+    </section>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="modal" (click)="closeModal()">
+    <form
+      class="modal"
+      (click)="$event.stopPropagation()"
+      (ngSubmit)="modal === 'depot' ? saveDepot() : modal === 'model' ? saveModel() : modal === 'warhead' ? saveWarhead() : modal === 'add-drone' ? addDepotStock('drone') : modal === 'add-warhead' ? addDepotStock('warhead') : modal === 'transfer-drone' ? transferStock('drone') : transferStock('warhead')"
+    >
+      <header>
+        <h2>
+          {{
+            modal === 'depot'
+              ? 'Новий склад БпЛА'
+              : modal === 'model'
+                ? 'Новий борт'
+                : modal === 'warhead'
+                  ? 'Нова БЧ'
+                  : modal === 'add-drone'
+                    ? 'Поповнити борти'
+                    : modal === 'add-warhead'
+                      ? 'Поповнити БЧ'
+                      : modal === 'transfer-drone'
+                        ? 'Передати борти на розрахунок'
+                        : 'Передати БЧ на розрахунок'
+          }}
+        </h2>
+        <button type="button" (click)="closeModal()">×</button>
+      </header>
+
+      <ng-container *ngIf="modal === 'depot'">
+        <label>Назва <input name="depotName" [(ngModel)]="depotForm.name" /></label>
+        <label>
+          Підрозділ
+          <select name="depotUnit" [(ngModel)]="depotForm.unitId">
+            <option value="">Без підрозділу</option>
+            <option *ngFor="let unit of availableDepotUnits" [value]="unit.id">{{ unit.name }}</option>
+          </select>
+        </label>
+        <label>
+          Батьківський склад
+          <select name="depotParent" [(ngModel)]="depotForm.parentId">
+            <option value="">Без батьківського складу</option>
+            <option *ngFor="let depot of droneDepots" [value]="depot.id">{{ depot.name }}</option>
+          </select>
+        </label>
+      </ng-container>
+
+      <ng-container *ngIf="modal === 'model'">
+        <label>Назва <input name="modelName" [(ngModel)]="modelForm.name" /></label>
+        <label>
+          Група
+          <select name="droneGroup" [(ngModel)]="modelForm.droneGroup">
+            <option value="recon">Розвідка</option>
+            <option value="combat">Бойовий</option>
+          </select>
+        </label>
+        <label>
+          Тип
+          <select name="droneType" [(ngModel)]="modelForm.droneType">
+            <option value="copter">Коптер</option>
+            <option value="fixed_wing">Крило</option>
+            <option value="fpv_radio">FPV радіо</option>
+            <option value="fpv_fiber">FPV оптика</option>
+            <option value="kamikaze">Камікадзе</option>
+            <option value="heavy_bomber">Важкий бомбер</option>
+          </select>
+        </label>
+        <label>
+          Камера
+          <select name="cameraType" [(ngModel)]="modelForm.cameraType">
+            <option value="none">Немає</option>
+            <option value="day">Денна</option>
+            <option value="night">Нічна</option>
+            <option value="thermal">Тепловізор</option>
+            <option value="day_night">День/ніч</option>
+          </select>
+        </label>
+
+<label>
+  Максимальна дальність, м
+  <input name="modelMaxRangeM" type="number" min="0" step="100" [(ngModel)]="modelForm.maxRangeM" />
+</label>
+
+<label>
+  Крейсерська швидкість, км/год
+  <input name="modelCruiseSpeedKmh" type="number" min="0" step="1" [(ngModel)]="modelForm.cruiseSpeedKmh" />
+</label>
+
+<label>
+  Автономність, хв
+  <input name="modelEnduranceMinutes" type="number" min="0" step="1" [(ngModel)]="modelForm.enduranceMinutes" />
+</label>
+
+<label>
+  Корисне навантаження, кг
+  <input name="modelPayloadCapacityKg" type="number" min="0" step="0.001" [(ngModel)]="modelForm.payloadCapacityKg" />
+</label>
+
+<label>
+  Максимальна висота, м
+  <input name="modelMaxAltitudeM" type="number" min="0" step="10" [(ngModel)]="modelForm.maxAltitudeM" />
+</label>
+
+<label>
+  Максимальний вітер, м/с
+  <input name="modelMaxWindMs" type="number" min="0" step="0.1" [(ngModel)]="modelForm.maxWindMs" />
+</label>
+
+      </ng-container>
+
+      <ng-container *ngIf="modal === 'warhead'">
+        <label>Назва <input name="warheadName" [(ngModel)]="warheadForm.name" /></label>
+        <label>
+          Облік
+          <select name="warheadMeasureUnit" [(ngModel)]="warheadForm.measureUnit">
+            <option value="unit">Готові вироби, шт</option>
+            <option value="kg">Маса БЧ, кг</option>
+          </select>
+        </label>
+        <label>Вага, кг <input name="weightKg" type="number" step="0.1" [(ngModel)]="warheadForm.weightKg" /></label>
+      </ng-container>
+
+      <ng-container *ngIf="modal !== 'depot' && modal !== 'model' && modal !== 'warhead'">
+        <label>
+          Склад
+          <select name="stockDepot" [(ngModel)]="stockForm.depotId">
+            <option *ngFor="let depot of droneDepots" [value]="depot.id">{{ depot.name }}</option>
+          </select>
+        </label>
+        <label *ngIf="modal.includes('drone')">
+          Борт
+          <select name="stockDroneModel" [(ngModel)]="stockForm.droneModelId">
+            <option *ngFor="let model of models" [value]="model.id">{{ model.name }}</option>
+          </select>
+        </label>
+        <label *ngIf="modal.includes('warhead')">
+          БЧ
+          <select name="stockWarhead" [(ngModel)]="stockForm.warheadTypeId">
+            <option *ngFor="let type of warheadTypes" [value]="type.id">{{ type.name }} · {{ getWarheadUnitLabel(type) }}</option>
+          </select>
+        </label>
+        <label *ngIf="modal.includes('transfer')">
+          Розрахунок
+          <select name="airAssetPosition" [(ngModel)]="stockForm.airAssetPositionId">
+            <option *ngFor="let asset of airAssets" [value]="asset.id">{{ asset.callsign || asset.name }}</option>
+          </select>
+        </label>
+        <label>
+          Кількість{{ modal.includes('warhead') ? ' / ' + getWarheadUnitLabel(selectedWarheadType) : '' }}
+          <input name="stockQuantity" type="number" [min]="stockQuantityMin" [step]="stockQuantityStep" [(ngModel)]="stockForm.quantity" />
+        </label>
+        <p class="stock-hint" *ngIf="selectedTransferAvailableQuantity !== null">
+          Доступно: {{ selectedTransferAvailableQuantity }}{{ modal.includes('warhead') ? ' ' + getWarheadUnitLabel(selectedWarheadType) : ' од.' }}
+        </p>
+      </ng-container>
+
+      <label *ngIf="modal !== 'depot' && modal !== 'model' && modal !== 'warhead'">Примітка <input name="stockComment" [(ngModel)]="stockForm.comment" /></label>
+      <label *ngIf="modal === 'model'">Примітка <input name="modelNote" [(ngModel)]="modelForm.note" /></label>
+      <label *ngIf="modal === 'warhead'">Примітка <input name="warheadNote" [(ngModel)]="warheadForm.note" /></label>
+
+      <footer>
+        <button type="button" class="ghost" (click)="closeModal()">Скасувати</button>
+        <button type="submit" [disabled]="isStockSubmitDisabled">Зберегти</button>
+      </footer>
+    </form>
+  </section>
+</main>

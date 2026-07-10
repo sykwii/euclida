@@ -10,9 +10,7 @@
         Додати користувача
       </button>
 
-      <button type="button" class="ghost-button" (click)="load()">
-        Оновити
-      </button>
+      <button type="button" class="ghost-button" (click)="load()">Оновити</button>
     </div>
   </header>
 
@@ -55,24 +53,18 @@
       </div>
 
       <div class="card-actions">
-        <button type="button" class="ghost-button" (click)="openEdit(user)">
-          Редагувати
-        </button>
+        <button type="button" class="ghost-button" (click)="openEdit(user)">Редагувати</button>
 
         <button type="button" class="ghost-button" (click)="toggleActive(user)">
           {{ user.isActive ? 'Вимкнути' : 'Увімкнути' }}
         </button>
 
-        <button type="button" class="danger-button" (click)="remove(user)">
-          Видалити
-        </button>
+        <button type="button" class="danger-button" (click)="remove(user)">Видалити</button>
       </div>
     </article>
   </section>
 
-  <p class="muted" *ngIf="!loading && items.length === 0">
-    Користувачів ще немає.
-  </p>
+  <p class="muted" *ngIf="!loading && items.length === 0">Користувачів ще немає.</p>
 
   <div class="modal-backdrop" *ngIf="modalOpen" (click)="onModalBackdropClick()">
     <section class="modal-card" (click)="onModalCardClick($event)">
@@ -82,7 +74,12 @@
           <h2>{{ editingUser ? editingUser.login : 'Створення користувача' }}</h2>
         </div>
 
-        <button type="button" class="icon-button" [disabled]="modalSubmitting" (click)="closeModal()">
+        <button
+          type="button"
+          class="icon-button"
+          [disabled]="modalSubmitting"
+          (click)="closeModal()"
+        >
           ×
         </button>
       </header>
@@ -121,14 +118,11 @@
 
         <label>
           Рівень доступу
-          <select
-            name="scope"
-            [(ngModel)]="form.scope"
-            (ngModelChange)="onScopeChange()"
-          >
+          <select name="scope" [(ngModel)]="form.scope" (ngModelChange)="onScopeChange()">
             <option value="main">Головний пункт</option>
             <option value="division">Дивізіон</option>
             <option value="battery">Батарея</option>
+            <option value="ew">РЕБ</option>
           </select>
         </label>
 
@@ -137,23 +131,24 @@
           <select name="unitId" [(ngModel)]="form.unitId">
             <option value="">Оберіть підрозділ</option>
             <option *ngFor="let unit of availableUnits" [value]="unit.id">
-  {{ unit.name }}
-</option>
+              {{ unit.name }}
+            </option>
           </select>
         </label>
 
         <label class="checkbox-row wide">
-          <input
-            name="isActive"
-            type="checkbox"
-            [(ngModel)]="form.isActive"
-          />
+          <input name="isActive" type="checkbox" [(ngModel)]="form.isActive" />
           <span>Користувач активний</span>
         </label>
       </div>
 
       <footer class="modal-actions">
-        <button type="button" class="ghost-button" [disabled]="modalSubmitting" (click)="closeModal()">
+        <button
+          type="button"
+          class="ghost-button"
+          [disabled]="modalSubmitting"
+          (click)="closeModal()"
+        >
           Скасувати
         </button>
 

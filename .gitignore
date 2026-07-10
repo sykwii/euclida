@@ -1,0 +1,65 @@
+﻿# Dependencies
+node_modules/
+**/node_modules/
+
+# Builds
+dist/
+**/dist/
+build/
+**/build/
+.angular/
+**/.angular/
+coverage/
+**/coverage/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Test and audit artifacts
+.npm-cache/
+.pw-browsers/
+.site-audit/
+test-results/
+playwright-report/
+.codex-playwright/
+
+codex-site-audit.js
+codex-spa-audit.js
+codex-modal-audit.js
+codex-mojibake-scan.js
+
+# Local archives
+*.zip
+*.7z
+*.rar
+
+# Certificates and keys
+*.pem
+*.key
+*.pfx
+*.p12

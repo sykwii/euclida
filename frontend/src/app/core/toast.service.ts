@@ -14,7 +14,7 @@ export interface ToastMessage {
 })
 export class ToastService {
   private readonly messagesSubject = new BehaviorSubject<ToastMessage[]>([]);
-  private readonly timers = new Map<number, number>();
+  private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
 
   readonly messages$ = this.messagesSubject.asObservable();
 
@@ -62,7 +62,7 @@ export class ToastService {
     const timer = this.timers.get(id);
 
     if (timer) {
-      window.clearTimeout(timer);
+      clearTimeout(timer);
       this.timers.delete(id);
     }
 
@@ -75,10 +75,10 @@ export class ToastService {
     const currentTimer = this.timers.get(id);
 
     if (currentTimer) {
-      window.clearTimeout(currentTimer);
+      clearTimeout(currentTimer);
     }
 
-    const timer = window.setTimeout(() => this.remove(id), 6500);
+    const timer = setTimeout(() => this.remove(id), 6500);
     this.timers.set(id, timer);
   }
 }

@@ -1,92 +1,192 @@
 <div class="eu-page positions-page">
   <header class="eu-page-header page-header ui-surface">
     <div>
-      <p class="eyebrow">ВП</p>
-      <h1>Вогневі позиції</h1>
-      <p>Координати, готовність, локальний БК та прив’язка Озброєння</p>
+      <p class="eyebrow">{{ pageEyebrow }}</p>
+      <h1>{{ pageTitle }}</h1>
+      <p>{{ pageDescription }}</p>
     </div>
 
-    <button type="button" class="ghost-button" (click)="load()">Оновити</button>
+    <div class="header-actions">
+      <button type="button" class="primary-button" (click)="openCreate()">
+        {{ createButtonLabel }}
+      </button>
+      <button type="button" class="ghost-button" (click)="load()">Оновити</button>
+    </div>
   </header>
 
-
   <section class="stats-grid">
-    <article class="stat-card ui-surface">
+    <button
+      type="button"
+      class="stat-card ui-surface"
+      [class.active]="activeFilter === 'all'"
+      (click)="setFilter('all')"
+    >
       <strong>{{ totalCount }}</strong>
       <span>Всього</span>
-    </article>
+    </button>
 
-    <article class="stat-card ready ui-surface">
+    <button
+      type="button"
+      class="stat-card ready ui-surface"
+      [class.active]="activeFilter === 'ready'"
+      (click)="setFilter('ready')"
+    >
       <strong>{{ readyCount }}</strong>
       <span>БГ</span>
-    </article>
+    </button>
 
-    <article class="stat-card danger ui-surface">
+    <button
+      type="button"
+      class="stat-card danger ui-surface"
+      [class.active]="activeFilter === 'not_ready'"
+      (click)="setFilter('not_ready')"
+    >
       <strong>{{ notReadyCount }}</strong>
       <span>НЕ БГ</span>
-    </article>
+    </button>
 
-    <article class="stat-card sg ui-surface">
+    <button
+      type="button"
+      class="stat-card sg ui-surface"
+      [class.active]="activeFilter === 'with_sg'"
+      (click)="setFilter('with_sg')"
+    >
       <strong>{{ withSgCount }}</strong>
       <span>З Озброєнням</span>
-    </article>
+    </button>
   </section>
 
-  <section class="editor-card ui-surface">
-    <div class="editor-head">
-      <div>
-        <span>{{ editingId ? 'Редагування' : 'Нова ВП' }}</span>
-        <h2>{{ editingId ? 'Оновити ВП' : 'Додати ВП' }}</h2>
+  <div class="filter-strip ui-surface" *ngIf="activeFilter !== 'all'">
+    <span>Фільтр: {{ activeFilterLabel }}</span>
+    <button type="button" class="ghost-button" (click)="clearFilter()">Показати всі</button>
+  </div>
+
+  <div class="fp-form-backdrop" *ngIf="formModalOpen" (click)="cancelEdit()">
+    <section class="editor-card ui-surface fp-form-dialog" (click)="$event.stopPropagation()">
+      <div class="editor-head">
+        <div>
+          <span>{{ editingId ? 'Редагування' : 'Нова ВП' }}</span>
+          <h2>{{ editingId ? 'Оновити ВП' : 'Додати ВП' }}</h2>
+        </div>
+
+        <button type="button" class="ghost-button" *ngIf="editingId" (click)="cancelEdit()">
+          Скасувати
+        </button>
       </div>
 
-      <button type="button" class="ghost-button" *ngIf="editingId" (click)="cancelEdit()">
-        Скасувати
-      </button>
-    </div>
+      <form class="position-form" (ngSubmit)="save()">
+        <section class="form-group main-group">
+          <span>Основне</span>
+          <label *ngIf="isEwPage || isAirAssetsPage">
+            Тип
+            <select name="positionType" [(ngModel)]="form.positionType">
+              <option *ngFor="let option of positionTypeOptions" [value]="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
 
-    <form class="position-form" (ngSubmit)="save()">
-      <input name="name" [(ngModel)]="form.name" placeholder="Назва ВП" />
+          <label>
+            {{ isEwPage || isAirAssetsPage ? 'Назва позиції' : 'Назва ВП' }}
+            <input name="name" [(ngModel)]="form.name" placeholder="Напр. Корок" />
+          </label>
 
-      <select name="unitId" [(ngModel)]="form.unitId">
-        <option value="">Без підрозділу</option>
-        <option *ngFor="let unit of availableUnits" [value]="unit.id">
-          {{ unit.name }}
-        </option>
-      </select>
+          <label>
+            Підрозділ
+            <select name="unitId" [(ngModel)]="form.unitId">
+              <option value="">Без підрозділу</option>
+              <option *ngFor="let unit of availableUnits" [value]="unit.id">
+                {{ unit.name }}
+              </option>
+            </select>
+          </label>
+        </section>
 
-      <select name="coordinateMode" [(ngModel)]="form.coordinateMode">
-        <option value="decimal">Decimal</option>
-        <option value="mgrs">MGRS</option>
-      </select>
+        <section class="form-group coordinates-group">
+          <span>Координати</span>
+          <label>
+            Формат
+            <select name="coordinateMode" [(ngModel)]="form.coordinateMode">
+              <option value="decimal">Decimal</option>
+              <option value="mgrs">MGRS</option>
+            </select>
+          </label>
 
-      <ng-container *ngIf="form.coordinateMode === 'decimal'">
-        <input name="lat" [(ngModel)]="form.lat" placeholder="Широта" />
-        <input name="lng" [(ngModel)]="form.lng" placeholder="Довгота" />
-        <input name="mgrs" [(ngModel)]="form.mgrs" placeholder="MGRS 36U XB 12345 67890" />
-      </ng-container>
+          <ng-container *ngIf="form.coordinateMode === 'decimal'">
+            <label>
+              Широта
+              <input name="lat" [(ngModel)]="form.lat" placeholder="49.123456" />
+            </label>
+            <label>
+              Довгота
+              <input name="lng" [(ngModel)]="form.lng" placeholder="37.123456" />
+            </label>
+            <label>
+              MGRS
+              <input name="mgrs" [(ngModel)]="form.mgrs" placeholder="36U XB 12345 67890" />
+            </label>
+          </ng-container>
 
-      <ng-container *ngIf="form.coordinateMode === 'mgrs'">
-        <input class="wide" name="mgrs" [(ngModel)]="form.mgrs" placeholder="MGRS 36U XB 12345 67890" />
-      </ng-container>
+          <label class="wide" *ngIf="form.coordinateMode === 'mgrs'">
+            MGRS
+            <input name="mgrs" [(ngModel)]="form.mgrs" placeholder="36U XB 12345 67890" />
+          </label>
+        </section>
 
-      <input name="mainDirectionUnits" type="number" step="0.01" [(ngModel)]="form.mainDirectionUnits" placeholder="ОН" />
-      <input name="traverseLeftUnits" type="number" step="0.01" [(ngModel)]="form.traverseLeftUnits" placeholder="Доворот ліворуч" />
-      <input name="traverseRightUnits" type="number" step="0.01" [(ngModel)]="form.traverseRightUnits" placeholder="Доворот праворуч" />
+        <section class="form-group sector-group">
+          <span>Сектор стрільби</span>
+          <label>
+            Основний напрям
+            <input
+              name="mainDirectionUnits"
+              type="number"
+              step="0.01"
+              [(ngModel)]="form.mainDirectionUnits"
+              placeholder="ОН"
+            />
+          </label>
+          <label>
+            Доворот ліворуч
+            <input
+              name="traverseLeftUnits"
+              type="number"
+              step="0.01"
+              [(ngModel)]="form.traverseLeftUnits"
+              placeholder="0.00"
+            />
+          </label>
+          <label>
+            Доворот праворуч
+            <input
+              name="traverseRightUnits"
+              type="number"
+              step="0.01"
+              [(ngModel)]="form.traverseRightUnits"
+              placeholder="0.00"
+            />
+          </label>
+        </section>
 
-      <label class="form-date">
-        <span>Остання ротація</span>
-        <input
-          name="personnelRotationDate"
-          type="date"
-          [(ngModel)]="form.personnelRotationDate"
-        />
-      </label>
+        <section class="form-group rotation-group">
+          <span>Ротація</span>
+          <label>
+            Остання ротація
+            <input
+              name="personnelRotationDate"
+              type="date"
+              [(ngModel)]="form.personnelRotationDate"
+            />
+          </label>
+        </section>
 
-      <button type="submit" class="primary-button">
-        {{ editingId ? 'Зберегти' : 'Додати' }}
-      </button>
-    </form>
-  </section>
+        <div class="form-actions">
+          <button type="submit" class="primary-button">
+            {{ editingId ? 'Зберегти ВП' : 'Додати ВП' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <div class="ui-state error" *ngIf="errorMessage && !loading">
     <span class="ui-state-icon">⚠</span>
@@ -104,14 +204,18 @@
     </div>
   </div>
 
-  <section class="positions-grid" *ngIf="!loading && !errorMessage && ownItems.length > 0">
-    <article class="position-card ui-surface" *ngFor="let item of ownItems">
+  <section class="positions-grid" *ngIf="!loading && !errorMessage && filteredOwnItems.length > 0">
+    <article
+      class="position-card ui-surface"
+      *ngFor="let item of filteredOwnItems"
+      (click)="openDetails(item)"
+    >
       <div class="card-status-row">
         <span class="status-label" [class]="getReadinessClass(item.readinessStatus)">
           <span class="status-dot" [class]="getReadinessClass(item.readinessStatus)"></span>
           {{ getReadinessLabel(item.readinessStatus) }}
         </span>
-        <span class="card-code">ВП</span>
+        <span class="card-code">{{ isAirAssetsPage ? 'ПОВІТРЯ' : isEwPage ? 'РЕБ' : 'ВП' }}</span>
       </div>
 
       <div class="card-title-row">
@@ -143,7 +247,9 @@
       <div class="position-metrics">
         <div>
           <span>Ротація</span>
-          <strong>{{ item.personnelRotationDate ? (item.personnelRotationDate | date:'dd.MM.yyyy') : '—' }}</strong>
+          <strong>{{
+            item.personnelRotationDate ? (item.personnelRotationDate | date: 'dd.MM.yyyy') : '—'
+          }}</strong>
         </div>
         <div>
           <span>Днів</span>
@@ -152,7 +258,10 @@
       </div>
 
       <div class="weapon-box" *ngIf="item.assignedWeapon; else noWeapon">
-        <div class="weapon-status" [class]="getWeaponReadinessClass(item.assignedWeapon.readinessStatus)">
+        <div
+          class="weapon-status"
+          [class]="getWeaponReadinessClass(item.assignedWeapon.readinessStatus)"
+        >
           {{ getWeaponReadinessLabel(item.assignedWeapon.readinessStatus) }}
         </div>
 
@@ -178,8 +287,8 @@
 
       <ng-template #noWeapon>
         <div class="weapon-empty">
-          <span>Озброєння</span>
-          <strong>Не призначене</strong>
+          <span>{{ isEwPage || isAirAssetsPage ? 'Засіб' : 'Озброєння' }}</span>
+          <strong>{{ isEwPage || isAirAssetsPage ? 'Не вказано' : 'Не призначене' }}</strong>
         </div>
       </ng-template>
 
@@ -188,11 +297,21 @@
       </div>
 
       <div class="card-actions">
-        <button type="button" class="ghost-button" *ngIf="item.canEdit" (click)="startEdit(item.id)">
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="item.canEdit"
+          (click)="$event.stopPropagation(); startEdit(item.id)"
+        >
           Редагувати
         </button>
 
-        <button type="button" class="danger-button" *ngIf="item.canEdit" (click)="remove(item.id)">
+        <button
+          type="button"
+          class="danger-button"
+          *ngIf="item.canEdit"
+          (click)="$event.stopPropagation(); remove(item.id)"
+        >
           Видалити
         </button>
       </div>
@@ -203,11 +322,7 @@
     <h2>ВП інших підрозділів</h2>
 
     <article class="foreign-group" *ngFor="let group of foreignGroups">
-      <button
-        type="button"
-        class="foreign-group-head"
-        (click)="toggleForeignGroup(group.unitId)"
-      >
+      <button type="button" class="foreign-group-head" (click)="toggleForeignGroup(group.unitId)">
         <span>{{ group.unitName }}</span>
         <strong>{{ group.items.length }}</strong>
         <b>{{ isForeignGroupOpen(group.unitId) ? '−' : '+' }}</b>
@@ -235,9 +350,109 @@
     <small>Додайте першу вогневу позицію або оновіть сторінку.</small>
   </div>
 
-  <div class="ui-state" *ngIf="!loading && !errorMessage && items.length > 0 && ownItems.length === 0">
+  <div
+    class="ui-state"
+    *ngIf="!loading && !errorMessage && items.length > 0 && ownItems.length === 0"
+  >
     <span class="ui-state-icon">◌</span>
     <strong>Немає ВП у вашому підрозділі</strong>
     <small>Доступні позиції інших підрозділів винесені нижче окремими групами.</small>
+  </div>
+
+  <div
+    class="ui-state"
+    *ngIf="!loading && !errorMessage && ownItems.length > 0 && filteredOwnItems.length === 0"
+  >
+    <span class="ui-state-icon">◌</span>
+    <strong>За фільтром немає ВП</strong>
+    <small>Скиньте фільтр або оберіть інший показник.</small>
+    <button type="button" class="ghost-button" (click)="clearFilter()">Показати всі</button>
+  </div>
+  <div class="fp-detail-backdrop" *ngIf="detailsPosition as detail" (click)="closeDetails()">
+    <section
+      class="fp-detail-window"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <header class="fp-detail-head">
+        <div>
+          <span>Вогнева позиція</span>
+          <h2>{{ detail.name }}</h2>
+        </div>
+        <div class="fp-detail-actions">
+          <span class="status-label" [class]="getReadinessClass(detail.readinessStatus)">
+            <span class="status-dot" [class]="getReadinessClass(detail.readinessStatus)"></span>
+            {{ getReadinessLabel(detail.readinessStatus) }}
+          </span>
+          <button
+            type="button"
+            class="ghost-button"
+            *ngIf="detail.canEdit"
+            (click)="startEdit(detail.id); closeDetails()"
+          >
+            Редагувати
+          </button>
+          <button type="button" class="ghost-button" (click)="closeDetails()">×</button>
+        </div>
+      </header>
+
+      <main class="fp-detail-grid">
+        <section>
+          <h3>Підрозділ</h3>
+          <strong>{{ detail.unit?.name || '—' }}</strong>
+          <span>{{ detail.ammoDepot?.name || 'Локальний БК не призначено' }}</span>
+        </section>
+
+        <section>
+          <h3>Тип озброєння</h3>
+          <strong>{{ detail.assignedWeapon?.weaponModel?.name || '—' }}</strong>
+          <span>{{
+            detail.assignedWeapon?.callsign ||
+              detail.assignedWeapon?.serialNumber ||
+              'СГ не призначена'
+          }}</span>
+        </section>
+
+        <section>
+          <h3>Координати</h3>
+          <strong>{{ detail.lat }}, {{ detail.lng }}</strong>
+          <span>{{ formatMgrs(detail.mgrs) }}</span>
+        </section>
+
+        <section>
+          <h3>Сектор стрільби</h3>
+          <strong
+            >ОН {{ detail.mainDirectionUnits || '—' }} /
+            {{ detail.mainDirectionDegrees || '—' }}°</strong
+          >
+          <span
+            >Ліворуч {{ detail.traverseLeftUnits || '—' }} /
+            {{ detail.traverseLeftDegrees || '—' }}° · Праворуч
+            {{ detail.traverseRightUnits || '—' }} / {{ detail.traverseRightDegrees || '—' }}°</span
+          >
+        </section>
+
+        <section>
+          <h3>Ротація</h3>
+          <strong>{{
+            detail.personnelRotationDate ? (detail.personnelRotationDate | date: 'dd.MM.yyyy') : '—'
+          }}</strong>
+          <span>{{ getRotationDays(detail.personnelRotationDate) }}</span>
+        </section>
+
+        <section>
+          <h3>Виконані ВГЗ</h3>
+          <strong>{{ detail.completedVgzCount || 0 }}</strong>
+          <span>зафіксовано по позиції</span>
+        </section>
+
+        <section class="fp-detail-wide">
+          <h3>Стан готовності</h3>
+          <strong>{{ detail.notReadyReason || 'Обмеження відсутні' }}</strong>
+          <span>Повітряна обстановка: {{ detail.airSituationStatus || '—' }}</span>
+        </section>
+      </main>
+    </section>
   </div>
 </div>

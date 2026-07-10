@@ -2,19 +2,17 @@
   <header class="page-header">
     <div>
       <h1>ПАСи / склади</h1>
-      <p>ПАСи</p>
+      <p>Дерево складів, залишки та рухи по вибраному складу.</p>
     </div>
 
     <button type="button" class="ghost-button" (click)="load()">Оновити</button>
   </header>
 
-
-
   <section class="editor-card">
     <form class="depot-form" (ngSubmit)="create()">
       <input name="name" [(ngModel)]="form.name" placeholder="Назва складу" />
 
-      <select name="depotType" [(ngModel)]="form.depotType">
+      <select name="depotType" [(ngModel)]="form.depotType" (ngModelChange)="onDepotTypeChange()">
         <option value="main_pas">Головний ПАС</option>
         <option value="division_pas">ПАС дивізіону</option>
         <option value="battery_pas">ПАС батареї</option>
@@ -23,16 +21,12 @@
 
       <select name="unitId" [(ngModel)]="form.unitId">
         <option value="">Без підрозділу</option>
-        <option *ngFor="let unit of units" [value]="unit.id">
-          {{ unit.name }} · {{ unit.type }}
-        </option>
+        <option *ngFor="let unit of availableUnits" [value]="unit.id">{{ unit.name }} · {{ unit.type }}</option>
       </select>
 
       <select name="parentId" [(ngModel)]="form.parentId">
         <option value="">Без батьківського складу</option>
-        <option *ngFor="let depot of items" [value]="depot.id">
-          {{ depot.name }}
-        </option>
+        <option *ngFor="let depot of ammoDepots" [value]="depot.id">{{ depot.name }}</option>
       </select>
 
       <button type="submit" class="primary-button">Додати</button>
@@ -60,34 +54,105 @@
     <p>Додайте головний ПАС або склад підрозділу.</p>
   </section>
 
- <section class="group-list" *ngIf="!loading && !errorMessage && items.length > 0">
-  <section class="unit-group" *ngFor="let group of getGroupedDepots()">
-    <h2>{{ group.title }}</h2>
+  <section class="warehouse-layout" *ngIf="!loading && !errorMessage && ammoDepots.length > 0">
+    <aside class="depot-tree-panel">
+      <header>
+        <div>
+          <span>Дерево складів</span>
+          <h2>Склади</h2>
+        </div>
+      </header>
 
-    <div class="depots-grid">
-      <article class="depot-card" *ngFor="let item of group.items">
-      <div class="card-top">
-        <span class="type-badge">{{ getDepotTypeLabel(item.depotType) }}</span>
-        <button type="button" class="icon-danger" title="Архівувати" (click)="remove(item.id)">
-  ⊘
-</button>
+      <ng-template #depotNode let-node>
+        <div
+          class="depot-tree-row"
+          role="button"
+          tabindex="0"
+          [class.active]="activeDepotId === node.depot.id"
+          [style.--level]="node.level"
+          (click)="selectDepot(node.depot)"
+          (keydown.enter)="selectDepot(node.depot)"
+        >
+          <span class="tree-indent"></span>
+          <button
+            type="button"
+            class="tree-toggle"
+            *ngIf="node.children.length > 0"
+            (click)="toggleDepot(node.depot.id, $event)"
+            [attr.aria-label]="isDepotExpanded(node.depot.id) ? 'Згорнути склад' : 'Розгорнути склад'"
+          >
+            {{ isDepotExpanded(node.depot.id) ? '▾' : '▸' }}
+          </button>
+          <span class="tree-toggle-spacer" *ngIf="node.children.length === 0"></span>
+          <span class="tree-main">
+            <strong>{{ node.depot.name }}</strong>
+            <small>{{ getDepotTypeLabel(node.depot.depotType) }} · {{ getDepotUnitName(node.depot.unitId) }}</small>
+          </span>
+        </div>
+
+        <ng-container *ngIf="node.children.length > 0 && isDepotExpanded(node.depot.id)">
+          <ng-container
+            *ngFor="let child of node.children"
+            [ngTemplateOutlet]="depotNode"
+            [ngTemplateOutletContext]="{ $implicit: child }"
+          ></ng-container>
+        </ng-container>
+      </ng-template>
+
+      <ng-container *ngFor="let node of depotTree">
+        <ng-container [ngTemplateOutlet]="depotNode" [ngTemplateOutletContext]="{ $implicit: node }"></ng-container>
+      </ng-container>
+    </aside>
+
+    <section class="depot-details-panel">
+      <article class="selected-depot-card">
+        <header>
+          <div>
+            <span>{{ getDepotTypeLabel(selectedDepot?.depotType || '') }}</span>
+            <h2>{{ selectedDepot?.name || 'Склад не обрано' }}</h2>
+          </div>
+          <button type="button" class="icon-danger" *ngIf="selectedDepot" title="Архівувати" (click)="remove(selectedDepot.id)">×</button>
+        </header>
+
+        <div class="depot-meta">
+          <p><span>Підрозділ</span><strong>{{ getDepotUnitName(selectedDepot?.unitId) }}</strong></p>
+          <p><span>Батьківський склад</span><strong>{{ getDepotParentName(selectedDepot?.parentId) }}</strong></p>
+        </div>
+      </article>
+
+      <div class="stock-grid">
+        <section>
+          <h3>Снаряди</h3>
+          <div class="stock-row" *ngFor="let item of selectedShells"><span>{{ item.marking }}</span><b>{{ item.quantity }}</b></div>
+          <p class="empty" *ngIf="selectedShells.length === 0">Немає залишків</p>
+        </section>
+        <section>
+          <h3>Заряди</h3>
+          <div class="stock-row" *ngFor="let item of selectedCharges"><span>{{ item.marking }}</span><b>{{ item.quantity }}</b></div>
+          <p class="empty" *ngIf="selectedCharges.length === 0">Немає залишків</p>
+        </section>
+        <section>
+          <h3>Підривачі</h3>
+          <div class="stock-row" *ngFor="let item of selectedFuzes"><span>{{ item.marking }}</span><b>{{ item.quantity }}</b></div>
+          <p class="empty" *ngIf="selectedFuzes.length === 0">Немає залишків</p>
+        </section>
+        <section>
+          <h3>Капсулі</h3>
+          <div class="stock-row" *ngFor="let item of selectedPrimers"><span>{{ item.marking }}</span><b>{{ item.quantity }}</b></div>
+          <p class="empty" *ngIf="selectedPrimers.length === 0">Немає залишків</p>
+        </section>
       </div>
 
-      <h2>{{ item.name }}</h2>
-
-      <div class="compact-info">
-        <p>
-          <span>Підрозділ</span>
-          <strong>{{ item.unit?.name || '—' }}</strong>
-        </p>
-
-        <p>
-          <span>Батьківський склад</span>
-          <strong>{{ item.parent?.name || '—' }}</strong>
-        </p>
-      </div>
-   
-    </article>
-    </div>
+      <section class="movements-panel">
+        <header><h3>Рухи складу</h3></header>
+        <div class="movement-row" *ngFor="let movement of selectedMovements">
+          <span>{{ getMovementDirection(movement) }}</span>
+          <strong>{{ movement.itemType }}</strong>
+          <b>{{ movement.quantity }}</b>
+          <small>{{ movement.comment || movement.movementType }}</small>
+        </div>
+        <p class="empty" *ngIf="selectedMovements.length === 0">Рухів по складу немає</p>
+      </section>
+    </section>
   </section>
-</section>
+</div>

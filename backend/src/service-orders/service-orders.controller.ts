@@ -21,11 +21,15 @@ import {
   ServiceOrderMapResult,
   ServiceOrdersService,
 } from './service-orders.service';
+import { ReconCoreIntegrationService } from '../modules/recon/services/recon-core-integration.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('service-orders')
 export class ServiceOrdersController {
-  constructor(private readonly service: ServiceOrdersService) {}
+  constructor(
+    private readonly service: ServiceOrdersService,
+    private readonly reconCore: ReconCoreIntegrationService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() user: AuthUser): Promise<ServiceOrder[]> {
@@ -52,6 +56,18 @@ export class ServiceOrdersController {
     @Body() body: CreateServiceOrderDto,
   ): Promise<ServiceOrder> {
     return this.service.create(body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post('puar/:id/accept')
+  async acceptPuarProposal(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<ServiceOrder> {
+    const proposal = await this.reconCore.getPuarProposalForCore(id);
+    const order = await this.service.createFromReconPuar(proposal, user);
+    await this.reconCore.markPuarAccepted(id, order.id);
+    return order;
   }
 
   @UseGuards(WriteAccessGuard)
@@ -97,6 +113,22 @@ export class ServiceOrdersController {
   ) {
     return this.service.selectPosition(id, body, user);
   }
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/select-air-asset')
+selectAirAsset(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+  @Body()
+  body: {
+    airAssetPositionId: string;
+    droneModelId: string;
+    warheadTypeId: string;
+  },
+): Promise<ServiceOrder> {
+  return this.service.selectAirAsset(id, body, user);
+}
+
 
   @UseGuards(WriteAccessGuard)
   @Post(':id/send')

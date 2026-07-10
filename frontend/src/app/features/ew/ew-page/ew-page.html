@@ -1,0 +1,176 @@
+<div class="special-assets-page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">РЕБ</span>
+      <h1>Позиції РЕБ</h1>
+      <p>Позиції, позивні, станції, діапазони частот, радіус або сектор дії.</p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="ghost-button" (click)="load()">Оновити</button>
+      <button type="button" class="primary-button" (click)="openCreate()">Додати РЕБ</button>
+    </div>
+  </header>
+
+  <section class="stats-grid">
+    <article>
+      <span>Усього</span>
+      <strong>{{ items.length }}</strong>
+    </article>
+    <article>
+      <span>БГ</span>
+      <strong>{{ readyCount }}</strong>
+    </article>
+    <article>
+      <span>НЕ БГ</span>
+      <strong>{{ notReadyCount }}</strong>
+    </article>
+  </section>
+
+  <section class="ui-state-block ui-state-error" *ngIf="errorMessage && !formModalOpen">
+    <span class="ui-state-icon">!</span>
+    <h2>Помилка</h2>
+    <p>{{ errorMessage }}</p>
+  </section>
+
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження РЕБ">
+    <article class="ui-skeleton-card" *ngFor="let row of [1, 2, 3]"><span></span><strong></strong><small></small></article>
+  </div>
+
+  <section class="ui-state-block" *ngIf="!loading && !errorMessage && items.length === 0">
+    <span class="ui-state-icon">∅</span>
+    <h2>Позиції РЕБ ще не додані</h2>
+    <p>Додайте позицію, станцію та діапазони частот.</p>
+  </section>
+
+  <section class="asset-grid" *ngIf="!loading && items.length > 0">
+    <article class="asset-card" *ngFor="let item of items">
+      <div class="card-top">
+        <span class="type-badge">{{ item.stationName }}</span>
+        <span class="status-pill" [class.ready]="item.readinessStatus === 'ready'" [class.danger]="item.readinessStatus === 'not_ready'">
+          {{ getReadinessLabel(item.readinessStatus) }}
+        </span>
+      </div>
+
+      <h2>{{ item.name }}</h2>
+      <p class="callsign">{{ item.callsign }}</p>
+
+      <div class="compact-info">
+        <p><span>Підрозділ</span><strong>{{ item.unit?.name || '—' }}</strong></p>
+        <p><span>Координати</span><strong>{{ item.mgrs || (item.lat + ', ' + item.lng) }}</strong></p>
+        <p><span>Дія</span><strong>{{ getEffectModeLabel(item.effectMode) }} · {{ item.effectMode === 'radius' ? ((item.radiusM || 0) + ' м') : 'сектор' }}</strong></p>
+        <p><span>Частоти</span><strong>{{ formatFrequencyRanges(item.frequencyRanges) }}</strong></p>
+        <p><span>Ротація</span><strong>{{ item.personnelRotationDate || '—' }}</strong></p>
+      </div>
+
+      <div class="card-actions">
+        <button type="button" class="ghost-button" (click)="openDetails(item)">Деталі</button>
+        <button type="button" class="ghost-button" (click)="startEdit(item)">Редагувати</button>
+        <button type="button" class="icon-danger" title="Видалити" (click)="remove(item.id)">×</button>
+      </div>
+    </article>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="formModalOpen">
+    <form class="asset-modal" (ngSubmit)="save()">
+      <header>
+        <div>
+          <span class="eyebrow">{{ editingId ? 'Редагування' : 'Створення' }}</span>
+          <h2>{{ editingId ? 'Редагувати позицію РЕБ' : 'Нова позиція РЕБ' }}</h2>
+        </div>
+        <button type="button" class="icon-button" (click)="cancelEdit()">×</button>
+      </header>
+
+      <p class="form-error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="form-grid">
+        <label>
+          <span>Назва позиції</span>
+          <input name="name" [(ngModel)]="form.name" placeholder="Напр. РЕБ-1 / північна позиція" />
+        </label>
+        <label><span>Позивний</span><input name="callsign" [(ngModel)]="form.callsign" /></label>
+        <label><span>Станція РЕБ</span><input name="stationName" [(ngModel)]="form.stationName" placeholder="Буковель / Нота / інша" /></label>
+        <label>
+          <span>Підрозділ</span>
+          <select name="unitId" [(ngModel)]="form.unitId">
+            <option value="">Оберіть підрозділ</option>
+            <option *ngFor="let unit of units" [value]="unit.id">{{ unit.name }} · {{ unit.type }}</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="mode-row">
+        <label><input type="radio" name="coordinateMode" value="decimal" [(ngModel)]="form.coordinateMode" /> Lat/Lng</label>
+        <label><input type="radio" name="coordinateMode" value="mgrs" [(ngModel)]="form.coordinateMode" /> MGRS</label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.coordinateMode === 'decimal'">
+        <label><span>Lat</span><input name="lat" type="number" step="0.000001" [(ngModel)]="form.lat" /></label>
+        <label><span>Lng</span><input name="lng" type="number" step="0.000001" [(ngModel)]="form.lng" /></label>
+        <label><span>MGRS, якщо є</span><input name="mgrsDecimal" [(ngModel)]="form.mgrs" /></label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.coordinateMode === 'mgrs'">
+        <label><span>MGRS</span><input name="mgrs" [(ngModel)]="form.mgrs" placeholder="36U XB 11111 22222" /></label>
+      </div>
+
+      <div class="section-title">Частотні діапазони</div>
+      <div class="frequency-list">
+        <div class="frequency-row" *ngFor="let range of form.frequencyRanges; let i = index">
+          <input [name]="'freqLabel' + i" [(ngModel)]="range.label" placeholder="Назва / канал" />
+          <input [name]="'freqFrom' + i" type="number" step="0.001" [(ngModel)]="range.frequencyFromMhz" placeholder="від, МГц" />
+          <input [name]="'freqTo' + i" type="number" step="0.001" [(ngModel)]="range.frequencyToMhz" placeholder="до, МГц" />
+          <button type="button" class="icon-danger" (click)="removeFrequencyRange(i)">×</button>
+        </div>
+        <button type="button" class="ghost-button" (click)="addFrequencyRange()">+ Додати діапазон</button>
+      </div>
+
+      <div class="mode-row">
+        <label><input type="radio" name="effectMode" value="radius" [(ngModel)]="form.effectMode" /> Радіус</label>
+        <label><input type="radio" name="effectMode" value="sector" [(ngModel)]="form.effectMode" /> Сектор</label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.effectMode === 'radius'">
+        <label><span>Радіус дії, м</span><input name="radiusM" type="number" [(ngModel)]="form.radiusM" /></label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.effectMode === 'sector'">
+        <label><span>ОН, поділки</span><input name="mainDirectionUnits" type="number" [(ngModel)]="form.mainDirectionUnits" /></label>
+        <label><span>Доворот ліворуч</span><input name="traverseLeftUnits" type="number" [(ngModel)]="form.traverseLeftUnits" /></label>
+        <label><span>Доворот праворуч</span><input name="traverseRightUnits" type="number" [(ngModel)]="form.traverseRightUnits" /></label>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>Готовність</span>
+          <select name="readinessStatus" [(ngModel)]="form.readinessStatus">
+            <option value="ready">БГ</option>
+            <option value="not_ready">Не БГ</option>
+          </select>
+        </label>
+        <label *ngIf="form.readinessStatus === 'not_ready'"><span>Причина</span><input name="notReadyReason" [(ngModel)]="form.notReadyReason" /></label>
+        <label><span>Дата ротації</span><input name="personnelRotationDate" type="date" [(ngModel)]="form.personnelRotationDate" /></label>
+      </div>
+
+      <label class="full-label"><span>Примітка</span><textarea name="note" [(ngModel)]="form.note"></textarea></label>
+
+      <footer>
+        <button type="button" class="ghost-button" (click)="cancelEdit()">Скасувати</button>
+        <button type="submit" class="primary-button" [disabled]="submitting">{{ submitting ? 'Збереження...' : 'Зберегти' }}</button>
+      </footer>
+    </form>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="detailsItem">
+    <article class="asset-modal compact-modal">
+      <header><h2>{{ detailsItem.name }}</h2><button type="button" class="icon-button" (click)="closeDetails()">×</button></header>
+      <div class="compact-info">
+        <p><span>Позивний</span><strong>{{ detailsItem.callsign }}</strong></p>
+        <p><span>Станція</span><strong>{{ detailsItem.stationName }}</strong></p>
+        <p><span>Частоти</span><strong>{{ formatFrequencyRanges(detailsItem.frequencyRanges) }}</strong></p>
+        <p><span>Статус</span><strong>{{ getReadinessLabel(detailsItem.readinessStatus) }}</strong></p>
+        <p><span>Примітка</span><strong>{{ detailsItem.note || '—' }}</strong></p>
+      </div>
+    </article>
+  </section>
+</div>

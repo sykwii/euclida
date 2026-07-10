@@ -7,4 +7,6 @@ declare global {
 export const API_URL =
   typeof window !== 'undefined' && window.__EUCLIDA_API_URL__
     ? window.__EUCLIDA_API_URL__
-    : 'http://localhost:3000';
+    : typeof window !== 'undefined'
+      ? `${window.location.protocol}//${window.location.hostname}:3000`
+      : 'http://localhost:3000';

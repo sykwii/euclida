@@ -1,0 +1,266 @@
+.special-assets-page {
+  height: calc(100dvh - 48px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 6px;
+}
+
+.page-header,
+.card-top,
+.card-actions,
+.asset-modal header,
+.asset-modal footer,
+.header-actions,
+.mode-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-header {
+  justify-content: space-between;
+}
+
+.page-header h1,
+.asset-card h2,
+.asset-modal h2 {
+  margin: 0;
+}
+
+.page-header p,
+.callsign,
+.eyebrow {
+  color: #94a3b8;
+}
+
+.eyebrow {
+  display: inline-flex;
+  color: #2ee6d6;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.stats-grid,
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.stats-grid article,
+.asset-card,
+.asset-modal {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+.stats-grid article {
+  padding: 16px;
+}
+
+.stats-grid span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.stats-grid strong {
+  color: #e5fbff;
+  font-size: 28px;
+}
+
+.asset-card {
+  padding: 16px;
+}
+
+.card-top,
+.asset-modal header,
+.asset-modal footer,
+.page-header {
+  justify-content: space-between;
+}
+
+.type-badge,
+.status-pill {
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.type-badge {
+  color: #dffcf7;
+  background: rgba(46, 230, 214, 0.1);
+  border: 1px solid rgba(46, 230, 214, 0.18);
+}
+
+.status-pill.ready {
+  color: #a7f3d0;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.24);
+}
+
+.status-pill.danger {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.24);
+}
+
+.compact-info {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.compact-info p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.compact-info span {
+  color: #94a3b8;
+}
+
+.compact-info strong {
+  color: #f8fafc;
+  text-align: right;
+}
+
+.card-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.asset-modal {
+  width: min(940px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  padding: 20px;
+}
+
+.compact-modal {
+  width: min(620px, 100%);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+label,
+.full-label {
+  display: grid;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-width: 0;
+  color: #e5eef8;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.mode-row {
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
+.mode-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-row input {
+  width: auto;
+}
+
+.section-title {
+  margin-top: 18px;
+  color: #e5fbff;
+  font-weight: 800;
+}
+
+.frequency-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.frequency-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr auto;
+  gap: 10px;
+}
+
+.form-error {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.icon-button,
+.icon-danger {
+  border: 0;
+  cursor: pointer;
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+}
+
+.icon-danger {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+@media (max-width: 760px) {
+  .page-header,
+  .header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .frequency-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,221 +1,332 @@
-<div class="app-shell" [class.sidebar-collapsed]="sidebarCollapsed" *ngIf="!isLoginPage">
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <div class="logo-mark">Є</div>
-      <div class="logo-text" *ngIf="!sidebarCollapsed">Євкліда</div>
-
-      <button type="button" class="collapse-button" (click)="toggleSidebar()" title="Згорнути меню">
-        {{ sidebarCollapsed ? '›' : '‹' }}
+<div class="core2-shell" [class.sidebar-collapsed]="sidebarCollapsed" *ngIf="!isLoginPage">
+  <aside class="core2-sidebar" aria-label="Головна навігація">
+    <header class="core2-brand">
+      <div class="core2-logo" aria-hidden="true">Є</div>
+      <div class="core2-brand-text">
+        <strong>Євкліда</strong>
+        <span>Core-2 - C2</span>
+      </div>
+      <button
+        type="button"
+        class="core2-sidebar-toggle"
+        (click)="toggleSidebar()"
+        [attr.aria-label]="sidebarStateLabel"
+        [title]="sidebarStateLabel"
+      >
+        {{ sidebarCollapsed ? '>' : '<' }}
       </button>
-    </div>
+    </header>
 
-    <nav>
-      <a class="single-link focus-link" routerLink="/home" routerLinkActive="active">
-        <span class="nav-icon">⌂</span>
-        <span *ngIf="!sidebarCollapsed">Головна</span>
-        <b class="nav-badge danger" *ngIf="!sidebarCollapsed && activeThreatsCount > 0">{{ activeThreatsCount }}</b>
-      </a>
-
-      <a class="single-link" routerLink="/map" routerLinkActive="active">
-        <span class="nav-icon">⌖</span>
-        <span *ngIf="!sidebarCollapsed">Карта</span>
-        <b class="nav-badge danger" *ngIf="!sidebarCollapsed && activeThreatsCount > 0">
-          {{ activeThreatsCount }}
-        </b>
-      </a>
-
-      <div class="nav-group">
-        <button type="button" class="group-button" (click)="toggleGroup('operations')">
-          <span class="nav-icon">●</span>
-          <span *ngIf="!sidebarCollapsed">Робота</span>
-          <span class="chevron" *ngIf="!sidebarCollapsed">
-            {{ openedGroup === 'operations' ? '−' : '+' }}
-          </span>
+    <nav class="core2-nav">
+      <section class="core2-nav-group">
+        <button
+          type="button"
+          class="core2-nav-group-button"
+          aria-label="Оперативна обстановка"
+          (click)="toggleGroup('situation')"
+          [attr.aria-expanded]="isGroupOpen('situation')"
+          title="Оперативна обстановка"
+        >
+          <span aria-hidden="true">⌂</span>
+          <b>Оперативна обстановка</b>
+          <i aria-hidden="true">{{ isGroupOpen('situation') ? '−' : '+' }}</i>
         </button>
 
-        <div class="group-items" *ngIf="!sidebarCollapsed && openedGroup === 'operations'">
-          <a routerLink="/fire-positions" routerLinkActive="active">Вогневі позиції</a>
-          <a routerLink="/weapon-systems" routerLinkActive="active">Озброєння</a>
-
-          <a routerLink="/service-orders" routerLinkActive="active">
-            <span>Вогневі завдання</span>
-            <b class="nav-badge" *ngIf="actionOrdersCount > 0">{{ actionOrdersCount }}</b>
+        <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('situation')">
+          <a
+            routerLink="/home"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+            title="Головна"
+          >
+            <span aria-hidden="true">⌂</span>
+            <b>Головна</b>
           </a>
-
-          <a routerLink="/air-threats" routerLinkActive="active">
-            <span>Мітки загроз</span>
-            <b class="nav-badge danger" *ngIf="activeThreatsCount > 0">{{ activeThreatsCount }}</b>
+          <a routerLink="/map" routerLinkActive="active" title="Карта">
+            <span aria-hidden="true">⌖</span>
+            <b>Карта</b>
           </a>
-
-          <a routerLink="/analytics" routerLinkActive="active">Аналітика</a>
+          <a routerLink="/recon" routerLinkActive="active" title="Розвідка">
+            <span aria-hidden="true">R</span>
+            <b>Розвідка</b>
+          </a>
+          <a routerLink="/notifications" routerLinkActive="active" title="Центр повідомлень">
+            <span aria-hidden="true">◇</span>
+            <b>Центр повідомлень</b>
+          </a>
         </div>
-      </div>
+      </section>
 
-      <div class="nav-group" *ngIf="canManageData">
-        <button type="button" class="group-button" (click)="toggleGroup('logistics')">
-          <span class="nav-icon">◆</span>
-          <span *ngIf="!sidebarCollapsed">Логістика</span>
-          <span class="chevron" *ngIf="!sidebarCollapsed">
-            {{ openedGroup === 'logistics' ? '−' : '+' }}
-          </span>
+      <section class="core2-nav-group">
+        <button
+          type="button"
+          class="core2-nav-group-button"
+          aria-label="Вогневі завдання"
+          (click)="toggleGroup('missions')"
+          [attr.aria-expanded]="isGroupOpen('missions')"
+          title="Вогневі завдання"
+        >
+          <span aria-hidden="true">◆</span>
+          <b>Вогневі завдання</b>
+          <i aria-hidden="true">{{ isGroupOpen('missions') ? '−' : '+' }}</i>
         </button>
 
-        <div class="group-items" *ngIf="!sidebarCollapsed && openedGroup === 'logistics'">
-          <a routerLink="/depots" routerLinkActive="active">Склади</a>
-          <a routerLink="/stock" routerLinkActive="active">Залишки</a>
-          <a routerLink="/stock-movements" routerLinkActive="active">Передачі</a>
+        <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('missions')">
+          <a
+            routerLink="/service-orders"
+            routerLinkActive="active"
+            title="ВГЗ"
+            *ngIf="!isEwOperator"
+          >
+            <span aria-hidden="true">◆</span>
+            <b>ВГЗ</b>
+            <em *ngIf="actionOrdersCount > 0">{{ actionOrdersCount }}</em>
+          </a>
+          <a
+            routerLink="/fire-positions"
+            routerLinkActive="active"
+            title="Вогневі позиції"
+            *ngIf="!isEwOperator"
+          >
+            <span aria-hidden="true">◆</span>
+            <b>Вогневі позиції</b>
+          </a>
+          <a
+            routerLink="/weapon-systems"
+            routerLinkActive="active"
+            title="Озброєння"
+            *ngIf="!isEwOperator"
+          >
+            <span aria-hidden="true">◆</span>
+            <b>Озброєння</b>
+          </a>
+          <a routerLink="/air-threats" routerLinkActive="active" title="Повітряні загрози">
+            <span aria-hidden="true">◆</span>
+            <b>Загрози</b>
+            <em class="critical" *ngIf="activeThreatsCount > 0">{{ activeThreatsCount }}</em>
+          </a>
+          <a routerLink="/ew" routerLinkActive="active" title="РЕБ">
+            <span aria-hidden="true">◆</span>
+            <b>РЕБ</b>
+          </a>
+          <a routerLink="/air-assets" routerLinkActive="active" title="Повітряні засоби">
+            <span aria-hidden="true">◆</span>
+            <b>Повітряні засоби</b>
+          </a>
+          <a
+            routerLink="/analytics"
+            routerLinkActive="active"
+            title="Аналітика"
+            *ngIf="!isEwOperator"
+          >
+            <span aria-hidden="true">◆</span>
+            <b>Аналітика</b>
+          </a>
         </div>
-      </div>
+      </section>
 
-      <div class="nav-group" *ngIf="canManageData">
-        <button type="button" class="group-button" (click)="toggleGroup('reference')">
-          <span class="nav-icon">▣</span>
-          <span *ngIf="!sidebarCollapsed">Дані</span>
-          <span class="chevron" *ngIf="!sidebarCollapsed">
-            {{ openedGroup === 'reference' ? '−' : '+' }}
-          </span>
+      <section class="core2-nav-group" *ngIf="canManageData">
+        <button
+          type="button"
+          class="core2-nav-group-button"
+          aria-label="Логістика"
+          (click)="toggleGroup('logistics')"
+          [attr.aria-expanded]="isGroupOpen('logistics')"
+          title="Логістика"
+        >
+          <span aria-hidden="true">▣</span>
+          <b>Логістика</b>
+          <i aria-hidden="true">{{ isGroupOpen('logistics') ? '−' : '+' }}</i>
         </button>
 
-        <div class="group-items" *ngIf="!sidebarCollapsed && openedGroup === 'reference'">
-          <a routerLink="/units" routerLinkActive="active">Підрозділи</a>
-          <a routerLink="/weapon-models" routerLinkActive="active">Моделі озброєння</a>
-          <a routerLink="/shells" routerLinkActive="active">Снаряди</a>
-          <a routerLink="/charges" routerLinkActive="active">Заряди</a>
-          <a routerLink="/fuzes" routerLinkActive="active">Підривники</a>
-          <a routerLink="/primers" routerLinkActive="active">Капсулі</a>
-          <a routerLink="/shell-compatible-charges" routerLinkActive="active">
-            Сумісність снарядів/зарядів
+        <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('logistics')">
+          <a routerLink="/depots" routerLinkActive="active" title="Склади">
+            <span aria-hidden="true">▣</span>
+            <b>Склади</b>
           </a>
-          <a routerLink="/shell-compatible-fuzes" routerLinkActive="active">
-            Сумісність снарядів/підривників
+          <a routerLink="/stock" routerLinkActive="active" title="Залишки БК">
+            <span aria-hidden="true">▣</span>
+            <b>Залишки БК</b>
           </a>
-          <a routerLink="/zones" routerLinkActive="active">Зони</a>
+          <a routerLink="/stock-movements" routerLinkActive="active" title="Передача БК">
+            <span aria-hidden="true">▣</span>
+            <b>Передача БК</b>
+          </a>
+          <a routerLink="/drone-logistics" routerLinkActive="active" title="Склади БпЛА">
+            <span aria-hidden="true">AIR</span>
+            <b>Склади БпЛА</b>
+          </a>
+          <a routerLink="/planned-trips" routerLinkActive="active" title="Планові поїздки">
+            <span aria-hidden="true">⌁</span>
+            <b>Планові поїздки</b>
+          </a>
         </div>
-      </div>
+      </section>
 
-      <div class="nav-group" *ngIf="canManageData || isAdmin">
-        <button type="button" class="group-button" (click)="toggleGroup('settings')">
-          <span class="nav-icon">⚙</span>
-          <span *ngIf="!sidebarCollapsed">Налаштування</span>
-          <span class="chevron" *ngIf="!sidebarCollapsed">
-            {{ openedGroup === 'settings' ? '−' : '+' }}
-          </span>
+      <section class="core2-nav-group" *ngIf="canManageData">
+        <button
+          type="button"
+          class="core2-nav-group-button"
+          aria-label="Довідники"
+          (click)="toggleGroup('reference')"
+          [attr.aria-expanded]="isGroupOpen('reference')"
+          title="Довідники"
+        >
+          <span aria-hidden="true">□</span>
+          <b>Довідники</b>
+          <i aria-hidden="true">{{ isGroupOpen('reference') ? '−' : '+' }}</i>
         </button>
 
-        <div class="group-items" *ngIf="!sidebarCollapsed && openedGroup === 'settings'">
-          <a routerLink="/settings" routerLinkActive="active">Карта</a>
-          <a *ngIf="isAdmin" routerLink="/users" routerLinkActive="active">Персонал</a>
-          <a *ngIf="isAdmin" routerLink="/audit" routerLinkActive="active">Аудит</a>
+        <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('reference')">
+          <a routerLink="/units" routerLinkActive="active" title="Підрозділи">
+            <span aria-hidden="true">□</span>
+            <b>Підрозділи</b>
+          </a>
+          <a routerLink="/shells" routerLinkActive="active" title="БК">
+            <span aria-hidden="true">□</span>
+            <b>БК</b>
+          </a>
+          <a routerLink="/weapon-models" routerLinkActive="active" title="Типи озброєння">
+            <span aria-hidden="true">□</span>
+            <b>Типи озброєння</b>
+          </a>
         </div>
-      </div>
+      </section>
+
+      <section class="core2-nav-group" *ngIf="canManageData || isAdmin">
+        <button
+          type="button"
+          class="core2-nav-group-button"
+          aria-label="Система"
+          (click)="toggleGroup('system')"
+          [attr.aria-expanded]="isGroupOpen('system')"
+          title="Система"
+        >
+          <span aria-hidden="true">⚙</span>
+          <b>Система</b>
+          <i aria-hidden="true">{{ isGroupOpen('system') ? '−' : '+' }}</i>
+        </button>
+
+        <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('system')">
+          <a
+            *ngIf="canManageData || isAdmin"
+            routerLink="/settings"
+            routerLinkActive="active"
+            title="Налаштування"
+          >
+            <span aria-hidden="true">⚙</span>
+            <b>Налаштування</b>
+          </a>
+          <a *ngIf="isAdmin" routerLink="/users" routerLinkActive="active" title="Користувачі">
+            <span aria-hidden="true">⚙</span>
+            <b>Користувачі</b>
+          </a>
+        </div>
+      </section>
     </nav>
 
-    <footer class="user-panel" *ngIf="!sidebarCollapsed">
-      <div>
-        <strong>{{ currentUser?.fullName || currentUser?.login || 'Користувач' }}</strong>
-        <span>{{ currentUser?.scope || '—' }} · {{ currentUser?.role || '—' }}</span>
+    <footer class="core2-user">
+      <div class="core2-user-id">
+        <strong>{{ currentUser?.fullName || currentUser?.login || 'Оператор' }}</strong>
+        <span>{{ currentUser?.scope || 'main' }} - {{ currentUser?.role || 'operator' }}</span>
       </div>
 
-      <div class="system-status realtime-card" [class.offline]="!realtimeConnected">
-        <div class="realtime-status-top">
-          <i></i>
-          <strong>{{ realtimeStatusLabel }}</strong>
-          <b>{{ realtimePulseLabel }}</b>
+      <div class="core2-live" [class.offline]="!realtimeConnected" [title]="realtimeStatusText">
+        <i aria-hidden="true"></i>
+        <div>
+          <b>{{ realtimeStatusLabel }}</b>
+          <span>{{ realtimeStatusText }}</span>
         </div>
-        <span>{{ realtimeStatusText }}</span>
-        <small>{{ realtimeLastEventLabel }}</small>
       </div>
 
-      <button type="button" class="logout-button" (click)="logout()">Вийти</button>
+      <button
+        type="button"
+        class="core2-logout"
+        aria-label="Вийти"
+        (click)="logout()"
+        title="Вийти"
+      >
+        Вийти
+      </button>
     </footer>
   </aside>
 
-  <main class="content">
-    <div class="top-status-bar" *ngIf="!isLoginPage">
-      <button
-        type="button"
-        class="command-trigger"
-        (click)="openCommandBar()"
-        title="Command Bar · Ctrl+K"
-      >
-        <span>🔍 Швидкий перехід</span>
-        <kbd>Ctrl</kbd><kbd>K</kbd>
-      </button>
-
-      <div class="top-realtime" [class.offline]="!realtimeConnected">
-        <i></i>
-        <strong>{{ realtimeStatusLabel }}</strong>
-        <span>{{ realtimeStatusText }}</span>
-      </div>
-    </div>
-
+  <main class="core2-main">
     <router-outlet></router-outlet>
   </main>
 
-  <nav class="mobile-bottom-nav">
-    <a routerLink="/home" routerLinkActive="active">⌂<span>Головна</span></a>
+  <nav class="core2-mobile-nav" aria-label="Мобільна навігація">
+    <a routerLink="/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
+      >⌂<span>Головна</span></a
+    >
     <a routerLink="/map" routerLinkActive="active">⌖<span>Карта</span></a>
-    <a routerLink="/service-orders" routerLinkActive="active">●<span>Вогневі завдання</span></a>
-    <a routerLink="/analytics" routerLinkActive="active">▣<span>Аналітика</span></a>
-    <a *ngIf="canManageData" routerLink="/stock" routerLinkActive="active">◆<span>БК</span></a>
+    <a routerLink="/recon" routerLinkActive="active">R<span>Розвідка</span></a>
+    <a routerLink="/service-orders" routerLinkActive="active">◆<span>ВГЗ</span></a>
+    <a routerLink="/analytics" routerLinkActive="active">◇<span>Аналітика</span></a>
+    <a *ngIf="canManageData" routerLink="/stock" routerLinkActive="active">▣<span>БК</span></a>
   </nav>
 
-  <div class="command-backdrop" *ngIf="commandOpen" (click)="closeCommandBar()">
-    <section class="command-panel" (click)="$event.stopPropagation()">
-      <header class="command-header">
+  <button
+    type="button"
+    class="core2-command-button"
+    (click)="openCommandBar()"
+    title="Швидкий перехід"
+  >
+    Ctrl K - пошук
+  </button>
+
+  <section class="core2-command-backdrop" *ngIf="commandOpen" (click)="closeCommandBar()">
+    <div
+      class="core2-command"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-label="Швидкий перехід"
+    >
+      <header>
         <div>
-          <strong>Command Bar</strong>
-          <span>Пошук по сторінках, ВП, ВГЗ, СГ та складах</span>
+          <strong>Швидкий перехід</strong>
+          <span>Сторінки, ВП, ВГЗ, СГ, склади</span>
         </div>
-        <button type="button" (click)="closeCommandBar()" title="Закрити">×</button>
+        <button type="button" (click)="closeCommandBar()" aria-label="Закрити">×</button>
       </header>
 
-      <label class="command-search">
-        <span>⌕</span>
+      <label>
+        <span aria-hidden="true">⌕</span>
         <input
           type="text"
           name="commandQuery"
           [(ngModel)]="commandQuery"
           (ngModelChange)="onCommandQueryChange()"
-          placeholder="Введіть ВП, MGRS, номер ВГЗ, позивний, склад..."
+          placeholder="ВП, MGRS, номер ВГЗ, позивний, склад..."
           autocomplete="off"
-          autofocus
         />
       </label>
 
-      <div class="command-state" *ngIf="commandLoading">Завантаження індексу...</div>
+      <div class="core2-command-state" *ngIf="commandLoading">Завантаження...</div>
 
-      <div class="command-results" *ngIf="!commandLoading && filteredCommandItems.length > 0">
-        <button
-          type="button"
-          class="command-item"
-          *ngFor="let item of filteredCommandItems; let i = index"
-          [class.active]="i === commandActiveIndex"
-          (mouseenter)="commandActiveIndex = i"
-          (click)="runCommand(item)"
-        >
-          <span class="command-item-icon">{{ getCommandIcon(item) }}</span>
-          <span class="command-item-body">
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.subtitle || item.route }}</small>
-          </span>
-          <span class="command-item-route">{{ item.route }}</span>
-        </button>
+      <button
+        type="button"
+        class="core2-command-item"
+        *ngFor="let item of filteredCommandItems; let i = index"
+        [class.active]="i === commandActiveIndex"
+        (mouseenter)="commandActiveIndex = i"
+        (click)="runCommand(item)"
+      >
+        <i>{{ getCommandIcon(item) }}</i>
+        <span>
+          <b>{{ item.title }}</b>
+          <small>{{ item.subtitle || item.route }}</small>
+        </span>
+        <em>{{ item.route }}</em>
+      </button>
+
+      <div class="core2-command-state" *ngIf="!commandLoading && filteredCommandItems.length === 0">
+        Нічого не знайдено.
       </div>
+    </div>
+  </section>
 
-      <div class="command-empty" *ngIf="!commandLoading && filteredCommandItems.length === 0">
-        Нічого не знайдено. Спробуйте номер ВГЗ, назву ВП, MGRS або позивний.
-      </div>
-
-      <footer class="command-footer">
-        <span>↑↓ вибір</span>
-        <span>Enter відкрити</span>
-        <span>Esc закрити</span>
-      </footer>
-    </section>
-  </div>
-
-  <app-event-feed-panel></app-event-feed-panel>
+  <app-operator-push></app-operator-push>
   <app-toast-container></app-toast-container>
 </div>
 

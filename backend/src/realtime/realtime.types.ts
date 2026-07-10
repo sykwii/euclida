@@ -9,7 +9,9 @@ export type RealtimeScope =
   | 'users'
   | 'settings'
   | 'weapons'
-  | 'threats';
+  | 'recon'
+  | 'threats'
+  | 'logistics';
 
 export type RealtimeAction =
   | 'created'

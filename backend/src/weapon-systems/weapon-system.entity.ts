@@ -34,6 +34,27 @@ export class WeaponSystem {
   @Column({ name: 'not_ready_reason', type: 'text', nullable: true })
   notReadyReason!: string | null;
 
+  @Column({ name: 'maintenance_status', type: 'varchar', length: 30, nullable: true })
+  maintenanceStatus!: string | null;
+
+  @Column({ name: 'maintenance_requested_start_at', type: 'timestamp', nullable: true })
+  maintenanceRequestedStartAt!: Date | null;
+
+  @Column({ name: 'maintenance_planned_end_at', type: 'timestamp', nullable: true })
+  maintenancePlannedEndAt!: Date | null;
+
+  @Column({ name: 'maintenance_actual_end_at', type: 'timestamp', nullable: true })
+  maintenanceActualEndAt!: Date | null;
+
+  @Column({ name: 'maintenance_note', type: 'text', nullable: true })
+  maintenanceNote!: string | null;
+
+  @Column({ name: 'maintenance_requested_by_user_id', type: 'uuid', nullable: true })
+  maintenanceRequestedByUserId!: string | null;
+
+  @Column({ name: 'maintenance_approved_by_user_id', type: 'uuid', nullable: true })
+  maintenanceApprovedByUserId!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

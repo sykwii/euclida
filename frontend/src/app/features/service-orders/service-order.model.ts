@@ -30,8 +30,16 @@ export interface ServiceOrder {
   sentByUserId: string | null;
   acceptedByUserId: string | null;
   completedByUserId: string | null;
+  reconSnapshot?: Record<string, unknown> | null;
+  sourceReconTargetId?: string | null;
+  sourceReconObservationId?: string | null;
+  sourcePuarProposalId?: string | null;
+  reconSnapshotUpdatedAt?: string | null;
+  reconLinkCheckedAt?: string | null;
 
   actualQuantity: number | null;
+  actualChargeQuantity: number | null;
+  actualChargeModulesPerShot: number | null;
 
   targetLat: number;
   targetLng: number;
@@ -45,6 +53,12 @@ export interface ServiceOrder {
   plannedQuantity: number;
 
   selectedFirePositionId: string | null;
+  executorType?: 'fire_position' | 'air_asset_position' | null;
+
+selectedAirAssetPositionId?: string | null;
+selectedDroneModelId?: string | null;
+selectedWarheadTypeId?: string | null;
+linkedAirTaskId?: string | null;
   selectedShellId?: string | null;
   selectedChargeId?: string | null;
   selectedZoneId?: string | null;
@@ -77,6 +91,9 @@ export interface ServiceOrder {
   selectedCharge: {
     id: string;
     marking: string;
+    chargeKind?: 'unit' | 'modular';
+    modulesPerCharge?: number | null;
+    maxUsableModules?: number | null;
   } | null;
 
   selectedZone: {
@@ -84,5 +101,36 @@ export interface ServiceOrder {
     zoneNumber: number;
     distanceFromM: number;
     distanceToM: number;
+  } | null;
+
+  selectedAirAssetPosition?: {
+    id: string;
+    name: string;
+    callsign?: string | null;
+    unitId?: string | null;
+    unit?: ServiceOrderUnitRef | null;
+  } | null;
+
+  selectedDroneModel?: {
+    id: string;
+    name: string;
+    droneGroup?: string | null;
+    droneType?: string | null;
+    cameraType?: string | null;
+    maxRangeM?: number | null;
+    cruiseSpeedKmh?: number | null;
+    enduranceMinutes?: number | null;
+    payloadCapacityKg?: number | null;
+    maxAltitudeM?: number | null;
+    maxWindMs?: number | null;
+    note?: string | null;
+  } | null;
+
+  selectedWarheadType?: {
+    id: string;
+    name: string;
+    weightKg?: number | null;
+    measureUnit?: 'unit' | 'kg';
+    note?: string | null;
   } | null;
 }

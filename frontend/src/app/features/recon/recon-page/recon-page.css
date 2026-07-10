@@ -1,0 +1,592 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(14, 77, 79, 0.2), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(21, 61, 117, 0.18), transparent 30%),
+    #02090e;
+}
+
+.recon-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: #d9edf2;
+  transition: grid-template-columns 180ms ease;
+}
+
+.recon-shell.panel-open {
+  grid-template-columns: minmax(0, 1fr) 390px;
+}
+
+.recon-map-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.recon-map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.recon-map-header {
+  position: absolute;
+  z-index: 410;
+  top: 8px;
+  left: 10px;
+  right: 10px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 8px;
+  align-items: start;
+  pointer-events: none;
+}
+
+.recon-title,
+.recon-map-controls,
+.recon-map-selectors,
+.recon-layers,
+.recon-legend,
+.recon-panel-toggle {
+  border: 1px solid rgba(28, 70, 80, 0.72);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.recon-title {
+  width: min(100%, 410px);
+  min-height: 48px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: rgba(3, 16, 24, 0.86);
+  pointer-events: auto;
+}
+
+.recon-title span,
+.recon-title p,
+.recon-row span,
+.recon-row p,
+.recon-target-card p,
+.recon-tab label span {
+  margin: 0;
+  color: #98adba;
+}
+
+.recon-title span {
+  display: block;
+  font-size: 11px;
+}
+
+.recon-title h1 {
+  margin: 1px 0;
+  font-size: 20px;
+  line-height: 1.05;
+}
+
+.recon-title p {
+  font-size: 12px;
+}
+
+.recon-map-controls,
+.recon-map-selectors {
+  display: flex;
+  gap: 6px;
+  min-height: 42px;
+  padding: 5px;
+  border-radius: 8px;
+  background: rgba(4, 18, 27, 0.88);
+  pointer-events: auto;
+}
+
+.recon-map-controls button,
+.recon-map-selectors button,
+.recon-map-selectors select,
+.recon-panel-toggle,
+.recon-panel-close,
+.recon-tabs button,
+.recon-inline button,
+.recon-form button {
+  min-height: 32px;
+  border: 1px solid #1e5661;
+  border-radius: 6px;
+  color: #e4f4f6;
+  background: #082630;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recon-map-controls button {
+  width: 32px;
+  padding: 0;
+  font-size: 17px;
+}
+
+.recon-map-selectors select {
+  width: 124px;
+  padding: 0 28px 0 10px;
+  color: #e4f4f6;
+  background: #061c25;
+}
+
+.recon-map-selectors .recon-layer-button {
+  padding: 0 14px;
+  background: #07424b;
+}
+
+.recon-panel-toggle {
+  position: absolute;
+  z-index: 430;
+  top: 64px;
+  right: 12px;
+  width: 42px;
+  min-height: 38px;
+  background: rgba(5, 72, 82, 0.94);
+}
+
+.recon-layers {
+  position: absolute;
+  z-index: 420;
+  top: 62px;
+  right: 12px;
+  display: grid;
+  gap: 8px;
+  min-width: 210px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(4, 18, 27, 0.95);
+}
+
+.recon-layers label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.recon-layers input {
+  accent-color: #20bfd0;
+}
+
+.recon-legend {
+  position: absolute;
+  z-index: 410;
+  right: 14px;
+  bottom: 14px;
+  display: grid;
+  gap: 8px;
+  min-width: 178px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(3, 13, 19, 0.92);
+}
+
+.recon-legend span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.recon-legend i {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.legend-area {
+  border: 2px solid #1e90ff;
+  background: rgba(30, 144, 255, 0.28);
+}
+
+.legend-observation {
+  border: 2px solid #ef4444;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.35);
+}
+
+.legend-impact {
+  display: grid;
+  place-items: center;
+}
+
+.legend-impact::before {
+  content: "+";
+  color: #ff2f3b;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.legend-target {
+  border: 2px solid #16a34a;
+  transform: rotate(45deg);
+  background: rgba(22, 163, 74, 0.25);
+}
+
+.legend-ellipse {
+  border: 2px solid #d6a21e;
+  border-radius: 999px;
+  background: rgba(214, 162, 30, 0.22);
+}
+
+.recon-panel {
+  z-index: 500;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  border-left: 1px solid #12343d;
+  background: rgba(6, 21, 29, 0.98);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(100%);
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.panel-open .recon-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.recon-panel-head {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  min-height: 58px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #12343d;
+  background: #071a23;
+}
+
+.recon-panel-close {
+  width: 38px;
+  min-height: 32px;
+  background: #07424b;
+}
+
+.recon-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.recon-tabs button {
+  min-width: 0;
+  padding: 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #091f29;
+}
+
+.recon-tabs button.active {
+  border-color: #12b6c9;
+  background: #0b5660;
+}
+
+.recon-panel-scroll {
+  height: calc(100% - 58px);
+  overflow: auto;
+  padding: 10px;
+  scrollbar-color: #1b5963 #06151d;
+}
+
+.recon-tab {
+  display: grid;
+  gap: 10px;
+}
+
+.recon-tab h2,
+.recon-tab h3 {
+  margin: 0;
+}
+
+.recon-tab h2 {
+  font-size: 15px;
+}
+
+.recon-tab h3 {
+  font-size: 13px;
+}
+
+.recon-preview-card,
+.recon-form,
+.recon-row,
+.recon-target-card,
+.recon-kpi-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #12343d;
+  border-radius: 8px;
+  background: #071c25;
+}
+
+.recon-preview-card strong,
+.recon-row strong,
+.recon-target-card strong,
+.recon-kpi-card strong {
+  color: #f2fbfc;
+}
+
+.recon-preview-grid,
+.recon-grid-2,
+.recon-inline,
+.recon-indexes,
+.recon-kpi-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.recon-preview-grid,
+.recon-grid-2,
+.recon-inline,
+.recon-indexes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recon-kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recon-kpi-card b {
+  font-size: 24px;
+  color: #f8fafc;
+}
+
+.recon-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.recon-form input,
+.recon-form select,
+.recon-form textarea {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid #173c46;
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: #e4f4f6;
+  background: #041119;
+  font: inherit;
+  font-size: 12px;
+}
+
+.recon-form textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.recon-static-field {
+  min-height: 34px;
+  padding: 9px;
+  border: 1px solid #173c46;
+  border-radius: 6px;
+  color: #a8bac4;
+  background: #041119;
+  font-size: 12px;
+}
+
+.recon-inline .secondary,
+.recon-form .secondary {
+  background: #102832;
+}
+
+.recon-row,
+.recon-target-card {
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recon-target-card.selected {
+  border-color: #2fc8d6;
+  box-shadow: 0 0 0 1px rgba(47, 200, 214, 0.22);
+}
+
+.recon-target-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recon-indexes span {
+  min-height: 34px;
+  padding: 7px;
+  border-left: 3px solid #64748b;
+  border-radius: 6px;
+  background: #041119;
+}
+
+.recon-bar-row {
+  gap: 6px;
+}
+
+.recon-bar-pair {
+  display: grid;
+  gap: 6px;
+}
+
+.recon-bar {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.recon-bar.primary {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.recon-bar.comparison {
+  background: linear-gradient(90deg, #f97316, #fb923c);
+}
+
+.recon-error {
+  position: absolute;
+  z-index: 430;
+  right: 12px;
+  bottom: 12px;
+  max-width: 360px;
+  padding: 10px 12px;
+  border: 1px solid #8f2020;
+  border-radius: 8px;
+  color: #ffe5e5;
+  background: rgba(77, 12, 12, 0.94);
+}
+
+pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  color: #cdeef2;
+  background: #031018;
+  font-size: 11px;
+}
+
+:host ::ng-deep .recon-area-label {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(2, 6, 23, 0.9), 0 0 5px rgba(2, 6, 23, 0.9);
+}
+
+:host ::ng-deep .recon-crosshair-icon,
+:host ::ng-deep .recon-impact-symbol,
+:host ::ng-deep .recon-milsymbol-icon {
+  background: transparent;
+  border: 0;
+}
+
+:host ::ng-deep .recon-crosshair-icon span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: #f8fafc;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
+}
+
+:host ::ng-deep .recon-impact-symbol span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: #ff1f2d;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 12px rgba(255, 71, 85, 0.9), 0 2px 2px rgba(0, 0, 0, 0.65);
+}
+
+:host ::ng-deep .recon-impact-symbol span.is-selected {
+  color: #f8fafc;
+}
+
+:host ::ng-deep .recon-symbol-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 10px rgba(2, 6, 23, 0.9));
+}
+
+:host ::ng-deep .recon-symbol-wrap svg {
+  overflow: visible;
+}
+
+:host ::ng-deep .recon-symbol-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  color: #f8fafc;
+  background: rgba(2, 13, 18, 0.92);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 1120px) {
+  .recon-shell.panel-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recon-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(94vw, 390px);
+  }
+}
+
+@media (max-width: 720px) {
+  .recon-map-header {
+    grid-template-columns: 1fr;
+    right: 58px;
+  }
+
+  .recon-title {
+    width: 100%;
+  }
+
+  .recon-map-controls,
+  .recon-map-selectors {
+    width: max-content;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .recon-legend {
+    display: none;
+  }
+
+  .recon-grid-2,
+  .recon-inline,
+  .recon-indexes,
+  .recon-preview-grid,
+  .recon-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}

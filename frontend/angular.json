@@ -3,7 +3,10 @@
   "version": 1,
   "cli": {
     "packageManager": "npm",
-    "analytics": "a505a0c8-aaf5-439a-a687-219e01eb2d9d"
+    "analytics": "a505a0c8-aaf5-439a-a687-219e01eb2d9d",
+    "cache": {
+      "enabled": false
+    }
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -18,6 +21,7 @@
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
+            "polyfills": ["@angular/compiler"],
             "tsConfig": "tsconfig.app.json",
             "assets": [
               {
@@ -25,15 +29,12 @@
                 "input": "public"
               }
             ],
-            "styles": ["node_modules/leaflet/dist/leaflet.css",
-"src/styles.css"],
-            "server": "src/main.server.ts",
-            "outputMode": "server",
+            "styles": [
+              "node_modules/leaflet/dist/leaflet.css",
+              "src/styles.css"
+            ],
             "security": {
               "allowedHosts": []
-            },
-            "ssr": {
-              "entry": "src/server.ts"
             }
           },
           "configurations": {
@@ -41,13 +42,13 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
-                  "maximumError": "1MB"
+                  "maximumWarning": "4MB",
+"maximumError": "5MB"
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "32kB",
+                  "maximumError": "40kB"
                 }
               ],
               "outputHashing": "all"

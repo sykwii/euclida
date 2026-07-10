@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Depot } from '../depots/depot.entity';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { CreateDepotChargeStockDto } from './dto/create-depot-charge-stock.dto';
 import { DepotChargeStock } from './depot-charge-stock.entity';
@@ -10,6 +11,8 @@ export class DepotChargeStockService {
   constructor(
     @InjectRepository(DepotChargeStock)
     private readonly repository: Repository<DepotChargeStock>,
+    @InjectRepository(Depot)
+    private readonly depotsRepository: Repository<Depot>,
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
@@ -22,14 +25,30 @@ export class DepotChargeStockService {
     });
   }
 
-  create(data: CreateDepotChargeStockDto): Promise<DepotChargeStock> {
+  async create(data: CreateDepotChargeStockDto): Promise<DepotChargeStock> {
+    await this.ensureAmmoDepot(data.depotId);
+    this.assertPositiveQuantity(data.quantity);
+
     const item = this.repository.create(data);
-    return this.repository.save(item).then((saved) => {
-      this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], 'created', {
-        entity: 'depot_charge_stock',
-        id: saved.id,
-      });
-      return saved;
+    const saved = await this.repository.save(item);
+    this.realtimeEvents.emitMany(['stock', 'analytics', 'events'], 'created', {
+      entity: 'depot_charge_stock',
+      id: saved.id,
     });
+    return saved;
+  }
+
+  private async ensureAmmoDepot(depotId: string): Promise<void> {
+    const depot = await this.depotsRepository.findOne({ where: { id: depotId } });
+    if (!depot) throw new NotFoundException('Склад не знайдено');
+    if (!['main_pas', 'division_pas', 'battery_pas', 'fire_position_ammo'].includes(depot.depotType)) {
+      throw new BadRequestException('БК можна обліковувати тільки на складах БК/ПАС');
+    }
+  }
+
+  private assertPositiveQuantity(quantity: number): void {
+    if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+      throw new BadRequestException('Кількість має бути більше 0');
+    }
   }
 }

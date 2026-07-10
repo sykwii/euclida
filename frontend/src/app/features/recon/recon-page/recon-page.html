@@ -1,0 +1,481 @@
+<section class="recon-shell" [class.panel-open]="rightPanelOpen">
+  <main class="recon-map-wrap">
+    <div id="recon-map" class="recon-map"></div>
+
+    <header class="recon-map-header">
+      <div class="recon-title">
+        <span>Recon R1–R4</span>
+        <h1>Розвідка та цілі</h1>
+        <p>Остання синхронізація: {{ lastSyncLabel }}</p>
+      </div>
+
+      <div class="recon-map-controls">
+        <button type="button" title="Додати шар тайлів">+</button>
+        <button type="button" title="Вимірювання">⌁</button>
+        <button type="button" (click)="toggleFullscreen()" title="Повний екран">⛶</button>
+      </div>
+
+      <div class="recon-map-selectors">
+        <select [(ngModel)]="baseLayer" (ngModelChange)="setBaseLayer($event)" title="Підкладка">
+          <option value="OSM">OSM</option>
+          <option value="Topo">Topo</option>
+          <option value="Satellite">Супутник</option>
+          <option value="Local XYZ">Local XYZ</option>
+        </select>
+        <select [(ngModel)]="clickMode" title="Режим кліку">
+          <option value="area">Клік: район</option>
+          <option value="observation">Клік: спостереження</option>
+          <option value="impact">Клік: ураження</option>
+        </select>
+        <button type="button" class="recon-layer-button" (click)="toggleLayersMenu()">Шари</button>
+      </div>
+    </header>
+
+    <button
+      type="button"
+      class="recon-panel-toggle"
+      [attr.aria-label]="rightPanelOpen ? 'Закрити панель' : 'Відкрити панель'"
+      (click)="togglePanel()"
+    >
+      {{ rightPanelOpen ? '«' : '»' }}
+    </button>
+
+    <div class="recon-layers" *ngIf="layersOpen">
+      <label><input type="checkbox" [ngModel]="layerState.areas" (ngModelChange)="toggleLayer('areas')" /> Райони</label>
+      <label><input type="checkbox" [ngModel]="layerState.observations" (ngModelChange)="toggleLayer('observations')" /> Спостереження</label>
+      <label><input type="checkbox" [ngModel]="layerState.impacts" (ngModelChange)="toggleLayer('impacts')" /> Ураження</label>
+      <label><input type="checkbox" [ngModel]="layerState.targets" (ngModelChange)="toggleLayer('targets')" /> Цілі</label>
+      <label><input type="checkbox" [ngModel]="layerState.ellipses" (ngModelChange)="toggleLayer('ellipses')" /> Еліпси</label>
+      <label><input type="checkbox" [ngModel]="layerState.correlations" (ngModelChange)="toggleLayer('correlations')" /> Кореляції</label>
+      <label><input type="checkbox" [ngModel]="layerState.heatmap" (ngModelChange)="toggleLayer('heatmap')" /> Heatmap</label>
+      <label><input type="checkbox" [ngModel]="layerState.puar" (ngModelChange)="toggleLayer('puar')" /> ПУАР</label>
+      <label><input type="checkbox" [ngModel]="layerState.historical" (ngModelChange)="toggleLayer('historical')" /> Включити історичні</label>
+    </div>
+
+    <div class="recon-legend">
+      <span><i class="legend-area"></i>Райони</span>
+      <span><i class="legend-observation"></i>Спостереження</span>
+      <span><i class="legend-impact"></i>Ураження</span>
+      <span><i class="legend-target"></i>Цілі</span>
+      <span><i class="legend-ellipse"></i>Еліпс імовірності</span>
+    </div>
+
+    <div class="recon-error" *ngIf="errorMessage">{{ errorMessage }}</div>
+  </main>
+
+  <aside class="recon-panel" [attr.aria-hidden]="!rightPanelOpen">
+    <div class="recon-panel-head">
+      <button type="button" class="recon-panel-close" (click)="closePanel()" aria-label="Закрити панель">«</button>
+      <nav class="recon-tabs" aria-label="Recon вкладки">
+        <button
+          type="button"
+          *ngFor="let tab of tabs"
+          [class.active]="activeTab === tab.id"
+          (click)="setTab(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+    </div>
+
+    <div class="recon-panel-scroll">
+      <section class="recon-preview-card" *ngIf="draftPoint">
+        <div>
+          <strong>{{ draftPoint.kind === 'impact' ? 'Попереднє ураження' : 'Попереднє спостереження' }}</strong>
+          <p>{{ targetTypeLabel(draftPoint.targetType) }} · {{ sourceLabel(draftPoint.source) }}</p>
+        </div>
+        <div class="recon-preview-grid">
+          <span>Lat {{ draftPoint.lat }}</span>
+          <span>Lng {{ draftPoint.lng }}</span>
+          <span>MGRS {{ draftPoint.mgrs }}</span>
+        </div>
+      </section>
+
+      <section class="recon-tab" *ngIf="activeTab === 'areas'">
+        <h2>Райони</h2>
+        <div class="recon-form">
+          <label>
+            <span>Назва району</span>
+            <input [(ngModel)]="areaForm.name" placeholder="Введіть назву" />
+          </label>
+          <label>
+            <span>Опис</span>
+            <textarea [(ngModel)]="areaForm.description" placeholder="Коментар"></textarea>
+          </label>
+          <label>
+            <span>Полігон</span>
+            <div class="recon-static-field">Клікніть по карті в режимі району · точок: {{ draftArea.length }}</div>
+          </label>
+          <div class="recon-inline">
+            <button type="button" class="secondary" (click)="clearDraftArea()">Скасувати</button>
+            <button type="button" (click)="saveArea()">Зберегти</button>
+          </div>
+        </div>
+
+        <article class="recon-row" *ngFor="let area of areas" (click)="selectArea(area)">
+          <strong>{{ area.name }}</strong>
+          <span>{{ area.status }}</span>
+          <p>{{ area.description || 'Без опису' }}</p>
+        </article>
+      </section>
+
+      <section class="recon-tab" *ngIf="activeTab === 'observations'">
+        <h2>Спостереження</h2>
+        <div class="recon-form">
+          <select [(ngModel)]="pointForm.source">
+            <option *ngFor="let source of sources" [value]="source.value">{{ source.label }}</option>
+          </select>
+          <select [(ngModel)]="pointForm.targetType">
+            <option *ngFor="let type of targetTypes" [value]="type.value">{{ type.label }}</option>
+          </select>
+          <input type="datetime-local" [(ngModel)]="pointForm.datetime" />
+          <div class="recon-grid-2">
+            <input [(ngModel)]="pointForm.lat" placeholder="Lat" />
+            <input [(ngModel)]="pointForm.lng" placeholder="Lng" />
+          </div>
+          <input [(ngModel)]="pointForm.mgrs" placeholder="MGRS" />
+          <textarea [(ngModel)]="pointForm.notes" placeholder="Нотатки"></textarea>
+          <button type="button" (click)="savePoint('observation')">Зберегти спостереження</button>
+        </div>
+
+        <article class="recon-row" *ngFor="let item of observations" (click)="selectObservation(item)">
+          <strong>{{ targetTypeLabel(item.targetType) }}</strong>
+          <span>{{ sourceLabel(item.source) }} · {{ item.observationDatetime | date: 'dd.MM HH:mm' }}</span>
+          <p>{{ item.mgrs }} · {{ item.status }}</p>
+          <div class="recon-inline">
+            <button type="button" *ngIf="!item.targetId" (click)="createTargetFromObservation(item); $event.stopPropagation()">Створити ціль</button>
+            <button type="button" class="secondary" (click)="createPuarFromObservation(item); $event.stopPropagation()">Запропонувати в ПУАР</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="recon-tab" *ngIf="activeTab === 'impacts'">
+        <h2>Ураження</h2>
+        <div class="recon-form">
+          <select [(ngModel)]="pointForm.source">
+            <option *ngFor="let source of sources" [value]="source.value">{{ source.label }}</option>
+          </select>
+          <select [(ngModel)]="pointForm.targetType">
+            <option *ngFor="let type of targetTypes" [value]="type.value">{{ type.label }}</option>
+          </select>
+          <input type="datetime-local" [(ngModel)]="pointForm.datetime" />
+          <div class="recon-grid-2">
+            <input [(ngModel)]="pointForm.lat" placeholder="Lat" />
+            <input [(ngModel)]="pointForm.lng" placeholder="Lng" />
+          </div>
+          <input [(ngModel)]="pointForm.mgrs" placeholder="MGRS" />
+          <textarea [(ngModel)]="pointForm.notes" placeholder="Коментар"></textarea>
+          <button type="button" (click)="savePoint('impact')">Зберегти ураження</button>
+        </div>
+
+        <article class="recon-row" *ngFor="let item of impacts" (click)="selectImpact(item)">
+          <strong>{{ targetTypeLabel(item.targetType) }}</strong>
+          <span>{{ sourceLabel(item.source) }} · {{ item.impactDatetime | date: 'dd.MM HH:mm' }}</span>
+          <p>{{ item.mgrs }} · {{ item.status }}</p>
+        </article>
+      </section>
+
+      <section class="recon-tab" *ngIf="activeTab === 'targets'">
+        <h2>Цілі</h2>
+        <article
+          class="recon-target-card"
+          *ngFor="let target of targets"
+          [class.selected]="selectedTarget?.id === target.id"
+          (click)="selectTarget(target)"
+        >
+          <header>
+            <strong>{{ targetTypeLabel(target.targetType) }}</strong>
+            <span>{{ target.status }}</span>
+          </header>
+          <p>{{ target.mgrs }}</p>
+          <div class="recon-indexes">
+            <span [style.border-color]="confidenceColor(target)">Довіра {{ target.confidenceIndex }}</span>
+            <span>Активність {{ target.activityIndex }}</span>
+            <span>Свіжість {{ target.freshnessIndex }}</span>
+            <span>Загроза {{ target.threatIndex }}</span>
+          </div>
+          <div class="recon-inline">
+            <button type="button" (click)="recalculateTarget(target); $event.stopPropagation()">Перерахувати</button>
+            <button type="button" class="secondary" (click)="createPuarFromTarget(target); $event.stopPropagation()">Запропонувати в ПУАР</button>
+          </div>
+        </article>
+
+        <div class="recon-form" *ngIf="selectedTarget">
+          <h3>Кореляції цілі</h3>
+          <article class="recon-row" *ngFor="let item of correlations">
+            <strong>Score {{ item.score }} · {{ item.status }}</strong>
+            <span>{{ item.distanceM | number: '1.0-0' }} м · {{ item.timeDeltaSec | number: '1.0-0' }} сек</span>
+            <div class="recon-inline">
+              <button type="button" (click)="acceptCorrelation(item)">Прийняти</button>
+              <button type="button" class="secondary" (click)="rejectCorrelation(item)">Відхилити</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="recon-tab" *ngIf="activeTab === 'analytics'">
+        <h2>Аналітика</h2>
+
+        <div class="recon-form">
+          <h3>Основний період</h3>
+          <div class="recon-grid-2">
+            <select [(ngModel)]="primaryPeriod.range" (ngModelChange)="updatePeriod(primaryPeriod, $event)">
+              <option *ngFor="let item of periodPresets" [value]="item.value">{{ item.label }}</option>
+            </select>
+            <select [(ngModel)]="comparisonPeriod.range" (ngModelChange)="updatePeriod(comparisonPeriod, $event)">
+              <option *ngFor="let item of periodPresets" [value]="item.value">Порівняння: {{ item.label }}</option>
+            </select>
+          </div>
+          <div class="recon-grid-2" *ngIf="primaryPeriod.range === 'custom'">
+            <input type="datetime-local" [(ngModel)]="primaryPeriod.from" (change)="load(false)" />
+            <input type="datetime-local" [(ngModel)]="primaryPeriod.to" (change)="load(false)" />
+          </div>
+          <div class="recon-grid-2" *ngIf="comparisonPeriod.range === 'custom'">
+            <input type="datetime-local" [(ngModel)]="comparisonPeriod.from" (change)="load(false)" />
+            <input type="datetime-local" [(ngModel)]="comparisonPeriod.to" (change)="load(false)" />
+          </div>
+          <h3>Heatmap</h3>
+          <div class="recon-grid-2">
+            <select [(ngModel)]="heatmapType" (ngModelChange)="load(false)">
+              <option value="observation">Спостереження</option>
+              <option value="target">Цілі</option>
+              <option value="activity">Активність</option>
+              <option value="threat">Загроза</option>
+            </select>
+            <select [(ngModel)]="heatmapPeriod.range" (ngModelChange)="updatePeriod(heatmapPeriod, $event)">
+              <option *ngFor="let item of periodPresets" [value]="item.value">{{ item.label }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="recon-kpi-grid">
+          <article
+            class="recon-kpi-card"
+            *ngFor="let card of areaSummaryCards"
+            (click)="card.areaId && selectAreaAnalyticsById(card.areaId)"
+          >
+            <strong>{{ card.label }}</strong>
+            <b>{{ card.value }}</b>
+          </article>
+          <article class="recon-kpi-card">
+            <strong>Спостереження</strong>
+            <b>{{ metricDelta('observations').primary }}</b>
+            <span>Було {{ metricDelta('observations').comparison }}</span>
+            <p>Δ {{ metricDelta('observations').delta }} / {{ metricDelta('observations').percent ?? '—' }}%</p>
+          </article>
+          <article class="recon-kpi-card">
+            <strong>Ураження</strong>
+            <b>{{ metricDelta('impacts').primary }}</b>
+            <span>Було {{ metricDelta('impacts').comparison }}</span>
+            <p>Δ {{ metricDelta('impacts').delta }} / {{ metricDelta('impacts').percent ?? '—' }}%</p>
+          </article>
+          <article class="recon-kpi-card">
+            <strong>Нові цілі</strong>
+            <b>{{ metricDelta('targets').primary }}</b>
+            <span>Було {{ metricDelta('targets').comparison }}</span>
+            <p>Δ {{ metricDelta('targets').delta }} / {{ metricDelta('targets').percent ?? '—' }}%</p>
+          </article>
+          <article class="recon-kpi-card">
+            <strong>Підтверджені</strong>
+            <b>{{ metricDelta('confirmed').primary }}</b>
+            <span>Було {{ metricDelta('confirmed').comparison }}</span>
+            <p>Δ {{ metricDelta('confirmed').delta }} / {{ metricDelta('confirmed').percent ?? '—' }}%</p>
+          </article>
+          <article class="recon-kpi-card">
+            <strong>Processed / ПУАР</strong>
+            <b>{{ metricDelta('processed').primary }}</b>
+            <span>Було {{ metricDelta('processed').comparison }}</span>
+            <p>Найактивніший: {{ primarySummary['mostActiveArea'] || '—' }}</p>
+          </article>
+        </div>
+
+        <div class="recon-form" *ngIf="conclusion">
+          <h3>Аналітичний висновок</h3>
+          <p>{{ conclusion }}</p>
+        </div>
+
+        <div class="recon-form">
+          <h3>Що змінилося</h3>
+          <p>Нові цілі: {{ changeBlock['newTargets'] || 0 }}</p>
+          <p>Реактивовані цілі: {{ changeBlock['reactivatedTargets'] || 0 }}</p>
+          <p>Stale / зниклі: {{ changeBlock['staleTargets'] || 0 }}</p>
+          <p>Нові прийняті кореляції: {{ changeBlock['acceptedCorrelations'] || 0 }}</p>
+        </div>
+
+        <div class="recon-form">
+          <h3>Порівняння районів</h3>
+          <article class="recon-row" *ngFor="let item of sortedAreaAnalytics" (click)="selectAreaAnalytics(item)">
+            <strong>{{ item.name }} · {{ item.primary.activityIndex | number: '1.0-0' }}</strong>
+            <span>{{ item.change.direction }} · {{ item.change.percent }}% · {{ item.change.severity }}</span>
+            <p>
+              Obs {{ item.primary.observations }} / {{ item.comparison.observations }} ·
+              Tgt {{ item.primary.targets }} / {{ item.comparison.targets }} ·
+              Imp {{ item.primary.impacts }} / {{ item.comparison.impacts }} ·
+              PUAR {{ item.primary.puar }}
+            </p>
+            <p>{{ item.recommendation }} · {{ item.reasons.join(' · ') || '—' }}</p>
+          </article>
+        </div>
+
+        <div class="recon-form" *ngIf="selectedAreaAnalytics">
+          <h3>{{ selectedAreaAnalytics.name }}</h3>
+          <p>
+            &#1040;&#1082;&#1090;&#1080;&#1074;&#1085;&#1110;&#1089;&#1090;&#1100;:
+            {{ selectedAreaAnalytics.primary.activityIndex | number: '1.0-0' }} /
+            {{ selectedAreaAnalytics.comparison.activityIndex | number: '1.0-0' }}
+            ({{ selectedAreaAnalytics.change.percent }}%)
+          </p>
+          <p>
+            &#1053;&#1086;&#1074;&#1110; &#1094;&#1110;&#1083;&#1110;: {{ selectedAreaAnalytics.changes.newTargetIds.length }} ·
+            Reactivated: {{ selectedAreaAnalytics.changes.reactivatedTargetIds.length }} ·
+            Stale: {{ selectedAreaAnalytics.changes.staleTargetIds.length }} ·
+            Corr: {{ selectedAreaAnalytics.changes.newAcceptedCorrelationIds.length }}
+          </p>
+          <p>
+            Weapon: {{ selectedAreaAnalytics.changes.newWeaponTypes.join(', ') || '—' }} ·
+            Newest: {{ selectedAreaAnalytics.primary.newestActivityAt ? (selectedAreaAnalytics.primary.newestActivityAt | date: 'dd.MM HH:mm') : '—' }}
+          </p>
+          <p>{{ selectedAreaAnalytics.recommendation }} · {{ selectedAreaAnalytics.reasons.join(' · ') || '—' }}</p>
+        </div>
+
+        <div class="recon-form">
+          <h3>&#1055;&#1086;&#1088;&#1110;&#1074;&#1085;&#1103;&#1085;&#1085;&#1103; &#1088;&#1072;&#1081;&#1086;&#1085;&#1110;&#1074;</h3>
+          <article class="recon-row recon-bar-row" *ngFor="let item of areaComparisonRows" (click)="pickArea(item)">
+            <strong>{{ item['name'] }}</strong>
+            <div class="recon-bar-pair">
+              <span class="recon-bar primary" [style.width.%]="item['observations']"></span>
+              <span class="recon-bar comparison" [style.width.%]="item['comparisonObservations']"></span>
+            </div>
+            <p>{{ item['observations'] }} / {{ item['comparisonObservations'] }} спост.</p>
+          </article>
+        </div>
+
+        <div class="recon-form">
+          <h3>Пріоритетні цілі</h3>
+          <article class="recon-row" *ngFor="let item of priorityTargets">
+            <strong>{{ targetTypeLabelAny(item['targetType']) }} · {{ item['area'] || 'Поза районом' }}</strong>
+            <span>{{ item['mgrs'] }}</span>
+            <p>Довіра {{ item['confidenceIndex'] }} · активність {{ item['activityIndex'] }} · рекомендація {{ item['recommendation'] }}</p>
+          </article>
+        </div>
+
+        <div class="recon-form">
+          <h3>Ефективність джерел</h3>
+          <article class="recon-row" *ngFor="let item of sourceEffectivenessRows">
+            <strong>{{ sourceLabelAny(item['source']) }}</strong>
+            <p>Звітів {{ item['reportsCount'] }} · linked {{ item['linkedToTargetPct'] }}% · confirmed {{ item['confirmedPct'] }}% · PUAR {{ item['puarPct'] }}%</p>
+          </article>
+        </div>
+
+        <div class="recon-form">
+          <h3>Decision funnel</h3>
+          <p>Observation → {{ decisionFunnel['observations'] || 0 }}</p>
+          <p>Target → {{ decisionFunnel['targets'] || 0 }}</p>
+          <p>PUAR → {{ decisionFunnel['puar'] || 0 }}</p>
+          <p>Core → {{ decisionFunnel['core'] || 0 }}</p>
+        </div>
+      </section>
+
+      <section class="recon-tab" *ngIf="activeTab === 'puar'">
+        <h2>ПУАР</h2>
+        <article class="recon-target-card" *ngFor="let item of puarProposals">
+          <header>
+            <strong>{{ item.sourceKind === 'target' ? 'Ціль' : 'Спостереження' }}</strong>
+            <span>{{ item.status }}</span>
+          </header>
+          <p>{{ item.createdAt | date: 'dd.MM HH:mm' }}</p>
+          <pre>{{ item.payload | json }}</pre>
+        </article>
+      </section>
+
+      <section class="recon-tab" *ngIf="activeTab === 'journal'">
+        <h2>&#1046;&#1091;&#1088;&#1085;&#1072;&#1083;</h2>
+        <div class="recon-form">
+          <h3>Delta CSV import</h3>
+          <input type="file" accept=".csv,text/csv" (change)="onImportFileSelected($event)" />
+          <div class="recon-grid-2">
+            <select [(ngModel)]="importSource">
+              <option *ngFor="let source of sources" [value]="source.value">{{ source.label }}</option>
+            </select>
+            <select [(ngModel)]="importTargetTypeOverride">
+              <option value="">Автовизначення типу</option>
+              <option *ngFor="let type of targetTypes" [value]="type.value">{{ type.label }}</option>
+            </select>
+          </div>
+          <div class="recon-grid-2">
+            <select [(ngModel)]="importDuplicateStrategy">
+              <option value="skip">&#1055;&#1088;&#1086;&#1087;&#1091;&#1089;&#1082;&#1072;&#1090;&#1080; &#1076;&#1091;&#1073;&#1083;&#1110;&#1082;&#1072;&#1090;&#1080;</option>
+              <option value="cancel">&#1047;&#1091;&#1087;&#1080;&#1085;&#1080;&#1090;&#1080; &#1087;&#1088;&#1080; &#1076;&#1091;&#1073;&#1083;&#1110;&#1082;&#1072;&#1090;&#1080;</option>
+              <option value="update-preview">&#1051;&#1080;&#1096;&#1077; preview &#1087;&#1088;&#1080; &#1076;&#1091;&#1073;&#1083;&#1110;&#1082;&#1072;&#1090;&#1080;</option>
+            </select>
+          </div>
+          <textarea [(ngModel)]="importCsv" placeholder="sidc,id,quantity,name,observation_datetime,..."></textarea>
+          <p *ngIf="importFilename">{{ importFilename }}</p>
+          <div class="recon-grid-2" *ngIf="importColumns().length">
+            <label *ngFor="let field of importMappingFields">
+              <span>{{ field.label }}</span>
+              <select [ngModel]="importMapping[field.key] || ''" (ngModelChange)="updateImportMapping(field.key, $event)">
+                <option value="">&#1040;&#1074;&#1090;&#1086;</option>
+                <option *ngFor="let column of importColumns()" [value]="column">{{ column }}</option>
+              </select>
+            </label>
+          </div>
+          <div class="recon-inline">
+            <button type="button" (click)="previewImport()" [disabled]="importBusy">Preview</button>
+            <button type="button" (click)="confirmImport()" [disabled]="importBusy">Confirm import</button>
+          </div>
+          <div *ngIf="importPreview">
+            <p>
+              &#1042;&#1089;&#1100;&#1086;&#1075;&#1086;: {{ importPreview.totalRows }} · &#1055;&#1088;&#1080;&#1081;&#1085;&#1103;&#1090;&#1086;: {{ importPreview.acceptedRows }} · &#1044;&#1091;&#1073;&#1083;&#1110;&#1082;&#1072;&#1090;&#1110;&#1074;:
+              {{ importPreview.duplicateRows }} · &#1055;&#1086;&#1087;&#1077;&#1088;&#1077;&#1076;&#1078;&#1077;&#1085;&#1100;: {{ importPreview.warningRows }} · &#1055;&#1086;&#1084;&#1080;&#1083;&#1086;&#1082;:
+              {{ importPreview.errorRows }}
+            </p>
+            <p *ngIf="importPreview.message">{{ importPreview.message }}</p>
+            <div class="recon-form" *ngIf="importRowsPreview().length">
+              <h3>&#1055;&#1077;&#1088;&#1096;&#1110; &#1088;&#1103;&#1076;&#1082;&#1080;</h3>
+              <article class="recon-row" *ngFor="let row of importRowsPreview()">
+                <strong *ngFor="let item of row | keyvalue">{{ item.key }}: {{ item.value }}</strong>
+              </article>
+            </div>
+            <article class="recon-row" *ngFor="let row of importPreview.rows | slice:0:8">
+              <strong>&#1056;&#1103;&#1076;&#1086;&#1082; {{ row.rowNumber }} · {{ row.status }}</strong>
+              <span *ngIf="row.message">{{ row.message }}</span>
+              <p *ngIf="row.normalized">{{ row.normalized | json }}</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="recon-form">
+          <h3>&#1030;&#1089;&#1090;&#1086;&#1088;&#1110;&#1103; &#1110;&#1084;&#1087;&#1086;&#1088;&#1090;&#1091;</h3>
+          <article class="recon-row" *ngFor="let batch of importHistory">
+            <strong>{{ batch.rawPayload?.['filename'] || batch.id }}</strong>
+            <span>{{ batch.createdAt | date: 'dd.MM HH:mm:ss' }} · {{ batch.status }}</span>
+            <p>
+              &#1042;&#1089;&#1100;&#1086;&#1075;&#1086; {{ batch.totalRows }} · &#1030;&#1084;&#1087;&#1086;&#1088;&#1090;&#1086;&#1074;&#1072;&#1085;&#1086; {{ batch.acceptedRows }} · &#1044;&#1091;&#1073;&#1083;&#1110;&#1082;&#1072;&#1090;&#1110;&#1074; {{ batch.duplicateRows }}
+              · &#1055;&#1086;&#1084;&#1080;&#1083;&#1086;&#1082; {{ batch.errorRows }}
+            </p>
+            <div class="recon-inline" *ngIf="batch.errorRows > 0">
+              <button type="button" class="secondary" (click)="downloadImportErrors(batch.id); $event.stopPropagation()">
+                CSV помилок
+              </button>
+            </div>
+          </article>
+        </div>
+
+        <div class="recon-form">
+          <h3>Кореляції</h3>
+          <button type="button" (click)="recalculateCorrelations()">Перерахувати</button>
+          <article class="recon-row" *ngFor="let item of correlations">
+            <strong>{{ item.status }} · score {{ item.score }}</strong>
+            <span>{{ item.distanceM | number: '1.0-0' }} м · {{ item.timeDeltaSec | number: '1.0-0' }} сек</span>
+          </article>
+        </div>
+
+        <article class="recon-row" *ngFor="let event of events">
+          <strong>{{ event.eventType }}</strong>
+          <span>{{ event.entityType }} · {{ event.createdAt | date: 'dd.MM HH:mm:ss' }}</span>
+        </article>
+      </section>
+    </div>
+  </aside>
+</section>

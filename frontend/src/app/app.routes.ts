@@ -6,6 +6,8 @@ import { ChargesPage } from './features/charges/charges-page/charges-page';
 import { DepotsPage } from './features/depots/depots-page/depots-page';
 import { FireMissionsPage } from './features/fire-missions/fire-missions-page/fire-missions-page';
 import { FirePositionsPage } from './features/fire-positions/fire-positions-page/fire-positions-page';
+import { EwPage } from './features/ew/ew-page/ew-page';
+import { AirAssetsPage } from './features/air-assets/air-assets-page/air-assets-page';
 import { FuzesPage } from './features/fuzes/fuzes-page/fuzes-page';
 import { MapPage } from './features/map/map-page/map-page';
 import { PrimersPage } from './features/primers/primers-page/primers-page';
@@ -23,9 +25,13 @@ import { ZonesPage } from './features/zones/zones-page/zones-page';
 import { UsersPage } from './features/users/users-page/users-page';
 import { AuditPage } from './features/audit/audit-page/audit-page';
 import { DocumentsPage } from './features/documents/documents-page/documents-page';
+import { DroneLogisticsPage } from './features/drone-logistics/drone-logistics-page';
 import { RecommendationsPage } from './features/recommendations/recommendations-page/recommendations-page';
+import { ReconPage } from './features/recon/recon-page/recon-page';
 import { AnalyticsPage } from './features/analytics/analytics-page/analytics-page';
 import { HomePage } from './features/home/home-page/home-page';
+import { NotificationsPage } from './features/notifications/notifications-page/notifications-page';
+import { PlannedTripsPage } from './features/planned-trips/planned-trips-page';
 
 export const routes: Routes = [
   {
@@ -46,6 +52,11 @@ export const routes: Routes = [
     path: 'map',
     canActivate: [authGuard],
     component: MapPage,
+  },
+  {
+    path: 'notifications',
+    canActivate: [authGuard],
+    component: NotificationsPage,
   },
   {
     path: 'service-orders',
@@ -88,6 +99,16 @@ export const routes: Routes = [
     component: StockMovementsPage,
   },
   {
+    path: 'drone-logistics',
+    canActivate: [authGuard],
+    component: DroneLogisticsPage,
+  },
+  {
+    path: 'planned-trips',
+    canActivate: [authGuard],
+    component: PlannedTripsPage,
+  },
+  {
     path: 'fire-missions',
     canActivate: [authGuard],
     component: FireMissionsPage,
@@ -96,6 +117,16 @@ export const routes: Routes = [
     path: 'air-threats',
     canActivate: [authGuard],
     component: AirThreatsPage,
+  },
+  {
+    path: 'ew',
+    canActivate: [authGuard],
+    component: EwPage,
+  },
+  {
+    path: 'air-assets',
+    canActivate: [authGuard],
+    component: AirAssetsPage,
   },
   {
     path: 'shells',
@@ -139,6 +170,11 @@ export const routes: Routes = [
     component: AnalyticsPage,
   },
   {
+    path: 'recon',
+    canActivate: [authGuard],
+    component: ReconPage,
+  },
+  {
     path: 'recommendations',
     canActivate: [authGuard],
     component: RecommendationsPage,
@@ -159,10 +195,10 @@ export const routes: Routes = [
     component: SettingsPage,
   },
   {
-  path: 'users',
-  canActivate: [authGuard],
-  component: UsersPage,
-},
+    path: 'users',
+    canActivate: [authGuard],
+    component: UsersPage,
+  },
   {
     path: '**',
     redirectTo: 'home',

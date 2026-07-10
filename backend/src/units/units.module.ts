@@ -1,14 +1,16 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { Depot } from '../depots/depot.entity';
 import { Unit } from './unit.entity';
 import { UnitsController } from './units.controller';
 import { UnitsService } from './units.service';
 import { RealtimeModule } from '../realtime/realtime.module';
 
 @Module({
-  imports: [RealtimeModule, 
-    TypeOrmModule.forFeature([Unit]),
+  imports: [
+    RealtimeModule,
+    TypeOrmModule.forFeature([Unit, Depot]),
     AuthModule,
   ],
   controllers: [UnitsController],

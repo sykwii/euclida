@@ -47,4 +47,27 @@ export class WeaponSystemsService {
   syncFirePositionStates(): Observable<{ updated: number }> {
     return this.api.post<{ updated: number }>(`/weapon-systems/sync-fire-position-states`, {});
   }
+
+  requestMaintenance(
+    id: string,
+    body: { requestedStartAt?: string; durationMinutes: number; note?: string },
+  ): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/request`, body);
+  }
+
+  approveMaintenance(id: string): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/approve`, {});
+  }
+
+  rejectMaintenance(id: string): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/reject`, {});
+  }
+
+  extendMaintenance(id: string, body: { extraMinutes: number; note?: string }): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/extend`, body);
+  }
+
+  finishMaintenance(id: string): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/finish`, {});
+  }
 }

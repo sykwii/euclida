@@ -1,304 +1,310 @@
-<div class="eu-page analytics-v2-page">
-  <header class="eu-page-header analytics-v2-hero">
-    <div class="analytics-v2-title">
-      <span>ЄВКЛІДА CORE</span>
-      <h1>Аналітика</h1>
-      <p>Поточна обстановка показує стан системи зараз. Історичні блоки рахуються за вибраний період.</p>
+<section class="analytics-v3">
+  <header class="analytics-v3-head">
+    <div>
+      <span>9. Аналітика</span>
+      <h1>Оперативна аналітика</h1>
     </div>
 
-    <div class="eu-page-actions analytics-v2-controls">
-      <label class="analytics-v2-field">
-        <span>Період історії</span>
-        <select [ngModel]="periodDays" (ngModelChange)="setPeriod($event)" [disabled]="loading">
-          <option [ngValue]="7">7 днів</option>
-          <option [ngValue]="10">10 днів</option>
-          <option [ngValue]="20">20 днів</option>
-          <option [ngValue]="30">30 днів</option>
+    <div class="analytics-v3-actions">
+      <label>
+        <span>Період</span>
+        <select
+          [ngModel]="periodDays"
+          (ngModelChange)="setPeriod($event)"
+          (change)="onPeriodSelect($event)"
+          [disabled]="loading"
+        >
+          <option value="7">Останні 7 діб</option>
+          <option value="10">Останні 10 діб</option>
+          <option value="20">Останні 20 діб</option>
+          <option value="30">Останні 30 діб</option>
         </select>
       </label>
 
-      <div class="analytics-v2-sync" [class.refreshing]="refreshing">
-        <b>{{ refreshing ? 'Оновлюється' : 'Дані актуальні' }}</b>
-        <small>{{ lastUpdatedAt ? (lastUpdatedAt | date:'dd.MM.yyyy HH:mm:ss') : 'очікування відповіді' }}</small>
-      </div>
-
-      <button type="button" class="analytics-v2-button" (click)="refresh(false, true)" [disabled]="loading">
-        Оновити
+      <button type="button" (click)="refresh(false, true)" [disabled]="loading || refreshing">
+        {{ refreshing ? 'Оновлення...' : 'Оновити' }}
       </button>
     </div>
   </header>
 
-  <section class="analytics-v2-skeleton" *ngIf="loading && !data">
-    <div *ngFor="let item of skeletonItems; trackBy: trackByIndex"></div>
+  <div class="analytics-v3-error" *ngIf="error">{{ error }}</div>
+
+  <section class="analytics-v3-loading" *ngIf="loading && !data">
+    <div *ngFor="let item of skeletonItems"></div>
   </section>
 
-  <section class="analytics-v2-state error" *ngIf="error && !data && !loading">
-    <strong>Не вдалося завантажити аналітику</strong>
-    <span>{{ error }}</span>
-    <button type="button" class="analytics-v2-button" (click)="refresh(true, true)">Повторити</button>
-  </section>
-
-  <section class="analytics-v2-state" *ngIf="!loading && !error && !data">
-    <strong>Дані аналітики відсутні</strong>
-    <span>Сторінка завантажує показники автоматично. Натисніть «Оновити», якщо сервер ще не відповів.</span>
-  </section>
-
-  <ng-container *ngIf="data as analytics">
-    <p class="analytics-v2-inline-error" *ngIf="error">{{ error }}</p>
-
-    <section class="analytics-v2-section">
-      <div class="analytics-v2-section-title">
-        <span>Поточна обстановка</span>
-        <h2>Готовність та ризики зараз</h2>
-      </div>
-
-      <div class="analytics-v2-kpi-grid">
-        <article class="analytics-v2-kpi ok">
-          <span>БГ СГ</span>
-          <strong>{{ safeNumber(analytics.readiness.weapons.ready) }}</strong>
-          <small>з {{ safeNumber(analytics.readiness.weapons.total) }} · {{ readinessPercent(analytics.readiness.weapons.ready, analytics.readiness.weapons.total) }}%</small>
-          <div class="analytics-v2-meter"><i [style.width.%]="readinessPercent(analytics.readiness.weapons.ready, analytics.readiness.weapons.total)"></i></div>
-        </article>
-
-        <article class="analytics-v2-kpi danger">
-          <span>Не БГ СГ</span>
-          <strong>{{ safeNumber(analytics.readiness.weapons.notReady) }}</strong>
-          <small>{{ analytics.readiness.weapons.notReadyReasons.length || 0 }} причин</small>
-        </article>
-
-        <article class="analytics-v2-kpi ok">
-          <span>БГ ВП</span>
-          <strong>{{ safeNumber(analytics.readiness.firePositions.ready) }}</strong>
-          <small>з {{ safeNumber(analytics.readiness.firePositions.total) }} · {{ readinessPercent(analytics.readiness.firePositions.ready, analytics.readiness.firePositions.total) }}%</small>
-          <div class="analytics-v2-meter"><i [style.width.%]="readinessPercent(analytics.readiness.firePositions.ready, analytics.readiness.firePositions.total)"></i></div>
-        </article>
-
-        <article class="analytics-v2-kpi danger">
-          <span>Не БГ ВП</span>
-          <strong>{{ safeNumber(analytics.readiness.firePositions.notReady) }}</strong>
-          <small>потребують уваги</small>
-        </article>
-
-        <article class="analytics-v2-kpi warning">
-          <span>Критичний БК</span>
-          <strong>{{ safeNumber(analytics.lowAmmoFirePositions.length) }}</strong>
-          <small>ВП з низьким залишком</small>
-        </article>
-
-        <article class="analytics-v2-kpi warning">
-          <span>Ротація</span>
-          <strong>{{ safeNumber(analytics.rotation.length) }}</strong>
-          <small>позицій у списку</small>
-        </article>
-      </div>
+  <ng-container *ngIf="!loading || data">
+    <section class="analytics-v3-kpis">
+      <article class="good hintable" title="Кількість ВГЗ, завершених за вибраний період.">
+        <span>Виконано ВГЗ</span>
+        <strong>{{ safeNumber(totalCompletedTasks()) }}</strong>
+        <small>{{ safeNumber(data?.serviceOrders?.completionRate) }}% завершення</small>
+      </article>
+      <article class="info hintable" title="Кількість підвозів БК і сумарний обсяг переміщення.">
+        <span>Підвозів БК</span>
+        <strong>{{ safeNumber(data?.logistics?.deliveries) }}</strong>
+        <small>{{ safeNumber(totalMovedAmmo()) }} од. переміщено</small>
+      </article>
+      <article class="warn hintable" title="ВП, де прогноз показує ризик нестачі БК.">
+        <span>Прогноз ризику БК</span>
+        <strong>{{
+          safeNumber(
+            (data?.logistics?.criticalForecastCount || 0) +
+              (data?.logistics?.warningForecastCount || 0)
+          )
+        }}</strong>
+        <small>{{ safeNumber(data?.logistics?.lowAmmoCount) }} ВП з низьким БК</small>
+      </article>
+      <article class="good hintable" title="Частка ВП у стані БГ від загальної кількості.">
+        <span>Готовність ВП</span>
+        <strong
+          >{{
+            readinessPercent(
+              data?.readiness?.firePositions?.ready,
+              data?.readiness?.firePositions?.total
+            )
+          }}%</strong
+        >
+        <small
+          >{{ safeNumber(data?.readiness?.firePositions?.ready) }} /
+          {{ safeNumber(data?.readiness?.firePositions?.total) }}</small
+        >
+      </article>
     </section>
 
-    <section class="analytics-v2-section analytics-v2-risk-section">
-      <div class="analytics-v2-section-title">
-        <span>Оперативна увага</span>
-        <h2>Що потребує контролю</h2>
-      </div>
+    <nav class="analytics-v3-tabs">
+      <button
+        type="button"
+        [class.active]="activeTab === 'overview'"
+        (click)="setActiveTab('overview')"
+      >
+        Огляд
+      </button>
+      <button
+        type="button"
+        [class.active]="activeTab === 'efficiency'"
+        (click)="setActiveTab('efficiency')"
+      >
+        Ефективність
+      </button>
+      <button
+        type="button"
+        [class.active]="activeTab === 'logistics'"
+        (click)="setActiveTab('logistics')"
+      >
+        Логістика
+      </button>
+      <button
+        type="button"
+        [class.active]="activeTab === 'forecast'"
+        (click)="setActiveTab('forecast')"
+      >
+        Прогноз
+      </button>
+      <button
+        type="button"
+        [class.active]="activeTab === 'history'"
+        (click)="setActiveTab('history')"
+      >
+        Історія
+      </button>
+    </nav>
 
-      <div class="analytics-v2-risk-grid" *ngIf="analytics.attention.length; else noAttention">
-        <article class="analytics-v2-risk" *ngFor="let item of analytics.attention; trackBy: trackByAttention" [class.danger]="item.level === 'critical'" [class.warning]="item.level === 'warning'">
-          <b>{{ safeText(item.title) }}</b>
-          <span>{{ safeText(item.details) }}</span>
-        </article>
-      </div>
-      <ng-template #noAttention>
-        <p class="analytics-v2-empty">Критичних зауважень немає.</p>
-      </ng-template>
-    </section>
+    <main class="analytics-v3-grid">
+      <section class="analytics-v3-panel span-2" *ngIf="showAnalyticsSection('deliveries')">
+        <header
+          class="hintable"
+          title="Показує, куди найчастіше підвозили БК і скільки одиниць доставили."
+        >
+          <h2>Топ ВП по кількості підвозів</h2>
+          <span>скільки разів і скільки БК подвезли</span>
+        </header>
 
-    <section class="analytics-v2-section">
-      <div class="analytics-v2-section-title">
-        <span>Готовність</span>
-        <h2>Причини неготовності</h2>
-      </div>
-
-      <div class="analytics-v2-card-grid two">
-        <article class="analytics-v2-card">
-          <header>
-            <h3>СГ</h3>
-            <small>Поточна технічна готовність</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="analytics.readiness.weapons.notReadyReasons.length; else noWeaponReasons">
-            <div class="analytics-v2-row" *ngFor="let row of analytics.readiness.weapons.notReadyReasons; trackBy: trackByReason">
-              <span>{{ safeText(row.reason, 'Не вказано') }}</span>
-              <b>{{ safeNumber(row.total) }}</b>
+        <div class="analytics-v3-bars" *ngIf="topDeliveryCountRows(8).length; else noDeliveries">
+          <article *ngFor="let row of topDeliveryCountRows(8); trackBy: trackByDelivery">
+            <div>
+              <strong>{{ row.firePositionName }}</strong>
+              <span>{{ row.unitName || row.depotName || '—' }}</span>
             </div>
-          </div>
-          <ng-template #noWeaponReasons><p class="analytics-v2-empty">Немає причин неготовності СГ.</p></ng-template>
-        </article>
+            <b>{{ row.deliveries }}</b>
+            <em>{{ safeNumber(row.totalQuantity) }} од.</em>
+            <i
+              [style.width.%]="percent(row.deliveries, topDeliveryCountRows(8)[0]?.deliveries || 1)"
+            ></i>
+          </article>
+        </div>
 
-        <article class="analytics-v2-card">
-          <header>
-            <h3>ВП</h3>
-            <small>Позиції та повітряна обстановка</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="analytics.readiness.firePositions.notReadyReasons.length; else noFpReasons">
-            <div class="analytics-v2-row" *ngFor="let row of analytics.readiness.firePositions.notReadyReasons; trackBy: trackByReason">
-              <span>{{ safeText(row.reason, 'Не вказано') }}</span>
-              <b>{{ safeNumber(row.total) }}</b>
+        <ng-template #noDeliveries>
+          <p class="analytics-v3-empty">Дані підвозів відсутні.</p>
+        </ng-template>
+      </section>
+
+      <section class="analytics-v3-panel" *ngIf="showAnalyticsSection('tasks')">
+        <header
+          class="hintable"
+          title="Порівнює ВП за кількістю виконаних задач і фактичною витратою БК."
+        >
+          <h2>Топ ВП по виконаних задачах</h2>
+          <span>ВГЗ / витрата БК</span>
+        </header>
+
+        <div class="analytics-v3-list">
+          <article *ngFor="let row of topTasks(8); trackBy: trackByTask">
+            <div>
+              <strong>{{ row.firePositionName }}</strong>
+              <span>{{ row.unitName || '—' }}</span>
             </div>
-          </div>
-          <ng-template #noFpReasons><p class="analytics-v2-empty">Немає причин неготовності ВП.</p></ng-template>
-        </article>
-      </div>
-    </section>
+            <b>{{ row.completedTasks }}</b>
+            <em>{{ safeNumber(row.actualQuantity) }} од.</em>
+          </article>
+        </div>
+      </section>
 
-    <section class="analytics-v2-section">
-      <div class="analytics-v2-section-title">
-        <span>Історія за {{ periodDays }} днів</span>
-        <h2>Активність ВП</h2>
-      </div>
+      <section class="analytics-v3-panel" *ngIf="showAnalyticsSection('ammo')">
+        <header class="hintable" title="Оцінює залишок БК за середньою добовою витратою.">
+          <h2>Прогноз залишку БК</h2>
+          <span>критичні та попереджувальні ВП</span>
+        </header>
 
-      <div class="analytics-v2-card-grid two">
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Топ ВП за підвозами</h3>
-            <small>Кількість підвозів і обсяг БК</small>
-          </header>
-          <div class="analytics-v2-rank-list" *ngIf="topDeliveries().length; else noDeliveries">
-            <article class="analytics-v2-rank" *ngFor="let row of topDeliveries(); let index = index; trackBy: trackByDelivery">
-              <em>{{ index + 1 }}</em>
-              <div>
-                <b>{{ safeText(row.firePositionName) }}</b>
-                <span>{{ safeText(row.unitName, 'Без підрозділу') }} · {{ safeText(row.depotName, 'Склад не вказано') }}</span>
-              </div>
-              <strong>{{ safeNumber(row.deliveries) }}</strong>
-              <small>БК {{ safeNumber(row.totalQuantity) }} · сн {{ safeNumber(row.shells) }} · зар {{ safeNumber(row.charges) }}</small>
-            </article>
-          </div>
-          <ng-template #noDeliveries><p class="analytics-v2-empty">За період підвозів немає.</p></ng-template>
-        </article>
-
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Топ ВП за виконаними ВГЗ</h3>
-            <small>Факт виконання і витрата</small>
-          </header>
-          <div class="analytics-v2-rank-list" *ngIf="topTasks().length; else noTasks">
-            <article class="analytics-v2-rank" *ngFor="let row of topTasks(); let index = index; trackBy: trackByTask">
-              <em>{{ index + 1 }}</em>
-              <div>
-                <b>{{ safeText(row.firePositionName) }}</b>
-                <span>{{ safeText(row.unitName, 'Без підрозділу') }}</span>
-              </div>
-              <strong>{{ safeNumber(row.completedTasks) }}</strong>
-              <small>витрата {{ safeNumber(row.actualQuantity) }}</small>
-            </article>
-          </div>
-          <ng-template #noTasks><p class="analytics-v2-empty">За період виконаних ВГЗ немає.</p></ng-template>
-        </article>
-      </div>
-    </section>
-
-    <section class="analytics-v2-section">
-      <div class="analytics-v2-section-title">
-        <span>БК та ресурс</span>
-        <h2>Критичні залишки, прогноз, ротація</h2>
-      </div>
-
-      <div class="analytics-v2-card-grid three">
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Критичний БК</h3>
-            <small>ВП з мінімальним залишком снарядів</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="analytics.lowAmmoFirePositions.length; else noLowAmmo">
-            <div class="analytics-v2-row three" *ngFor="let row of analytics.lowAmmoFirePositions; trackBy: trackByLowAmmo">
-              <span>{{ safeText(row.firePositionName) }}</span>
-              <small>{{ safeText(row.unitName, 'Без підрозділу') }}</small>
-              <b>{{ safeNumber(row.shellBalance) }}</b>
+        <div class="analytics-v3-list">
+          <article
+            *ngFor="let row of urgentAmmo(8); trackBy: trackByAmmo"
+            [class]="levelClass(row.level)"
+          >
+            <div>
+              <strong>{{ row.firePositionName }}</strong>
+              <span>{{ safeNumber(row.shellBalance) }} снар. · {{ daysLeftText(row) }}</span>
             </div>
-          </div>
-          <ng-template #noLowAmmo><p class="analytics-v2-empty">Критичних залишків не знайдено.</p></ng-template>
-        </article>
+            <b>{{ safeNumber(row.averageDailyConsumption) }}</b>
+            <em>{{ levelLabel(row.level) }}</em>
+          </article>
+        </div>
+      </section>
 
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Прогноз БК</h3>
-            <small>Оцінка за середньою витратою</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="urgentAmmo().length; else noForecast">
-            <div class="analytics-v2-row three" *ngFor="let row of urgentAmmo(); trackBy: trackByAmmo" [class.danger]="levelClass(row.level) === 'danger'" [class.warning]="levelClass(row.level) === 'warning'">
-              <span>{{ safeText(row.firePositionName) }}</span>
-              <small>залишок {{ safeNumber(row.shellBalance) }} · {{ safeNumber(row.averageDailyConsumption) }}/добу</small>
-              <b>{{ daysLeftText(row) }}</b>
+      <section class="analytics-v3-panel" *ngIf="showAnalyticsSection('rotation')">
+        <header class="hintable" title="Підказує, де давно не проводили ротацію.">
+          <h2>Кому проводити ротацію</h2>
+          <span>прострочені та найближчі</span>
+        </header>
+
+        <div class="analytics-v3-list">
+          <article
+            *ngFor="let row of urgentRotation(8); trackBy: trackByRotation"
+            [class]="levelClass(row.level)"
+          >
+            <div>
+              <strong>{{ row.firePositionName }}</strong>
+              <span>{{ row.unitName || '—' }}</span>
             </div>
-          </div>
-          <ng-template #noForecast><p class="analytics-v2-empty">Критичних прогнозів немає.</p></ng-template>
-        </article>
+            <b>{{ row.daysSinceRotation === null ? '—' : row.daysSinceRotation }}</b>
+            <em>{{ levelLabel(row.level) }}</em>
+          </article>
+        </div>
+      </section>
 
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Ротація</h3>
-            <small>Строки перебування на ВП</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="urgentRotation().length; else noRotation">
-            <div class="analytics-v2-row three" *ngFor="let row of urgentRotation(); trackBy: trackByRotation" [class.danger]="levelClass(row.level) === 'danger'" [class.warning]="levelClass(row.level) === 'warning'">
-              <span>{{ safeText(row.firePositionName) }}</span>
-              <small>{{ row.daysSinceRotation === null ? 'немає даних' : row.daysSinceRotation + ' діб' }}</small>
-              <b>{{ levelLabel(row.level) }}</b>
+      <section class="analytics-v3-panel" *ngIf="showAnalyticsSection('bestWeapons')">
+        <header
+          class="hintable"
+          title="СГ з найкращим співвідношенням виконаних задач до залучення."
+        >
+          <h2>Кращі СГ</h2>
+          <span>за виконанням</span>
+        </header>
+
+        <div class="analytics-v3-list">
+          <article *ngFor="let row of efficiencyTop(8); trackBy: trackByWeaponEfficiency">
+            <div>
+              <strong>{{ row.weaponName }}</strong>
+              <span>{{ row.firePositionName || row.unitName || '—' }}</span>
             </div>
-          </div>
-          <ng-template #noRotation><p class="analytics-v2-empty">Ротація не потребує уваги.</p></ng-template>
-        </article>
-      </div>
-    </section>
+            <b>{{ row.completedTasks }}</b>
+            <em>{{ safeNumber(row.efficiencyPercent) }}%</em>
+          </article>
+        </div>
+      </section>
 
-    <section class="analytics-v2-section">
-      <div class="analytics-v2-section-title">
-        <span>Ефективність</span>
-        <h2>СГ та повітряна обстановка</h2>
-      </div>
+      <section class="analytics-v3-panel" *ngIf="showAnalyticsSection('worstWeapons')">
+        <header
+          class="hintable"
+          title="СГ, які мають найнижчі показники виконання або потребують перевірки."
+        >
+          <h2>Гірші СГ</h2>
+          <span>потребують уваги</span>
+        </header>
 
-      <div class="analytics-v2-card-grid three">
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Найефективніші СГ</h3>
-            <small>Кращий результат за період</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="efficiencyTop().length; else noEffTop">
-            <div class="analytics-v2-row three" *ngFor="let row of efficiencyTop(); trackBy: trackByWeaponEfficiency">
-              <span>{{ safeText(row.weaponName) }}</span>
-              <small>{{ safeText(row.firePositionName, 'ВП не вказана') }}</small>
-              <b>{{ safeNumber(row.efficiencyPercent) }}%</b>
+        <div class="analytics-v3-list">
+          <article
+            class="warning"
+            *ngFor="let row of efficiencyBottom(8); trackBy: trackByWeaponEfficiency"
+          >
+            <div>
+              <strong>{{ row.weaponName }}</strong>
+              <span>{{ row.firePositionName || row.unitName || '—' }}</span>
             </div>
-          </div>
-          <ng-template #noEffTop><p class="analytics-v2-empty">Даних ефективності немає.</p></ng-template>
-        </article>
+            <b>{{ row.completedTasks }}</b>
+            <em>{{ safeNumber(row.efficiencyPercent) }}%</em>
+          </article>
+        </div>
+      </section>
 
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Найнижча ефективність</h3>
-            <small>Потребує перевірки</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="efficiencyBottom().length; else noEffBottom">
-            <div class="analytics-v2-row three" *ngFor="let row of efficiencyBottom(); trackBy: trackByWeaponEfficiency">
-              <span>{{ safeText(row.weaponName) }}</span>
-              <small>{{ safeText(row.firePositionName, 'ВП не вказана') }}</small>
-              <b>{{ safeNumber(row.efficiencyPercent) }}%</b>
-            </div>
-          </div>
-          <ng-template #noEffBottom><p class="analytics-v2-empty">Даних ефективності немає.</p></ng-template>
-        </article>
+      <section class="analytics-v3-panel span-2" *ngIf="showAnalyticsSection('problems')">
+        <header
+          class="hintable"
+          title="Групує причини не БГ, щоб швидко відділити повітряну небезпеку від технічних і логістичних причин."
+        >
+          <h2>Аналіз проблемних ВП</h2>
+          <span>повітряна небезпека, технічні причини, БК</span>
+        </header>
 
-        <article class="analytics-v2-card">
-          <header>
-            <h3>Повітряна загроза</h3>
-            <small>Блокування ВП</small>
-          </header>
-          <div class="analytics-v2-list" *ngIf="analytics.threatBlockedFirePositions.length; else noThreat">
-            <div class="analytics-v2-row" *ngFor="let row of analytics.threatBlockedFirePositions; trackBy: trackByReason">
-              <span>{{ safeText(row.reason) }}</span>
-              <b>{{ safeNumber(row.total) }}</b>
-            </div>
+        <div class="analytics-v3-categories">
+          <article
+            *ngFor="let row of readinessCategoryRows(); trackBy: trackBySimple"
+            [class]="row.level"
+          >
+            <span>{{ row.label }}</span>
+            <strong>{{ row.value }}</strong>
+            <small>{{ row.detail }}</small>
+          </article>
+        </div>
+
+        <div class="analytics-v3-reasons">
+          <div *ngFor="let row of worstReadinessReasons(8); trackBy: trackByReason">
+            <span>{{ row.reason }}</span>
+            <b>{{ row.total }}</b>
           </div>
-          <ng-template #noThreat><p class="analytics-v2-empty">Блокувань немає.</p></ng-template>
-        </article>
-      </div>
-    </section>
+        </div>
+
+        <div class="analytics-v3-problem-fp">
+          <article
+            *ngFor="let row of problemFirePositions(10); trackBy: trackByIndex"
+            [class]="row.category"
+          >
+            <div>
+              <strong>{{ row.firePositionName }}</strong>
+              <span>{{ row.unitName || '—' }} · {{ row.reason }}</span>
+            </div>
+            <b>{{ problemCategoryLabel(row.category) }}</b>
+            <em>БК {{ safeNumber(row.shellBalance) }}</em>
+          </article>
+        </div>
+      </section>
+
+      <section class="analytics-v3-panel span-2" *ngIf="showAnalyticsSection('dynamics')">
+        <header class="hintable" title="Показує зміну кількості виконаних ВГЗ у вибраному періоді.">
+          <h2>Динаміка виконання</h2>
+          <span>ВГЗ за період</span>
+        </header>
+
+        <div class="analytics-v3-chart" *ngIf="dailyRows(10).length">
+          <article
+            *ngFor="let row of dailyRows(10); trackBy: trackBySimple"
+            [style.height.%]="percent(row.value, maxSimple(dailyRows(10)))"
+          >
+            <b>{{ row.value }}</b>
+            <span>{{ row.label }}</span>
+          </article>
+        </div>
+      </section>
+    </main>
   </ng-container>
-</div>
+</section>

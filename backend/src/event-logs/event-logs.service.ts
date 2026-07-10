@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, DataSource, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { EventLog } from './event-log.entity';
@@ -33,14 +33,33 @@ export interface CreateEventLogInput {
 }
 
 @Injectable()
-export class EventLogsService {
+export class EventLogsService implements OnModuleInit {
+  private readonly logger = new Logger(EventLogsService.name);
+
   constructor(
     @InjectRepository(EventLog)
     private readonly repository: Repository<EventLog>,
     private readonly accessScope: AccessScopeService,
+    private readonly dataSource: DataSource,
   ) {}
 
-  async findAll(user: AuthUser, filters: EventLogFilters = {}): Promise<EventLog[]> {
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.dataSource.query(
+        'ALTER TABLE event_logs ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ NULL',
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to ensure event_logs.read_at column: ${message}`,
+      );
+    }
+  }
+
+  async findAll(
+    user: AuthUser,
+    filters: EventLogFilters = {},
+  ): Promise<EventLog[]> {
     const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
 
     if (allowedUnitIds !== null && allowedUnitIds.length === 0) {
@@ -48,16 +67,21 @@ export class EventLogsService {
     }
 
     const limit = Math.min(Math.max(Number(filters.limit || 200), 1), 500);
-    const query = this.repository.createQueryBuilder('event')
+    const query = this.repository
+      .createQueryBuilder('event')
       .orderBy('event.createdAt', 'DESC')
       .take(limit);
 
     if (allowedUnitIds !== null) {
-      query.andWhere('event.unitId IN (:...allowedUnitIds)', { allowedUnitIds });
+      query.andWhere('event.unitId IN (:...allowedUnitIds)', {
+        allowedUnitIds,
+      });
     }
 
     if (filters.eventType) {
-      query.andWhere('event.eventType = :eventType', { eventType: filters.eventType });
+      query.andWhere('event.eventType = :eventType', {
+        eventType: filters.eventType,
+      });
     }
 
     if (filters.action) {
@@ -65,20 +89,28 @@ export class EventLogsService {
     }
 
     if (filters.entityType) {
-      query.andWhere('event.entityType = :entityType', { entityType: filters.entityType });
+      query.andWhere('event.entityType = :entityType', {
+        entityType: filters.entityType,
+      });
     }
 
     const search = filters.q?.trim();
 
     if (search) {
-      query.andWhere(new Brackets((qb) => {
-        qb.where('event.title ILIKE :search', { search: `%${search}%` })
-          .orWhere('event.details ILIKE :search', { search: `%${search}%` })
-          .orWhere('event.entityName ILIKE :search', { search: `%${search}%` })
-          .orWhere('event.unitName ILIKE :search', { search: `%${search}%` })
-          .orWhere('event.actorName ILIKE :search', { search: `%${search}%` })
-          .orWhere('event.actorLogin ILIKE :search', { search: `%${search}%` });
-      }));
+      query.andWhere(
+        new Brackets((qb) => {
+          qb.where('event.title ILIKE :search', { search: `%${search}%` })
+            .orWhere('event.details ILIKE :search', { search: `%${search}%` })
+            .orWhere('event.entityName ILIKE :search', {
+              search: `%${search}%`,
+            })
+            .orWhere('event.unitName ILIKE :search', { search: `%${search}%` })
+            .orWhere('event.actorName ILIKE :search', { search: `%${search}%` })
+            .orWhere('event.actorLogin ILIKE :search', {
+              search: `%${search}%`,
+            });
+        }),
+      );
     }
 
     return query.getMany();
@@ -108,5 +140,29 @@ export class EventLogsService {
     });
 
     return this.repository.save(event);
+  }
+
+  async markRead(user: AuthUser, ids?: string[]): Promise<{ updated: number }> {
+    const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
+    const query = this.repository
+      .createQueryBuilder()
+      .update(EventLog)
+      .set({ readAt: () => 'NOW()' })
+      .where('read_at IS NULL');
+
+    if (allowedUnitIds !== null) {
+      if (allowedUnitIds.length === 0) {
+        return { updated: 0 };
+      }
+
+      query.andWhere('unit_id IN (:...allowedUnitIds)', { allowedUnitIds });
+    }
+
+    if (ids?.length) {
+      query.andWhere('id IN (:...ids)', { ids });
+    }
+
+    const result = await query.execute();
+    return { updated: result.affected ?? 0 };
   }
 }

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
@@ -41,7 +45,19 @@ export class ChargesService {
 
   async update(id: string, data: UpdateChargeDto): Promise<Charge> {
     const charge = await this.findOne(id);
-    Object.assign(charge, this.normalizeChargeData({ ...charge, ...data } as unknown as CreateChargeDto));
+    const merged: CreateChargeDto = {
+      marking: data.marking ?? charge.marking,
+      packagingType: data.packagingType ?? charge.packagingType,
+      measurementUnit: data.measurementUnit ?? charge.measurementUnit,
+      chargeKind: data.chargeKind ?? charge.chargeKind,
+      modulesPerCharge:
+        data.modulesPerCharge ?? charge.modulesPerCharge ?? undefined,
+      maxUsableModules:
+        data.maxUsableModules ?? charge.maxUsableModules ?? undefined,
+      moduleNote: data.moduleNote ?? charge.moduleNote ?? undefined,
+    };
+
+    Object.assign(charge, this.normalizeChargeData(merged));
     const saved = await this.chargesRepository.save(charge);
     this.emitReferenceChanged('updated', saved.id);
     return saved;
@@ -53,11 +69,18 @@ export class ChargesService {
     this.emitReferenceChanged('deleted', id);
   }
 
-  private emitReferenceChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
-    this.realtimeEvents.emitMany(['reference', 'stock', 'analytics', 'events'], action, {
-      entity: 'charge',
-      id,
-    });
+  private emitReferenceChanged(
+    action: 'created' | 'updated' | 'deleted',
+    id: string,
+  ): void {
+    this.realtimeEvents.emitMany(
+      ['reference', 'stock', 'analytics', 'events'],
+      action,
+      {
+        entity: 'charge',
+        id,
+      },
+    );
   }
 
   private normalizeChargeData(data: CreateChargeDto): Partial<Charge> {
@@ -77,15 +100,21 @@ export class ChargesService {
     const maxUsableModules = Number(data.maxUsableModules);
 
     if (!Number.isInteger(modulesPerCharge) || modulesPerCharge < 1) {
-      throw new BadRequestException('Для модульного заряду вкажи кількість модулів у заряді');
+      throw new BadRequestException(
+        'Для модульного заряду вкажи кількість модулів у заряді',
+      );
     }
 
     if (!Number.isInteger(maxUsableModules) || maxUsableModules < 1) {
-      throw new BadRequestException('Для модульного заряду вкажи максимальну кількість модулів до використання');
+      throw new BadRequestException(
+        'Для модульного заряду вкажи максимальну кількість модулів до використання',
+      );
     }
 
     if (maxUsableModules > modulesPerCharge) {
-      throw new BadRequestException('Максимально дозволені модулі не можуть перевищувати кількість модулів у заряді');
+      throw new BadRequestException(
+        'Максимально дозволені модулі не можуть перевищувати кількість модулів у заряді',
+      );
     }
 
     return {

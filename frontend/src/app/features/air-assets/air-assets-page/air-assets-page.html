@@ -1,0 +1,420 @@
+﻿<div class="special-assets-page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Повітря</span>
+      <h1>Повітряні розрахунки</h1>
+      <p>Розвідка, бойові FPV, камікадзе та важкі бомбери з позиціями, районами і секторами.</p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="ghost-button" (click)="load()">Оновити</button>
+      <button type="button" class="ghost-button" (click)="openTask()">+ Задача</button>
+      <button type="button" class="ghost-button" (click)="openCreate('recon')">+ Розвідка</button>
+      <button type="button" class="primary-button" (click)="openCreate('combat')">+ Бойовий</button>
+    </div>
+  </header>
+
+  <section class="stats-grid">
+    <article><span>Усього</span><strong>{{ items.length }}</strong></article>
+    <article><span>Розвідка</span><strong>{{ reconCount }}</strong></article>
+    <article><span>Бойові</span><strong>{{ combatCount }}</strong></article>
+    <article><span>БГ</span><strong>{{ readyCount }}</strong></article>
+    <article><span>Задачі</span><strong>{{ activeTaskCount }}</strong></article>
+  </section>
+
+  <section class="filter-row">
+    <button type="button" class="ghost-button" [class.active]="activeGroup === 'all'" (click)="setGroup('all')">Усі</button>
+    <button type="button" class="ghost-button" [class.active]="activeGroup === 'recon'" (click)="setGroup('recon')">Розвідка</button>
+    <button type="button" class="ghost-button" [class.active]="activeGroup === 'combat'" (click)="setGroup('combat')">Бойові</button>
+  </section>
+
+  <section class="ui-state-block ui-state-error" *ngIf="errorMessage && !formModalOpen && !stockModalItem && !reconModalItem">
+    <span class="ui-state-icon">!</span>
+    <h2>Помилка</h2>
+    <p>{{ errorMessage }}</p>
+  </section>
+
+  <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження повітряних розрахунків">
+    <article class="ui-skeleton-card" *ngFor="let row of [1, 2, 3]"><span></span><strong></strong><small></small></article>
+  </div>
+
+  <section class="ui-state-block" *ngIf="!loading && !errorMessage && filteredItems.length === 0">
+    <span class="ui-state-icon">∅</span>
+    <h2>Розрахунки ще не додані</h2>
+    <p>Додайте розвідників або бойові розрахунки.</p>
+  </section>
+
+  <section class="asset-grid" *ngIf="!loading && filteredItems.length > 0">
+    <article class="asset-card" *ngFor="let item of filteredItems">
+      <div class="card-top">
+        <span class="type-badge">{{ getGroupLabel(item.assetGroup) }}</span>
+        <span class="status-pill" [class.ready]="item.readinessStatus === 'ready'" [class.danger]="item.readinessStatus === 'not_ready'">
+          {{ getReadinessLabel(item.readinessStatus) }}
+        </span>
+      </div>
+
+      <h2>{{ item.name }}</h2>
+      <p class="callsign">{{ item.callsign }}</p>
+
+      <div class="compact-info">
+        <p><span>Тип</span><strong>{{ item.assetGroup === 'recon' ? getReconTypeLabel(item.reconType) : getCombatTypeLabel(item.combatType) }}</strong></p>
+        <p><span>Засіб</span><strong>{{ item.assetGroup === 'recon' ? (item.assetName || '—') : (item.droneModel || '—') }}</strong></p>
+        <p><span>Склад</span><strong>{{ getStockSummary(item) }}</strong></p>
+        <p><span>Підрозділ</span><strong>{{ item.unit?.name || '—' }}</strong></p>
+        <p><span>Координати</span><strong>{{ item.mgrs || (item.lat + ', ' + item.lng) }}</strong></p>
+        <p><span>Ротація</span><strong>{{ item.personnelRotationDate || '—' }}</strong></p>
+      </div>
+
+      <div class="card-actions">
+        <button type="button" class="ghost-button" (click)="openDetails(item)">Деталі</button>
+        <button type="button" class="ghost-button" (click)="openTask(item)">Задача</button>
+        <button type="button" class="ghost-button" (click)="openStock(item)">Склад</button>
+        <button type="button" class="ghost-button" *ngIf="item.assetGroup === 'recon'" (click)="openReconAreas(item)">Райони</button>
+        <button type="button" class="ghost-button" (click)="startEdit(item)">Редагувати</button>
+        <button type="button" class="icon-danger" title="Видалити" (click)="remove(item.id)">×</button>
+      </div>
+    </article>
+  </section>
+
+  <section class="task-strip" *ngIf="tasks.length > 0">
+    <header>
+      <div>
+        <span class="eyebrow">Задачі</span>
+        <h2>Повітряні задачі</h2>
+      </div>
+      <button type="button" class="ghost-button" (click)="openTask()">+ Задача</button>
+    </header>
+
+    <div class="task-list">
+      <article class="task-card" *ngFor="let task of tasks">
+        <div>
+          <strong>{{ task.name }}</strong>
+          <span>{{ task.areaName }} · {{ task.airAssetPosition?.callsign || task.airAssetPosition?.name || 'Розрахунок' }}</span>
+        </div>
+        <b [class.done]="task.status === 'completed'" [class.cancelled]="task.status === 'cancelled'">{{ getReconStatusLabel(task.status) }}</b>
+        <small>{{ task.droneModel?.name || 'Борт не обрано' }}<ng-container *ngIf="task.warheadType"> · {{ task.warheadType.name }}</ng-container></small>
+        <button type="button" class="icon-danger" title="Видалити" (click)="removeTask(task)">×</button>
+      </article>
+    </div>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="formModalOpen">
+    <form class="asset-modal" (ngSubmit)="save()">
+      <header>
+        <div>
+          <span class="eyebrow">{{ editingId ? 'Редагування' : 'Створення' }}</span>
+          <h2>{{ editingId ? 'Редагувати розрахунок' : 'Новий повітряний розрахунок' }}</h2>
+        </div>
+        <button type="button" class="icon-button" (click)="cancelEdit()">×</button>
+      </header>
+
+      <p class="form-error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="mode-row">
+        <label><input type="radio" name="assetGroup" value="recon" [(ngModel)]="form.assetGroup" /> Розвідка</label>
+        <label><input type="radio" name="assetGroup" value="combat" [(ngModel)]="form.assetGroup" /> Бойовий</label>
+      </div>
+
+      <div class="form-grid">
+        <label><span>Позиція</span><input name="name" [(ngModel)]="form.name" /></label>
+        <label><span>Позивний</span><input name="callsign" [(ngModel)]="form.callsign" /></label>
+        <label>
+          <span>Підрозділ</span>
+          <select name="unitId" [(ngModel)]="form.unitId">
+            <option value="">Оберіть підрозділ</option>
+            <option *ngFor="let unit of units" [value]="unit.id">
+  {{ unit.name }} · {{ unit.type }}
+</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.assetGroup === 'recon'">
+        <label>
+          <span>Тип розвідки</span>
+          <select name="reconType" [(ngModel)]="form.reconType">
+            <option value="copter">Коптер</option>
+            <option value="fixed_wing">БпЛА крило</option>
+          </select>
+        </label>
+        <label *ngIf="!editingId">
+          <span>Борт зі складу</span>
+          <select name="sourceDroneStockKey" [(ngModel)]="form.sourceDroneStockKey" (ngModelChange)="onReconStockChange()">
+            <option value="">Оберіть готовий борт</option>
+            <option *ngFor="let row of availableReconDepotDrones" [value]="getDepotDroneKey(row)">{{ getDepotDroneLabel(row) }}</option>
+          </select>
+        </label>
+        <label *ngIf="!editingId">
+          <span>Кількість</span>
+          <input
+            name="sourceDroneQuantity"
+            type="number"
+            min="1"
+            step="1"
+            [max]="selectedReconStockMaxQuantity || null"
+            [(ngModel)]="form.sourceDroneQuantity"
+            (ngModelChange)="onReconStockChange()"
+          />
+        </label>
+        <label *ngIf="editingId"><span>Засіб розвідки</span><input name="assetName" [(ngModel)]="form.assetName" /></label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.assetGroup === 'combat'">
+        <label>
+          <span>Тип дрона</span>
+          <select name="combatType" [(ngModel)]="form.combatType">
+            <option value="fpv_radio">FPV радіокерування</option>
+            <option value="fpv_fiber">FPV оптоволокно</option>
+            <option value="kamikaze">Камікадзе</option>
+            <option value="heavy_bomber">Важкий бомбер</option>
+          </select>
+        </label>
+        <label><span>Модель</span><input name="droneModel" [(ngModel)]="form.droneModel" /></label>
+      </div>
+
+      <div class="mode-row">
+        <label><input type="radio" name="coordinateMode" value="decimal" [(ngModel)]="form.coordinateMode" /> Lat/Lng</label>
+        <label><input type="radio" name="coordinateMode" value="mgrs" [(ngModel)]="form.coordinateMode" /> MGRS</label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.coordinateMode === 'decimal'">
+        <label><span>Lat</span><input name="lat" type="number" step="0.000001" [(ngModel)]="form.lat" /></label>
+        <label><span>Lng</span><input name="lng" type="number" step="0.000001" [(ngModel)]="form.lng" /></label>
+        <label><span>MGRS, якщо є</span><input name="mgrsDecimal" [(ngModel)]="form.mgrs" /></label>
+      </div>
+
+      <div class="form-grid" *ngIf="form.coordinateMode === 'mgrs'">
+        <label><span>MGRS</span><input name="mgrs" [(ngModel)]="form.mgrs" placeholder="36U XB 11111 22222" /></label>
+      </div>
+
+      <ng-container *ngIf="form.assetGroup === 'combat'">
+        <div class="section-title">Сектор роботи</div>
+        <div class="form-grid">
+          <label><span>ОН, поділки</span><input name="mainDirectionUnits" type="number" [(ngModel)]="form.mainDirectionUnits" /></label>
+          <label><span>Доворот ліворуч</span><input name="traverseLeftUnits" type="number" [(ngModel)]="form.traverseLeftUnits" /></label>
+          <label><span>Доворот праворуч</span><input name="traverseRightUnits" type="number" [(ngModel)]="form.traverseRightUnits" /></label>
+          <label><span>Дальність сектору, м</span><input name="maxSectorDistanceM" type="number" [(ngModel)]="form.maxSectorDistanceM" /></label>
+        </div>
+      </ng-container>
+
+      <div class="form-grid">
+        <label>
+          <span>Готовність</span>
+          <select name="readinessStatus" [(ngModel)]="form.readinessStatus">
+            <option value="ready">БГ</option>
+            <option value="not_ready">Не БГ</option>
+          </select>
+        </label>
+        <label *ngIf="form.readinessStatus === 'not_ready'"><span>Причина</span><input name="notReadyReason" [(ngModel)]="form.notReadyReason" /></label>
+        <label><span>Дата ротації</span><input name="personnelRotationDate" type="date" [(ngModel)]="form.personnelRotationDate" /></label>
+      </div>
+
+      <label class="full-label"><span>Примітка</span><textarea name="note" [(ngModel)]="form.note"></textarea></label>
+
+      <footer>
+        <button type="button" class="ghost-button" (click)="cancelEdit()">Скасувати</button>
+        <button type="submit" class="primary-button">Зберегти</button>
+      </footer>
+    </form>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="detailsItem">
+    <article class="asset-modal compact-modal">
+      <header><h2>{{ detailsItem.name }}</h2><button type="button" class="icon-button" (click)="closeDetails()">×</button></header>
+      <div class="compact-info">
+        <p><span>Позивний</span><strong>{{ detailsItem.callsign }}</strong></p>
+        <p><span>Група</span><strong>{{ getGroupLabel(detailsItem.assetGroup) }}</strong></p>
+        <p><span>Тип</span><strong>{{ detailsItem.assetGroup === 'recon' ? getReconTypeLabel(detailsItem.reconType) : getCombatTypeLabel(detailsItem.combatType) }}</strong></p>
+        <p><span>Склад</span><strong>{{ getStockSummary(detailsItem) }}</strong></p>
+        <p><span>Райони розвідки</span><strong>{{ detailsItem.reconAreas?.length || 0 }}</strong></p>
+        <p><span>Статус</span><strong>{{ getReadinessLabel(detailsItem.readinessStatus) }}</strong></p>
+        <p><span>Примітка</span><strong>{{ detailsItem.note || '—' }}</strong></p>
+      </div>
+    </article>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="stockModalItem">
+    <article class="asset-modal stock-modal">
+      <header>
+        <div>
+          <span class="eyebrow">Склад позиції</span>
+          <h2>{{ stockModalItem.name }}</h2>
+        </div>
+        <button type="button" class="icon-button" (click)="closeStock()">×</button>
+      </header>
+
+      <p class="form-error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="stock-columns">
+        <section>
+          <h3>Борти</h3>
+          <div class="stock-row" *ngFor="let row of getStock(stockModalItem).drones">
+            <strong>{{ row.droneModel?.name || row.droneModelId }}</strong>
+            <span>{{ row.droneModel?.cameraType || 'none' }}</span>
+            <b>{{ row.quantity }}</b>
+          </div>
+          <div class="stock-row muted" *ngIf="getStock(stockModalItem).drones.length === 0">Немає записів</div>
+        </section>
+
+        <section>
+          <h3>БЧ</h3>
+          <div class="stock-row" *ngFor="let row of getStock(stockModalItem).warheads">
+            <strong>{{ row.warheadType?.name || row.warheadTypeId }}</strong>
+            <span>{{ row.warheadType?.weightKg || '-' }} кг</span>
+            <b>{{ getWarheadQuantityLabel(row.quantity, row.warheadType) }}</b>
+          </div>
+          <div class="stock-row muted" *ngIf="getStock(stockModalItem).warheads.length === 0">Немає записів</div>
+        </section>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>Модель борта</span>
+          <select name="stockDroneModelId" [(ngModel)]="stockForm.droneModelId">
+            <option value="">Оберіть модель</option>
+            <option *ngFor="let model of droneModels" [value]="model.id">{{ model.name }} · {{ model.cameraType || 'none' }}</option>
+          </select>
+        </label>
+        <label><span>Кількість</span><input name="stockDroneQuantity" type="number" min="0" [(ngModel)]="stockForm.droneQuantity" /></label>
+        <button type="button" class="primary-button inline-action" (click)="saveDroneCorrection()">Оновити борти</button>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>Тип БЧ</span>
+          <select name="stockWarheadTypeId" [(ngModel)]="stockForm.warheadTypeId">
+            <option value="">Оберіть БЧ</option>
+            <option *ngFor="let type of warheadTypes" [value]="type.id">{{ type.name }} · {{ getWarheadUnitLabel(type) }}</option>
+          </select>
+        </label>
+        <label><span>Кількість / {{ getWarheadUnitLabel(selectedStockWarheadType) }}</span><input name="stockWarheadQuantity" type="number" min="0" [step]="stockWarheadQuantityStep" [(ngModel)]="stockForm.warheadQuantity" /></label>
+        <button type="button" class="primary-button inline-action" (click)="saveWarheadCorrection()">Оновити БЧ</button>
+      </div>
+
+      <label class="full-label"><span>Коментар до корекції</span><textarea name="stockComment" [(ngModel)]="stockForm.comment"></textarea></label>
+    </article>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="reconModalItem">
+    <article class="asset-modal recon-modal">
+      <header>
+        <div>
+          <span class="eyebrow">Райони розвідки</span>
+          <h2>{{ reconModalItem.name }}</h2>
+        </div>
+        <button type="button" class="icon-button" (click)="closeReconAreas()">×</button>
+      </header>
+
+      <p class="form-error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="recon-area-list">
+        <button type="button" class="recon-area-item" *ngFor="let area of reconModalItem.reconAreas || []" (click)="editReconArea(area)">
+          <strong>{{ area.name || 'Район розвідки' }}</strong>
+          <span>{{ getReconStatusLabel(area.status) }} · {{ area.plannedStartAt || area.activeDate }}</span>
+          <b>{{ area.points.length || 0 }} т.</b>
+          <i type="button" (click)="removeReconArea(area); $event.stopPropagation()">×</i>
+        </button>
+      </div>
+
+      <div class="form-grid">
+        <label><span>Назва</span><input name="reconAreaNameModal" [(ngModel)]="reconForm.name" /></label>
+        <label><span>Дата</span><input name="reconAreaActiveDateModal" type="date" [(ngModel)]="reconForm.activeDate" /></label>
+        <label>
+          <span>Статус</span>
+          <select name="reconAreaStatus" [(ngModel)]="reconForm.status">
+            <option value="planned">План</option>
+            <option value="active">Активний</option>
+            <option value="completed">Завершений</option>
+            <option value="cancelled">Скасований</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="form-grid">
+        <label><span>Початок</span><input name="reconPlannedStart" type="datetime-local" [(ngModel)]="reconForm.plannedStartAt" /></label>
+        <label><span>Завершення</span><input name="reconPlannedEnd" type="datetime-local" [(ngModel)]="reconForm.plannedEndAt" /></label>
+      </div>
+
+      <div class="points-list">
+        <div class="point-row" *ngFor="let point of reconForm.points; let i = index">
+          <strong>#{{ i + 1 }}</strong>
+          <input [name]="'reconModalLat' + i" type="number" step="0.000001" [(ngModel)]="point.lat" placeholder="Lat" />
+          <input [name]="'reconModalLng' + i" type="number" step="0.000001" [(ngModel)]="point.lng" placeholder="Lng" />
+          <button type="button" class="icon-danger" (click)="removeReconModalPoint(i)">×</button>
+        </div>
+        <button type="button" class="ghost-button" (click)="addReconModalPoint()">+ Додати точку</button>
+        <button type="button" class="ghost-button" (click)="startReconAreaMapDrawing()">Задати на карті</button>
+      </div>
+
+      <label class="full-label"><span>Примітка</span><textarea name="reconAreaNoteModal" [(ngModel)]="reconForm.note"></textarea></label>
+
+      <footer>
+        <button type="button" class="ghost-button" (click)="reconForm = getEmptyReconAreaForm()">Очистити</button>
+        <button type="button" class="primary-button" (click)="saveReconArea()">Зберегти район</button>
+      </footer>
+    </article>
+  </section>
+
+  <section class="modal-backdrop" *ngIf="taskModalOpen">
+    <article class="asset-modal task-modal">
+      <header>
+        <div>
+          <span class="eyebrow">Задача</span>
+          <h2>{{ taskForm.taskType === 'combat' ? 'Бойова задача БпЛА' : 'Задача на розвідку' }}</h2>
+        </div>
+        <button type="button" class="icon-button" (click)="closeTask()">×</button>
+      </header>
+
+      <p class="form-error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <div class="form-grid">
+        <label><span>Назва задачі</span><input name="taskName" [(ngModel)]="taskForm.name" /></label>
+        <label>
+          <span>Розрахунок</span>
+          <select name="taskAsset" [(ngModel)]="taskForm.airAssetPositionId" (ngModelChange)="onTaskAssetChange()">
+            <option value="">Оберіть розрахунок</option>
+            <option *ngFor="let item of items" [value]="item.id">{{ getGroupLabel(item.assetGroup) }} · {{ item.callsign }} · {{ item.name }}</option>
+          </select>
+        </label>
+        <label><span>Назва району</span><input name="taskAreaName" [(ngModel)]="taskForm.areaName" /></label>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>Борт</span>
+          <select name="taskDroneModel" [(ngModel)]="taskForm.droneModelId">
+            <option value="">Авто / не обрано</option>
+            <option *ngFor="let row of taskAvailableDrones" [value]="row.droneModelId">{{ row.droneModel?.name || row.droneModelId }} · {{ row.quantity }} од.</option>
+          </select>
+        </label>
+        <label *ngIf="taskAsset?.assetGroup === 'combat'">
+          <span>БЧ</span>
+          <select name="taskWarhead" [(ngModel)]="taskForm.warheadTypeId">
+            <option value="">Без БЧ / авто</option>
+            <option *ngFor="let row of taskAvailableWarheads" [value]="row.warheadTypeId">{{ row.warheadType?.name || row.warheadTypeId }} · {{ getWarheadQuantityLabel(row.quantity, row.warheadType) }}</option>
+          </select>
+        </label>
+        <label><span>Початок</span><input name="taskStart" type="datetime-local" [(ngModel)]="taskForm.plannedStartAt" /></label>
+        <label><span>Завершення</span><input name="taskEnd" type="datetime-local" [(ngModel)]="taskForm.plannedEndAt" /></label>
+      </div>
+
+      <div class="points-list">
+        <div class="point-row" *ngFor="let point of taskForm.points; let i = index">
+          <strong>#{{ i + 1 }}</strong>
+          <input [name]="'taskLat' + i" type="number" step="0.000001" [(ngModel)]="point.lat" placeholder="Lat" />
+          <input [name]="'taskLng' + i" type="number" step="0.000001" [(ngModel)]="point.lng" placeholder="Lng" />
+          <button type="button" class="icon-danger" (click)="removeTaskPoint(i)">×</button>
+        </div>
+        <button type="button" class="ghost-button" (click)="addTaskPoint()">+ Точка</button>
+        <button type="button" class="ghost-button" (click)="startTaskMapDrawing()">Задати на карті</button>
+      </div>
+
+      <label class="full-label"><span>Примітка</span><textarea name="taskNote" [(ngModel)]="taskForm.note"></textarea></label>
+
+      <footer>
+        <button type="button" class="ghost-button" (click)="closeTask()">Скасувати</button>
+        <button type="button" class="primary-button" (click)="saveTask()">Створити задачу</button>
+      </footer>
+    </article>
+  </section>
+</div>

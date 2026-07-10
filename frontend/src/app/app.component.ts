@@ -1,29 +1,23 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import {
-  NavigationEnd,
-  Router,
-  RouterLink,
-  RouterLinkActive,
-  RouterOutlet,
-} from '@angular/router';
+import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { AutoRefreshService } from './core/auto-refresh.service';
-import { RealtimeEventName, RealtimePayload, RealtimeService } from './core/realtime.service';
-import { EventFeedPanelComponent } from './core/event-feed-panel.component';
-import { FormsModule } from '@angular/forms';
-import { ToastContainerComponent } from './core/toast-container.component';
 import { AnalyticsService } from './features/analytics/analytics.service';
 import { AuthService } from './features/auth/auth.service';
 import { DepotsService } from './features/depots/depots.service';
 import { FirePositionsService } from './features/fire-positions/fire-positions.service';
 import { ServiceOrdersService } from './features/service-orders/service-orders.service';
 import { WeaponSystemsService } from './features/weapon-systems/weapon-systems.service';
-
-type NavGroup = 'operations' | 'logistics' | 'reference' | 'settings';
+import { AutoRefreshService } from './core/auto-refresh.service';
+import { RealtimeEventName, RealtimePayload, RealtimeService } from './core/realtime.service';
+import { ToastContainerComponent } from './core/toast-container.component';
+import { OperatorPushComponent } from './core/operator-push.component';
+import { EventFeedService } from './core/event-feed.service';
 
 type CommandEntity = 'page' | 'firePosition' | 'serviceOrder' | 'weaponSystem' | 'depot';
+type NavGroup = 'situation' | 'missions' | 'logistics' | 'reference' | 'system';
 
 interface CommandItem {
   id: string;
@@ -33,7 +27,6 @@ interface CommandItem {
   entity: CommandEntity;
   keywords: string;
 }
-
 
 @Component({
   selector: 'app-root',
@@ -45,15 +38,21 @@ interface CommandItem {
     RouterLink,
     RouterLinkActive,
     ToastContainerComponent,
-    EventFeedPanelComponent,
+    OperatorPushComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
 })
 export class AppComponent implements OnInit, OnDestroy {
   isLoginPage = false;
-  sidebarCollapsed = true;
-  openedGroup: NavGroup | null = 'operations';
+  sidebarCollapsed = false;
+  openedGroups: Record<NavGroup, boolean> = {
+    situation: true,
+    missions: true,
+    logistics: true,
+    reference: false,
+    system: false,
+  };
   actionOrdersCount = 0;
   activeThreatsCount = 0;
   realtimeConnected = false;
@@ -66,52 +65,6 @@ export class AppComponent implements OnInit, OnDestroy {
   commandLoading = false;
   commandItems: CommandItem[] = [];
   commandActiveIndex = 0;
-
-
-  get realtimeStatusLabel(): string {
-    return this.realtimeConnected ? 'Realtime Online' : 'Realtime Offline';
-  }
-
-  get realtimeStatusText(): string {
-    if (!this.realtimeConnected) {
-      return 'Зʼєднання втрачено';
-    }
-
-    if (!this.realtimeLastEventAt) {
-      return 'Підключено · очікування подій';
-    }
-
-    return `Остання подія · ${this.formatRealtimeTime(this.realtimeLastEventAt)}`;
-  }
-
-  get realtimePulseLabel(): string {
-    if (!this.realtimeConnected) {
-      return 'OFF';
-    }
-
-    return this.realtimeEventsCount > 0 ? `LIVE ${this.realtimeEventsCount}` : 'LIVE';
-  }
-
-  get isAdmin(): boolean {
-    return this.auth.hasRole('admin');
-  }
-
-  get canManageData(): boolean {
-    const role = this.currentUser?.role;
-    return role === 'admin' || role === 'operator';
-  }
-
-  get currentUser() {
-    return this.auth.getUser();
-  }
-
-  logout(): void {
-    this.auth.logout();
-  }
-
-  isRouteActive(path: string): boolean {
-    return this.router.url.startsWith(path);
-  }
 
   private readonly subscriptions = new Subscription();
   private countersRequest?: Subscription;
@@ -130,14 +83,78 @@ export class AppComponent implements OnInit, OnDestroy {
     private readonly serviceOrders: ServiceOrdersService,
     private readonly weaponSystems: WeaponSystemsService,
     private readonly depots: DepotsService,
+    private readonly eventFeed: EventFeedService,
+    private readonly cdr: ChangeDetectorRef,
   ) {}
+
+  get sidebarStateLabel(): string {
+    return this.sidebarCollapsed ? 'Розгорнути меню' : 'Згорнути меню';
+  }
+
+  get realtimeStatusLabel(): string {
+    return this.realtimeConnected ? 'Realtime Online' : 'Realtime Offline';
+  }
+
+  get realtimeStatusText(): string {
+    if (!this.realtimeConnected) {
+      return 'Звʼязок втрачено';
+    }
+
+    if (!this.realtimeLastEventAt) {
+      return 'Підключено - очікування подій';
+    }
+
+    return `Остання подія - ${this.formatRealtimeTime(this.realtimeLastEventAt)}`;
+  }
+
+  get isAdmin(): boolean {
+    return this.auth.hasRole('admin');
+  }
+
+  get canManageData(): boolean {
+    const role = this.currentUser?.role;
+    return role === 'admin' || (role === 'operator' && this.currentUser?.scope !== 'ew');
+  }
+
+  get isEwOperator(): boolean {
+    return this.currentUser?.scope === 'ew';
+  }
+
+  get currentUser() {
+    return this.auth.getUser();
+  }
+
+  get filteredCommandItems(): CommandItem[] {
+    const query = this.commandQuery.trim().toLowerCase();
+
+    if (!query) {
+      return this.commandItems.slice(0, 10);
+    }
+
+    return this.commandItems.filter((item) => item.keywords.includes(query)).slice(0, 12);
+  }
 
   ngOnInit(): void {
     this.isLoginPage = this.router.url.startsWith('/login');
+    this.auth.syncCurrentUser();
+    setTimeout(() => this.updateRealtimeConnection(this.realtime.connected$.value));
 
     if (this.auth.isLoggedIn() && !this.isLoginPage) {
-      this.loadOperatorCounters();
+      setTimeout(() => this.loadOperatorCounters());
     }
+
+    this.subscriptions.add(
+      this.auth.currentUser$.subscribe((user) => {
+        this.resetSessionScopedState();
+
+        if (user && !this.isLoginPage) {
+          setTimeout(() => {
+            this.eventFeed.load();
+            this.loadOperatorCounters(true);
+          });
+        }
+      }),
+    );
 
     this.subscriptions.add(
       this.router.events.subscribe((event) => {
@@ -150,31 +167,30 @@ export class AppComponent implements OnInit, OnDestroy {
         this.scrollContentToTop();
 
         if (this.auth.isLoggedIn() && !this.isLoginPage) {
-          this.loadOperatorCounters();
+          setTimeout(() => this.loadOperatorCounters());
         }
       }),
     );
 
     this.subscriptions.add(
       this.realtime.connected$.subscribe((connected) => {
-        this.realtimeConnected = connected;
-        this.realtimeUpdatedAt = new Date();
-        if (!connected) {
-          this.realtimeLastEventLabel = 'Зʼєднання втрачено';
-        } else if (!this.realtimeLastEventAt) {
-          this.realtimeLastEventLabel = 'Підключено';
-        }
+        setTimeout(() => {
+          this.updateRealtimeConnection(connected);
+          this.cdr.detectChanges();
+        });
       }),
     );
 
     this.subscriptions.add(
-      this.autoRefresh.watch(['all', 'missions', 'map', 'analytics', 'stock', 'threats', 'weapons'], () => {
-        if (this.auth.isLoggedIn() && !this.isLoginPage) {
-          this.loadOperatorCounters();
-        }
-      }),
+      this.autoRefresh.watch(
+        ['all', 'missions', 'map', 'analytics', 'stock', 'threats', 'weapons'],
+        () => {
+          if (this.auth.isLoggedIn() && !this.isLoginPage) {
+            this.loadOperatorCounters();
+          }
+        },
+      ),
     );
-
 
     this.subscriptions.add(
       this.realtime.onAnyChanged((eventName, payload) => {
@@ -189,6 +205,11 @@ export class AppComponent implements OnInit, OnDestroy {
     this.commandIndexRequest?.unsubscribe();
   }
 
+  logout(): void {
+    this.resetSessionScopedState();
+    this.auth.logout();
+  }
+
   toggleSidebar(): void {
     this.sidebarCollapsed = !this.sidebarCollapsed;
   }
@@ -196,11 +217,15 @@ export class AppComponent implements OnInit, OnDestroy {
   toggleGroup(group: NavGroup): void {
     if (this.sidebarCollapsed) {
       this.sidebarCollapsed = false;
-      this.openedGroup = group;
+      this.openedGroups[group] = true;
       return;
     }
 
-    this.openedGroup = this.openedGroup === group ? null : group;
+    this.openedGroups[group] = !this.openedGroups[group];
+  }
+
+  isGroupOpen(group: NavGroup): boolean {
+    return this.openedGroups[group];
   }
 
   @HostListener('document:keydown', ['$event'])
@@ -248,18 +273,6 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  get filteredCommandItems(): CommandItem[] {
-    const query = this.commandQuery.trim().toLowerCase();
-
-    if (!query) {
-      return this.commandItems.slice(0, 10);
-    }
-
-    return this.commandItems
-      .filter((item) => item.keywords.includes(query))
-      .slice(0, 12);
-  }
-
   openCommandBar(): void {
     this.commandOpen = true;
     this.commandQuery = '';
@@ -289,7 +302,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   runCommand(item: CommandItem): void {
-    this.router.navigateByUrl(item.route);
+    void this.router.navigateByUrl(item.route);
     this.closeCommandBar();
   }
 
@@ -304,7 +317,7 @@ export class AppComponent implements OnInit, OnDestroy {
       case 'depot':
         return 'БК';
       default:
-        return '↗';
+        return '>';
     }
   }
 
@@ -314,7 +327,6 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.commandLoading = true;
-
     this.commandIndexRequest?.unsubscribe();
 
     this.commandIndexRequest = forkJoin({
@@ -325,12 +337,64 @@ export class AppComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: ({ firePositions, serviceOrders, weaponSystems, depots }) => {
         const staticItems: CommandItem[] = [
-          this.createCommandItem('page-home', 'Dashboard командира', 'Головний екран системи', '/home', 'page'),
-          this.createCommandItem('page-map', 'Карта', 'Робоча карта оператора', '/map', 'page'),
-          this.createCommandItem('page-service-orders', 'Вогневі завдання', 'Створення та контроль ВГЗ', '/service-orders', 'page'),
-          this.createCommandItem('page-fire-positions', 'Вогневі позиції', 'Готовність, координати, БК', '/fire-positions', 'page'),
-          this.createCommandItem('page-stock', 'Залишки БК', 'Склади та боєкомплект', '/stock', 'page'),
-          this.createCommandItem('page-analytics', 'Аналітика', 'Готовність, витрати, ефективність', '/analytics', 'page'),
+          this.createCommandItem('page-home', 'Головна', 'Оперативна обстановка', '/home', 'page'),
+          this.createCommandItem('page-map', 'Карта', 'Карта обстановки', '/map', 'page'),
+          this.createCommandItem(
+            'page-notifications',
+            'Центр повідомлень',
+            'Події, увага, інформація, журнал',
+            '/notifications',
+            'page',
+          ),
+          this.createCommandItem(
+            'page-service-orders',
+            'ВГЗ',
+            'Вогневі завдання',
+            '/service-orders',
+            'page',
+          ),
+          this.createCommandItem(
+            'page-fire-positions',
+            'ВП',
+            'Вогневі позиції',
+            '/fire-positions',
+            'page',
+          ),
+          this.createCommandItem(
+            'page-weapon-systems',
+            'СГ',
+            'Озброєння',
+            '/weapon-systems',
+            'page',
+          ),
+          this.createCommandItem(
+            'page-ew',
+            'РЕБ',
+            'Аеророзвідка, пости РЕБ, станції РЕБ',
+            '/ew',
+            'page',
+          ),
+          this.createCommandItem(
+            'page-air-assets',
+            'Повітряні засоби',
+            'Розрахунки БпЛА, екіпажі та повітряні засоби',
+            '/air-assets',
+            'page',
+          ),
+          this.createCommandItem(
+            'page-stock',
+            'Залишки БК',
+            'Склади та боєкомплект',
+            '/stock',
+            'page',
+          ),
+          this.createCommandItem(
+            'page-analytics',
+            'Аналітика',
+            'Готовність, витрати, ефективність',
+            '/analytics',
+            'page',
+          ),
         ];
 
         this.commandItems = [
@@ -339,19 +403,22 @@ export class AppComponent implements OnInit, OnDestroy {
             this.createCommandItem(
               `fp-${position.id}`,
               position.name || 'Вогнева позиція',
-              [position.unit?.name, position.mgrs || this.formatCommandCoords(position.lat, position.lng)]
+              [
+                position.unit?.name,
+                position.mgrs || this.formatCommandCoords(position.lat, position.lng),
+              ]
                 .filter(Boolean)
-                .join(' · '),
-              `/fire-positions`,
+                .join(' - '),
+              '/fire-positions',
               'firePosition',
             ),
           ),
           ...serviceOrders.map((order) =>
             this.createCommandItem(
               `vgz-${order.id}`,
-              `Вогневе завдання ${order.orderNumber || order.id}`,
-              [order.status, order.targetSettlement, order.targetMgrs].filter(Boolean).join(' · '),
-              `/service-orders`,
+              `ВГЗ ${order.orderNumber || order.id}`,
+              [order.status, order.targetSettlement, order.targetMgrs].filter(Boolean).join(' - '),
+              '/service-orders',
               'serviceOrder',
             ),
           ),
@@ -359,8 +426,10 @@ export class AppComponent implements OnInit, OnDestroy {
             this.createCommandItem(
               `sg-${weapon.id}`,
               weapon.callsign || weapon.serialNumber || weapon.weaponModel?.name || 'СГ',
-              [weapon.weaponModel?.name, weapon.readinessStatus, weapon.firePosition?.name].filter(Boolean).join(' · '),
-              `/weapon-systems`,
+              [weapon.weaponModel?.name, weapon.readinessStatus, weapon.firePosition?.name]
+                .filter(Boolean)
+                .join(' - '),
+              '/weapon-systems',
               'weaponSystem',
             ),
           ),
@@ -368,8 +437,8 @@ export class AppComponent implements OnInit, OnDestroy {
             this.createCommandItem(
               `depot-${depot.id}`,
               depot.name || 'Склад',
-              [depot.depotType, depot.unit?.name, depot.mgrs].filter(Boolean).join(' · '),
-              `/depots`,
+              [depot.depotType, depot.unit?.name, depot.mgrs].filter(Boolean).join(' - '),
+              '/depots',
               'depot',
             ),
           ),
@@ -403,7 +472,10 @@ export class AppComponent implements OnInit, OnDestroy {
     };
   }
 
-  private formatCommandCoords(lat: number | null | undefined, lng: number | null | undefined): string {
+  private formatCommandCoords(
+    lat: number | null | undefined,
+    lng: number | null | undefined,
+  ): string {
     if (lat == null || lng == null) {
       return '';
     }
@@ -411,13 +483,12 @@ export class AppComponent implements OnInit, OnDestroy {
     return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   }
 
-
   private scrollContentToTop(): void {
     if (typeof document === 'undefined') {
       return;
     }
 
-    document.querySelector('.content')?.scrollTo({ top: 0, left: 0 });
+    document.querySelector('.core2-main')?.scrollTo({ top: 0, left: 0 });
   }
 
   private trackRealtimeEvent(eventName: RealtimeEventName, payload?: RealtimePayload): void {
@@ -427,8 +498,23 @@ export class AppComponent implements OnInit, OnDestroy {
     this.realtimeLastEventLabel = this.getRealtimeEventLabel(eventName, payload);
   }
 
+  private updateRealtimeConnection(connected: boolean): void {
+    this.realtimeConnected = connected;
+    this.realtimeUpdatedAt = new Date();
+
+    if (!connected) {
+      this.realtimeLastEventLabel = 'Звʼязок втрачено';
+      return;
+    }
+
+    if (!this.realtimeLastEventAt) {
+      this.realtimeLastEventLabel = 'Підключено';
+    }
+  }
+
   private getRealtimeEventLabel(eventName: RealtimeEventName, payload?: RealtimePayload): string {
-    const entity = typeof payload?.entity === 'string' && payload.entity.trim() ? ` · ${payload.entity}` : '';
+    const entity =
+      typeof payload?.entity === 'string' && payload.entity.trim() ? ` - ${payload.entity}` : '';
 
     switch (eventName) {
       case 'fire_mission_changed':
@@ -479,8 +565,8 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.countersLoading = true;
-
     this.countersRequest?.unsubscribe();
+
     this.countersRequest = this.analytics.getOperatorCounters().subscribe({
       next: (counters) => {
         this.actionOrdersCount = Number(counters.actionOrdersCount || 0);
@@ -503,4 +589,16 @@ export class AppComponent implements OnInit, OnDestroy {
     });
   }
 
+  private resetSessionScopedState(): void {
+    this.countersRequest?.unsubscribe();
+    this.countersLoading = false;
+    this.countersQueued = false;
+    this.lastCountersLoadedAt = 0;
+    this.actionOrdersCount = 0;
+    this.activeThreatsCount = 0;
+    this.commandIndexRequest?.unsubscribe();
+    this.commandLoading = false;
+    this.commandItems = [];
+    this.eventFeed.reset();
+  }
 }

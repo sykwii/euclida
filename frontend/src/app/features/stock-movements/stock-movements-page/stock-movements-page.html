@@ -1,286 +1,443 @@
-<div class="logistics-page">
-  <header class="page-header">
+<div class="transfer-page">
+  <header class="transfer-header">
     <div>
-      <h1>Рух БК</h1>
-      <p>Документи передачі та залишки на вибраних складах</p>
+      <div class="eyebrow">8. ПЕРЕДАЧА БК</div>
+      <h1>Передача БК</h1>
+      <p>Документи передачі, маршрути руху та залишки на складах</p>
     </div>
 
     <div class="header-actions">
-      <button type="button" class="primary-button" (click)="openTransferForm()">
-        Передати майно
+      <button
+        type="button"
+        class="btn primary"
+        aria-label="Нова передача"
+        (click)="openTransferForm()"
+        title="Створити документ передачі БК між складами або зовнішньою поставкою"
+      >
+        + Нова передача
       </button>
-
-      <button type="button" class="ghost-button" (click)="load()" [disabled]="loading || refreshing">
+      <button
+        type="button"
+        class="btn"
+        [attr.aria-label]="refreshing ? 'Оновлення' : 'Оновити'"
+        (click)="load()"
+        [disabled]="loading || refreshing"
+        title="Оновити документи передачі і залишки"
+      >
         {{ refreshing ? 'Оновлення...' : 'Оновити' }}
       </button>
     </div>
   </header>
 
-  <div class="ui-state error" *ngIf="errorMessage && !loading && items.length === 0">
-    <span class="ui-state-icon">⚠</span>
-    <strong>Не вдалося отримати рух БК</strong>
-    <small>{{ errorMessage }}</small>
-    <button type="button" class="ghost-button" (click)="load()">Повторити</button>
-  </div>
+  <section class="transfer-card workspace-card">
+    <div class="tabs-row">
+      <button
+        type="button"
+        class="tab"
+        [attr.aria-label]="'В роботі ' + activeItems.length"
+        [class.active]="activeTab === 'active'"
+        (click)="setActiveTab('active')"
+        title="Поточні документи передачі БК"
+      >
+        В роботі <span>{{ activeItems.length }}</span>
+      </button>
+      <button
+        type="button"
+        class="tab"
+        [attr.aria-label]="'Завершені ' + completedItems.length"
+        [class.active]="activeTab === 'completed'"
+        (click)="setActiveTab('completed')"
+        title="Документи зі статусом завершення, коли статус буде доступний у даних"
+      >
+        Завершені <span>{{ completedItems.length }}</span>
+      </button>
+      <button
+        type="button"
+        class="tab"
+        [attr.aria-label]="'Скасовані ' + cancelledItems.length"
+        [class.active]="activeTab === 'cancelled'"
+        (click)="setActiveTab('cancelled')"
+        title="Скасовані передачі, коли статус буде доступний у даних"
+      >
+        Скасовані <span>{{ cancelledItems.length }}</span>
+      </button>
+      <button
+        type="button"
+        class="tab"
+        [attr.aria-label]="'Історія ' + historyItems.length"
+        [class.active]="activeTab === 'history'"
+        (click)="setActiveTab('history')"
+        title="Вся історія проведених передач БК"
+      >
+        Історія <span>{{ historyItems.length }}</span>
+      </button>
+    </div>
 
-  <p class="error" *ngIf="errorMessage && items.length > 0">{{ errorMessage }}</p>
+    <div class="filters-row">
+      <label>
+        <span>Дата з</span>
+        <input
+          type="date"
+          name="dateFrom"
+          [(ngModel)]="filters.dateFrom"
+          (ngModelChange)="onFiltersChanged()"
+        />
+      </label>
+
+      <label>
+        <span>Дата по</span>
+        <input
+          type="date"
+          name="dateTo"
+          [(ngModel)]="filters.dateTo"
+          (ngModelChange)="onFiltersChanged()"
+        />
+      </label>
+
+      <label>
+        <span>Підрозділ</span>
+        <select
+          name="filterToDepotId"
+          [(ngModel)]="filters.toDepotId"
+          (ngModelChange)="onFiltersChanged()"
+        >
+          <option value="">Усі підрозділи</option>
+          <option *ngFor="let depot of ammoDepots" [value]="depot.id">{{ depot.name }}</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Тип</span>
+        <select
+          name="movementKind"
+          [(ngModel)]="filters.movementKind"
+          (ngModelChange)="onFiltersChanged()"
+        >
+          <option value="">Усі типи</option>
+          <option value="external">Зовнішня</option>
+          <option value="internal">Внутрішня</option>
+        </select>
+      </label>
+
+      <button
+        type="button"
+        class="btn small"
+        (click)="resetFilters()"
+        title="Очистити фільтри і пошук"
+      >
+        Скинути
+      </button>
+    </div>
+
+    <div class="search-row">
+      <span class="search-icon">⌕</span>
+      <input
+        name="movementSearch"
+        [(ngModel)]="searchTerm"
+        (ngModelChange)="onFiltersChanged()"
+        placeholder="Пошук за №, звідки, куди..."
+      />
+    </div>
+
+    <div class="state error" *ngIf="errorMessage && !loading && items.length === 0">
+      <b>Не вдалося отримати передачі БК</b>
+      <span>{{ errorMessage }}</span>
+      <button
+        type="button"
+        class="btn"
+        (click)="load()"
+        title="Спробувати завантажити передачі ще раз"
+      >
+        Повторити
+      </button>
+    </div>
+
+    <p class="inline-error" *ngIf="errorMessage && items.length > 0">{{ errorMessage }}</p>
+
+    <div class="table-wrap" *ngIf="!loading || items.length > 0">
+      <table class="transfer-table">
+        <thead>
+          <tr>
+            <th>№ передачі</th>
+            <th>Звідки → Куди</th>
+            <th>БК</th>
+            <th>Кількість</th>
+            <th>Статус</th>
+            <th>Оновлено</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <ng-container *ngFor="let group of pagedItems">
+            <tr class="main-row" (click)="toggleGroup(group.groupId)">
+              <td>
+                <b>{{ group.documentNumber }}</b>
+              </td>
+
+              <td>
+                <span class="route">
+                  {{ group.fromDepot?.name || 'Зовнішня поставка' }}
+                  <em>→</em>
+                  {{ group.toDepot?.name || '—' }}
+                </span>
+              </td>
+
+              <td>{{ group.items[0] ? getItemTypeLabel(group.items[0].itemType) : '—' }}</td>
+              <td>{{ group.items[0]?.quantity || 0 }}</td>
+              <td>
+                <span class="status-chip" [ngClass]="getGroupStatusClass()">{{
+                  getGroupStatusLabel()
+                }}</span>
+              </td>
+              <td>
+                <span class="time-cell">{{ group.movementDatetime | date: 'HH:mm' }}</span>
+                <button
+                  type="button"
+                  class="expand-button"
+                  title="Розкрити склад документа"
+                  data-tip-pos="left"
+                >
+                  {{ expandedGroupId === group.groupId ? '−' : '+' }}
+                </button>
+              </td>
+            </tr>
+
+            <tr class="details-row" *ngIf="expandedGroupId === group.groupId">
+              <td colspan="6">
+                <div class="details-box">
+                  <div class="details-comment">{{ group.comment || 'Без коментаря' }}</div>
+
+                  <div class="details-grid">
+                    <div class="detail-item" *ngFor="let item of group.items">
+                      <span>{{ getItemTypeLabel(item.itemType) }}</span>
+                      <b>{{ getResourceName(item.itemType, item.itemId) }}</b>
+                      <strong>{{ item.quantity }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="state" *ngIf="loading && items.length === 0">
+      <b>Завантаження передач БК...</b>
+      <span>Очікування відповіді сервера</span>
+    </div>
+
+    <div class="state" *ngIf="!loading && !errorMessage && filteredItems.length === 0">
+      <b>{{ emptyStateTitle }}</b>
+      <span>{{ emptyStateHint }}</span>
+    </div>
+
+    <div class="pagination" *ngIf="filteredItems.length > pageSize">
+      <button
+        type="button"
+        class="btn small"
+        [disabled]="currentPage <= 1"
+        (click)="goToPage(currentPage - 1)"
+        title="Попередня сторінка"
+      >
+        ‹
+      </button>
+      <span>Сторінка {{ currentPage }} / {{ totalPages }}</span>
+      <button
+        type="button"
+        class="btn small"
+        [disabled]="currentPage >= totalPages"
+        (click)="goToPage(currentPage + 1)"
+        title="Наступна сторінка"
+      >
+        ›
+      </button>
+    </div>
+  </section>
 
   <div class="modal-backdrop" *ngIf="transferFormOpen" (click)="onModalBackdropClick()">
-  <section class="document-card transfer-modal" (click)="onModalCardClick($event)">
-    <div class="document-head">
-      <div>
-        <span>Новий документ</span>
-        <h2>Передача майна</h2>
-      </div>
+    <section class="transfer-modal" (click)="onModalCardClick($event)">
+      <header class="modal-header">
+        <div>
+          <div class="eyebrow">Новий документ</div>
+          <h2>Передача майна</h2>
+          <p>Оберіть маршрут передачі, тип майна та кількість.</p>
+        </div>
 
-      <button type="button" class="icon-button" [disabled]="modalSubmitting" (click)="closeTransferForm()">×</button>
-    </div>
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="Закрити"
+          [disabled]="modalSubmitting"
+          (click)="closeTransferForm()"
+          title="Закрити створення передачі"
+          data-tip-pos="left"
+        >
+          ×
+        </button>
+      </header>
 
-    <p class="muted transfer-note">
-      Оберіть маршрут передачі, тип майна та кількість. Якщо склад-відправник вибраний, система показує тільки ресурси з фактичним залишком.
-    </p>
+      <form class="modal-body" id="movementForm" (ngSubmit)="create()">
+        <section class="route-panel">
+          <label>
+            <span>Звідки</span>
+            <select
+              name="fromDepotId"
+              [(ngModel)]="form.fromDepotId"
+              (ngModelChange)="onFromDepotChanged()"
+            >
+              <option value="">Зовнішня поставка</option>
+              <option *ngFor="let depot of ammoDepots" [value]="depot.id">{{ depot.name }}</option>
+            </select>
+          </label>
 
-    <form id="movementForm" (ngSubmit)="create()">
-      <div class="route-box">
-        <label>
-          Звідки
-          <select name="fromDepotId" [(ngModel)]="form.fromDepotId" (ngModelChange)="onFromDepotChanged()">
-            <option value="">Зовнішня поставка</option>
-            <option *ngFor="let depot of depots" [value]="depot.id">
-              {{ depot.name }}
-            </option>
-          </select>
-        </label>
+          <div class="route-arrow">→</div>
 
-        <div class="route-arrow">→</div>
+          <label>
+            <span>Куди</span>
+            <select
+              name="toDepotId"
+              [(ngModel)]="form.toDepotId"
+              (ngModelChange)="onToDepotChanged()"
+            >
+              <option value="">Без отримувача</option>
+              <option *ngFor="let depot of ammoDepots" [value]="depot.id">{{ depot.name }}</option>
+            </select>
+          </label>
+        </section>
 
-        <label>
-          Куди
-          <select name="toDepotId" [(ngModel)]="form.toDepotId" (ngModelChange)="onToDepotChanged()">
-            <option value="">Без отримувача</option>
-            <option *ngFor="let depot of depots" [value]="depot.id">
-              {{ depot.name }}
-            </option>
-          </select>
-        </label>
-      </div>
+        <section class="stock-preview">
+          <article class="stock-panel">
+            <h3>Залишок відправника</h3>
+            <p class="muted" *ngIf="!form.fromDepotId">Зовнішня поставка</p>
 
-      <div class="stock-preview">
-        <article class="stock-panel">
-          <h3>Залишок відправника</h3>
-          <p class="muted" *ngIf="!form.fromDepotId">Зовнішня поставка</p>
-
-          <ng-container *ngIf="form.fromDepotId">
-            <div class="stock-resource-group" *ngFor="let type of getSelectedItemTypes()">
-              <h4>{{ getItemTypeLabel(type) }}</h4>
-
-              <div class="stock-line" *ngFor="let resource of getPositiveStock(form.fromDepotId, type)">
-                <span>{{ resource.marking }}</span>
-                <strong>{{ resource.quantity }}</strong>
+            <ng-container *ngIf="form.fromDepotId">
+              <div class="stock-group" *ngFor="let type of getSelectedItemTypes()">
+                <h4>{{ getItemTypeLabel(type) }}</h4>
+                <div
+                  class="stock-line"
+                  *ngFor="let resource of getPositiveStock(form.fromDepotId, type)"
+                >
+                  <span>{{ resource.marking }}</span>
+                  <b>{{ resource.quantity }}</b>
+                </div>
+                <p class="muted" *ngIf="getPositiveStock(form.fromDepotId, type).length === 0">
+                  Немає
+                </p>
               </div>
+            </ng-container>
+          </article>
 
-              <p class="muted" *ngIf="getPositiveStock(form.fromDepotId, type).length === 0">
-                Немає
-              </p>
-            </div>
-          </ng-container>
-        </article>
+          <article class="stock-panel">
+            <h3>Залишок отримувача</h3>
+            <p class="muted" *ngIf="!form.toDepotId">Отримувач не вибраний</p>
 
-        <article class="stock-panel">
-          <h3>Залишок отримувача</h3>
-          <p class="muted" *ngIf="!form.toDepotId">Отримувач не вибраний</p>
-
-          <ng-container *ngIf="form.toDepotId">
-            <div class="stock-resource-group" *ngFor="let type of getSelectedItemTypes()">
-              <h4>{{ getItemTypeLabel(type) }}</h4>
-
-              <div class="stock-line" *ngFor="let resource of getPositiveStock(form.toDepotId, type)">
-                <span>{{ resource.marking }}</span>
-                <strong>{{ resource.quantity }}</strong>
+            <ng-container *ngIf="form.toDepotId">
+              <div class="stock-group" *ngFor="let type of getSelectedItemTypes()">
+                <h4>{{ getItemTypeLabel(type) }}</h4>
+                <div
+                  class="stock-line"
+                  *ngFor="let resource of getPositiveStock(form.toDepotId, type)"
+                >
+                  <span>{{ resource.marking }}</span>
+                  <b>{{ resource.quantity }}</b>
+                </div>
+                <p class="muted" *ngIf="getPositiveStock(form.toDepotId, type).length === 0">
+                  Немає
+                </p>
               </div>
+            </ng-container>
+          </article>
+        </section>
 
-              <p class="muted" *ngIf="getPositiveStock(form.toDepotId, type).length === 0">
-                Немає
-              </p>
-            </div>
-          </ng-container>
-        </article>
-      </div>
-
-      <div class="resource-document">
-        <div class="resource-document-head">
-          <h3>Ресурси документа</h3>
-          <button type="button" class="ghost-button" [disabled]="modalSubmitting" (click)="addItem()">+ Додати</button>
-        </div>
-
-        <div class="resource-row" *ngFor="let item of form.items; let i = index">
-          <select [name]="'itemType' + i" [(ngModel)]="item.itemType" (change)="onItemTypeChange(item)">
-            <option value="shell">Снаряд</option>
-            <option value="charge">Заряд</option>
-            <option value="fuze">Підривники</option>
-            <option value="primer">Капсулі</option>
-          </select>
-
-          <select [name]="'itemId' + i" [(ngModel)]="item.itemId">
-            <option value="">Оберіть ресурс</option>
-            <option *ngFor="let resource of getSelectedResources(item.itemType)" [value]="resource.id">
-              {{ resource.marking }}
-            </option>
-          </select>
-
-          <input [name]="'quantity' + i" type="number" min="0.01" step="0.01" [(ngModel)]="item.quantity" />
-
-          <span class="available-chip" *ngIf="form.fromDepotId && item.itemId">
-            Доступно: {{ getAvailableQuantity(item) }}
-          </span>
-
-          <button type="button" class="icon-button danger" [disabled]="modalSubmitting" (click)="removeItem(i)">×</button>
-        </div>
-      </div>
-
-      <input class="comment-input" name="comment" [(ngModel)]="form.comment" placeholder="Коментар до документа" />
-
-      <footer class="modal-actions">
-        <button type="button" class="ghost-button" [disabled]="modalSubmitting" (click)="closeTransferForm()">
-          Скасувати
-        </button>
-
-        <button type="submit" class="primary-button" [disabled]="modalSubmitting">
-          {{ modalSubmitting ? 'Створення...' : 'Створити передачу' }}
-        </button>
-      </footer>
-    </form>
-  </section>
-  </div>
-
-  <section class="history-section">
-    <div class="section-title">
-  <div>
-    <h2>Історія передач</h2>
-    <p>Один документ — кілька ресурсів всередині</p>
-  </div>
-
-  <button type="button" class="ghost-button" (click)="toggleFilter()">
-    Фільтр
-  </button>
-</div>
-
-<div class="filter-card" *ngIf="filterVisible">
-  <div class="filter-grid">
-    <label>
-      Дата з
-      <input type="date" name="dateFrom" [(ngModel)]="filters.dateFrom" (ngModelChange)="onFiltersChanged()" />
-    </label>
-
-    <label>
-      Дата по
-      <input type="date" name="dateTo" [(ngModel)]="filters.dateTo" (ngModelChange)="onFiltersChanged()" />
-    </label>
-
-    <label>
-      Від
-      <select name="filterFromDepotId" [(ngModel)]="filters.fromDepotId" (ngModelChange)="onFiltersChanged()">
-        <option value="">Усі</option>
-        <option *ngFor="let depot of depots" [value]="depot.id">
-          {{ depot.name }}
-        </option>
-      </select>
-    </label>
-
-    <label>
-      Кому
-      <select name="filterToDepotId" [(ngModel)]="filters.toDepotId" (ngModelChange)="onFiltersChanged()">
-        <option value="">Усі</option>
-        <option *ngFor="let depot of depots" [value]="depot.id">
-          {{ depot.name }}
-        </option>
-      </select>
-    </label>
-
-    <label>
-      Тип передачі
-      <select name="movementKind" [(ngModel)]="filters.movementKind" (ngModelChange)="onFiltersChanged()">
-        <option value="">Усі</option>
-        <option value="external">Зовнішня</option>
-        <option value="internal">Внутрішня</option>
-      </select>
-    </label>
-  </div>
-
-  <div class="filter-actions">
-    <button type="button" class="ghost-button" (click)="resetFilters()">
-      Скинути
-    </button>
-  </div>
-</div>
-
-    <div class="ui-skeleton-grid" *ngIf="loading && items.length === 0" aria-label="Завантаження руху БК">
-      <div class="ui-skeleton-card" *ngFor="let item of [1,2,3,4]">
-        <span class="ui-skeleton-line short"></span>
-        <span class="ui-skeleton-line long"></span>
-        <span class="ui-skeleton-line medium"></span>
-      </div>
-    </div>
-
-    <div class="section-hint" *ngIf="refreshing">Оновлення історії передач...</div>
-
-    <div class="movement-list" *ngIf="!loading || items.length > 0">
-     <article class="movement-card" *ngFor="let group of pagedItems">
-        <button type="button" class="movement-header" (click)="toggleGroup(group.groupId)">
-          <div class="doc-main">
-            <strong>{{ group.documentNumber }}</strong>
-            <span>{{ group.movementDatetime | date: 'dd.MM.yyyy HH:mm' }}</span>
+        <section class="resource-document">
+          <div class="resource-head">
+            <h3>Ресурси документа</h3>
+            <button
+              type="button"
+              class="btn small"
+              aria-label="Додати"
+              [disabled]="modalSubmitting"
+              (click)="addItem()"
+              title="Додати ще один ресурс у документ"
+            >
+              + Додати
+            </button>
           </div>
 
-          <div class="doc-route">
-            <span>{{ group.fromDepot?.name || 'Зовнішня поставка' }}</span>
-            <b>→</b>
-            <span>{{ group.toDepot?.name || '—' }}</span>
+          <div class="resource-row" *ngFor="let item of form.items; let i = index">
+            <select
+              [name]="'itemType' + i"
+              [(ngModel)]="item.itemType"
+              (change)="onItemTypeChange(item)"
+            >
+              <option value="shell">Снаряд</option>
+              <option value="charge">Заряд</option>
+              <option value="fuze">Підривники</option>
+              <option value="primer">Капсулі</option>
+            </select>
+
+            <select [name]="'itemId' + i" [(ngModel)]="item.itemId">
+              <option value="">Оберіть ресурс</option>
+              <option
+                *ngFor="let resource of getSelectedResources(item.itemType)"
+                [value]="resource.id"
+              >
+                {{ resource.marking }}
+              </option>
+            </select>
+
+            <input
+              [name]="'quantity' + i"
+              type="number"
+              min="0.01"
+              step="0.01"
+              [(ngModel)]="item.quantity"
+            />
+
+            <button
+              type="button"
+              class="icon-button danger"
+              aria-label="Прибрати"
+              [disabled]="modalSubmitting || form.items.length === 1"
+              (click)="removeItem(i)"
+              title="Прибрати цей ресурс із документа"
+              data-tip-pos="left"
+            >
+              ×
+            </button>
           </div>
+        </section>
 
-          <div class="doc-meta">
-            <span>{{ group.items.length }} ресурсів</span>
-            <em>{{ expandedGroupId === group.groupId ? '−' : '+' }}</em>
-          </div>
-        </button>
+        <input
+          class="comment-input"
+          name="comment"
+          [(ngModel)]="form.comment"
+          placeholder="Коментар до документа"
+        />
 
-        <div class="movement-details" *ngIf="expandedGroupId === group.groupId">
-          <p class="muted">{{ group.comment || 'Без коментаря' }}</p>
-
-          <div class="movement-item" *ngFor="let item of group.items">
-            <span>{{ getItemTypeLabel(item.itemType) }}</span>
-            <strong>{{ getResourceName(item.itemType, item.itemId) }}</strong>
-            <b>{{ item.quantity }}</b>
-          </div>
-        </div>
-      </article>
-    </div>
-<div class="pagination" *ngIf="filteredItems.length > pageSize">
-  <button type="button" class="ghost-button" [disabled]="currentPage <= 1" (click)="goToPage(currentPage - 1)">
-    ‹
-  </button>
-
-  <span>
-    Сторінка {{ currentPage }} / {{ totalPages }}
-  </span>
-
-  <button type="button" class="ghost-button" [disabled]="currentPage >= totalPages" (click)="goToPage(currentPage + 1)">
-    ›
-  </button>
-</div>
-
-    <div class="ui-state" *ngIf="!loading && !errorMessage && items.length === 0">
-      <span class="ui-state-icon">▦</span>
-      <strong>Документи передачі відсутні</strong>
-      <small>Після першої передачі БК історія зʼявиться тут.</small>
-    </div>
-
-    <div class="ui-state" *ngIf="!loading && items.length > 0 && filteredItems.length === 0">
-      <span class="ui-state-icon">⌕</span>
-      <strong>За фільтром нічого не знайдено</strong>
-      <small>Змініть дати, склад або тип передачі.</small>
-    </div>
-
-    
-  </section>
+        <footer class="modal-actions">
+          <button
+            type="button"
+            class="btn"
+            aria-label="Скасувати"
+            [disabled]="modalSubmitting"
+            (click)="closeTransferForm()"
+            title="Закрити без створення документа"
+          >
+            Скасувати
+          </button>
+          <button
+            type="submit"
+            class="btn primary"
+            aria-label="Створити передачу"
+            [disabled]="modalSubmitting"
+            title="Провести передачу і оновити залишки складів"
+          >
+            {{ modalSubmitting ? 'Створення...' : 'Створити передачу' }}
+          </button>
+        </footer>
+      </form>
+    </section>
+  </div>
 </div>

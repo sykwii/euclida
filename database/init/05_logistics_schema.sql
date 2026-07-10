@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS depot_charge_stock (
 
     charge_id UUID NOT NULL REFERENCES charges(id),
 
-    quantity NUMERIC(18,2) NOT NULL DEFAULT 0,
+    quantity NUMERIC(18,3) NOT NULL DEFAULT 0,
 
     UNIQUE(depot_id, charge_id)
 );

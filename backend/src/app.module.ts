@@ -37,6 +37,11 @@ import { OperatorShiftsModule } from './operator-shifts/operator-shifts.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { DocumentsModule } from './documents/documents.module';
+import { EwModule } from './ew/ew.module';
+import { AirAssetsModule } from './air-assets/air-assets.module';
+import { DroneLogisticsModule } from './drone-logistics/drone-logistics.module';
+import { PlannedTripsModule } from './planned-trips/planned-trips.module';
+import { ReconModule } from './modules/recon/recon.module';
 
 @Module({
   imports: [
@@ -88,6 +93,11 @@ import { DocumentsModule } from './documents/documents.module';
     AnalyticsModule,
     RecommendationsModule,
     DocumentsModule,
+    EwModule,
+AirAssetsModule,
+DroneLogisticsModule,
+PlannedTripsModule,
+ReconModule,
   ],
   providers: [
     UnitService,
