@@ -472,6 +472,7 @@ selectSuggestion(
   this.service
     .selectPosition(order.id, {
       firePositionId: firePosition.id,
+      shotConfigurationId: variant.shotConfigurationId,
       shellId: variant.shellId,
       chargeId: variant.chargeId,
       zoneId: variant.zoneId,
@@ -661,6 +662,7 @@ selectSuggestion(
         startedAt: new Date(form.startedAt).toISOString(),
         completedAt: new Date(form.completedAt).toISOString(),
         actualQuantity,
+        actualShotConfigurationId: order.selectedShotConfigurationId || undefined,
         actualShellId: firstItem.shellId,
         actualChargeId: firstItem.chargeId,
         actualAmmoItems: actualAmmoItems.map((item) => {

@@ -47,6 +47,10 @@ export class CompleteServiceOrderDto {
   actualChargeId?: string;
 
   @IsOptional()
+  @IsUUID()
+  actualShotConfigurationId?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   chargeModulesPerShot?: number;

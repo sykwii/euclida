@@ -62,6 +62,7 @@ linkedAirTaskId?: string | null;
   selectedShellId?: string | null;
   selectedChargeId?: string | null;
   selectedZoneId?: string | null;
+  selectedShotConfigurationId?: string | null;
 
   rejectionReason: string | null;
   rejectedByUnitName: string | null;
@@ -101,6 +102,42 @@ linkedAirTaskId?: string | null;
     zoneNumber: number;
     distanceFromM: number;
     distanceToM: number;
+  } | null;
+
+  selectedShotConfiguration?: {
+    id: string;
+    name: string;
+    maxRangeM: number;
+    fuzeId?: string | null;
+    primerId?: string | null;
+    shell?: {
+      id: string;
+      marking: string;
+    } | null;
+    fuze?: {
+      id: string;
+      marking: string;
+    } | null;
+    primer?: {
+      id: string;
+      marking: string;
+    } | null;
+    zone?: {
+      id: string;
+      zoneNumber: number;
+      distanceFromM: number;
+      distanceToM: number;
+    } | null;
+    charges: Array<{
+      chargeId: string;
+      quantityPerShot: number;
+      sortOrder: number;
+      charge: {
+        id: string;
+        marking: string;
+        chargeKind?: 'unit' | 'modular';
+      };
+    }>;
   } | null;
 
   selectedAirAssetPosition?: {

@@ -10,6 +10,7 @@ export interface CompleteServiceOrderRequest {
   resultType: string;
   resultComment?: string;
   actualQuantity: number;
+  actualShotConfigurationId?: string;
   actualShellId?: string;
   actualChargeId?: string;
   chargeModulesPerShot?: number;
@@ -40,9 +41,13 @@ export interface SendServiceOrderRequest {
 }
 
 export interface ServiceOrderSuggestionVariant {
+  shotConfigurationId: string;
+  shotConfigurationName: string;
   shellId: string;
   chargeId: string;
   zoneId: string | null;
+  fuzeId: string | null;
+  primerId: string | null;
   maxRangeM: number;
   rangeReserveM: number;
   availableQuantity: number;
@@ -58,12 +63,34 @@ export interface ServiceOrderSuggestionVariant {
     marking: string;
   };
 
+  fuze?: {
+    id: string;
+    marking: string;
+  } | null;
+
+  primer?: {
+    id: string;
+    marking: string;
+  } | null;
+
   zone: {
     id: string;
     zoneNumber: number;
     distanceFromM: number;
     distanceToM: number;
   } | null;
+
+  charges: Array<{
+    chargeId: string;
+    quantityPerShot: number;
+    sortOrder: number;
+    accountingUnit: 'piece' | 'module';
+    charge: {
+      id: string;
+      marking: string;
+      chargeKind?: 'unit' | 'modular';
+    };
+  }>;
 }
 
 export interface ServiceOrderAirPayloadVariant {
@@ -176,9 +203,10 @@ export class ServiceOrdersService {
     id: string,
     body: {
       firePositionId: string;
-      shellId: string;
-      chargeId: string;
-      zoneId: string | null;
+      shotConfigurationId?: string;
+      shellId?: string;
+      chargeId?: string;
+      zoneId?: string | null;
     },
   ): Observable<ServiceOrder> {
     return this.api.post<ServiceOrder>(`/service-orders/${id}/select-position`, body);

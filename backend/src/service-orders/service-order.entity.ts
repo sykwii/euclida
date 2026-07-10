@@ -14,6 +14,7 @@ import { DroneModel } from '../drone-logistics/drone-model.entity';
 import { DroneWarheadType } from '../drone-logistics/drone-warhead-type.entity';
 import { FirePosition } from '../fire-positions/fire-position.entity';
 import { Shell } from '../shells/shell.entity';
+import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { Zone } from '../zones/zone.entity';
 
 const integerNumericTransformer: ValueTransformer = {
@@ -158,6 +159,13 @@ linkedAirTaskId!: string | null;
   @Column({ name: 'selected_zone_id', type: 'uuid', nullable: true })
   selectedZoneId!: string | null;
 
+  @Column({
+    name: 'selected_shot_configuration_id',
+    type: 'uuid',
+    nullable: true,
+  })
+  selectedShotConfigurationId!: string | null;
+
   @ManyToOne(() => FirePosition, { nullable: true })
   @JoinColumn({ name: 'selected_fire_position_id' })
   selectedFirePosition!: FirePosition | null;
@@ -173,6 +181,10 @@ linkedAirTaskId!: string | null;
   @ManyToOne(() => Zone, { nullable: true })
   @JoinColumn({ name: 'selected_zone_id' })
   selectedZone!: Zone | null;
+
+  @ManyToOne(() => ShotConfiguration, { nullable: true })
+  @JoinColumn({ name: 'selected_shot_configuration_id' })
+  selectedShotConfiguration!: ShotConfiguration | null;
 
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
   rejectionReason!: string | null;
@@ -231,6 +243,13 @@ linkedAirTaskId!: string | null;
 
   @Column({ name: 'recon_snapshot', type: 'jsonb', nullable: true })
   reconSnapshot!: Record<string, unknown> | null;
+
+  @Column({
+    name: 'actual_shot_configuration_snapshot',
+    type: 'jsonb',
+    nullable: true,
+  })
+  actualShotConfigurationSnapshot!: Record<string, unknown> | null;
 
   @Column({ name: 'source_recon_target_id', type: 'uuid', nullable: true })
   sourceReconTargetId!: string | null;

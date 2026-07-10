@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServiceOrderActualAmmo } from './service-order-actual-ammo.entity';
+import { ServiceOrderActualShotConfigurationCharge } from './service-order-actual-shot-configuration-charge.entity';
+import { ServiceOrderActualShotConfiguration } from './service-order-actual-shot-configuration.entity';
 import { ServiceOrder } from './service-order.entity';
 import { ServiceOrdersController } from './service-orders.controller';
 import { ServiceOrdersService } from './service-orders.service';
@@ -10,9 +12,10 @@ import { AccessScopeModule } from '../access-scope/access-scope.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventLogsModule } from '../event-logs/event-logs.module';
 import { ReconModule } from '../modules/recon/recon.module';
+import { ShotConfigurationsModule } from '../shot-configurations/shot-configurations.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ServiceOrder, ServiceOrderActualAmmo]),RealtimeModule,AccessScopeModule,AuthModule,EventLogsModule,ReconModule],
+  imports: [TypeOrmModule.forFeature([ServiceOrder, ServiceOrderActualAmmo, ServiceOrderActualShotConfiguration, ServiceOrderActualShotConfigurationCharge]),RealtimeModule,AccessScopeModule,AuthModule,EventLogsModule,ReconModule,ShotConfigurationsModule],
   controllers: [ServiceOrdersController],
   providers: [
   ServiceOrdersService,

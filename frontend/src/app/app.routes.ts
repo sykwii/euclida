@@ -16,6 +16,7 @@ import { SettingsPage } from './features/settings/settings-page/settings-page';
 import { ShellCompatibleChargesPage } from './features/shell-compatible-charges/shell-compatible-charges-page/shell-compatible-charges-page';
 import { ShellCompatibleFuzesPage } from './features/shell-compatible-fuzes/shell-compatible-fuzes-page/shell-compatible-fuzes-page';
 import { ShellsPage } from './features/shells/shells-page/shells-page';
+import { ShotConfigurationsPage } from './features/shot-configurations/shot-configurations-page/shot-configurations-page';
 import { StockMovementsPage } from './features/stock-movements/stock-movements-page/stock-movements-page';
 import { StockPage } from './features/stock/stock-page/stock-page';
 import { UnitsPage } from './features/units/units-page/units-page';
@@ -157,6 +158,11 @@ export const routes: Routes = [
     path: 'shell-compatible-fuzes',
     canActivate: [authGuard],
     component: ShellCompatibleFuzesPage,
+  },
+  {
+    path: 'shot-configurations',
+    canActivate: [authGuard],
+    component: ShotConfigurationsPage,
   },
   {
     path: 'zones',

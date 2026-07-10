@@ -1,0 +1,28 @@
+.shot-config-form {
+  display: grid;
+  gap: 12px;
+}
+
+.shot-config-charges {
+  display: grid;
+  gap: 8px;
+}
+
+.shot-config-charge-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 48px;
+  gap: 8px;
+  align-items: center;
+}
+
+.shot-config-active {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.shot-config-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

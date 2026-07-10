@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   Injectable,
   Logger,
@@ -16,19 +16,27 @@ import {
   normalizeMgrs,
 } from '../common/geo/mgrs.util';
 import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entity';
+import { DepotFuzeStock } from '../depot-fuze-stock/depot-fuze-stock.entity';
+import { DepotPrimerStock } from '../depot-primer-stock/depot-primer-stock.entity';
 import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { EventLogsService } from '../event-logs/event-logs.service';
 import { FirePosition } from '../fire-positions/fire-position.entity';
+import { Fuze } from '../fuzes/fuze.entity';
+import { Primer } from '../primers/primer.entity';
 import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { SendServiceOrderDto } from './dto/send-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
 import { ServiceOrder } from './service-order.entity';
 import { ServiceOrderActualAmmo } from './service-order-actual-ammo.entity';
+import { ServiceOrderActualShotConfigurationCharge } from './service-order-actual-shot-configuration-charge.entity';
+import { ServiceOrderActualShotConfiguration } from './service-order-actual-shot-configuration.entity';
 import { ServiceOrderSuggestionsService } from './service-order-suggestions.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { ShellCompatibleCharge } from '../shell-compatible-charges/shell-compatible-charge.entity';
+import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { StockMovement } from '../stock-movements/stock-movement.entity';
+import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
 
 export interface ServiceOrderMapResult {
   id: string;
@@ -48,6 +56,30 @@ export interface ServiceOrderMapResult {
   shellMarking: string | null;
   chargeMarking: string | null;
   zoneName: string | null;
+}
+
+interface ResolvedShotConfigurationComponent {
+  chargeId: string;
+  charge: Charge;
+  quantityPerShot: number;
+  sortOrder: number;
+  accountingUnit: 'piece' | 'module';
+}
+
+interface ResolvedShotConfiguration {
+  id: string | null;
+  name: string;
+  weaponModelId: string | null;
+  shellId: string;
+  shellMarking: string;
+  fuzeId: string | null;
+  fuzeMarking: string | null;
+  primerId: string | null;
+  primerMarking: string | null;
+  zoneId: string | null;
+  zoneNumber: number | null;
+  maxRangeM: number;
+  charges: ResolvedShotConfigurationComponent[];
 }
 
 @Injectable()
@@ -80,6 +112,15 @@ export class ServiceOrdersService {
         selectedShell: true,
         selectedCharge: true,
         selectedZone: true,
+        selectedShotConfiguration: {
+          shell: true,
+          fuze: true,
+          primer: true,
+          zone: true,
+          charges: {
+            charge: true,
+          },
+        },
         selectedAirAssetPosition: {
           unit: true,
         },
@@ -139,6 +180,15 @@ export class ServiceOrdersService {
         selectedShell: true,
         selectedCharge: true,
         selectedZone: true,
+        selectedShotConfiguration: {
+          shell: true,
+          fuze: true,
+          primer: true,
+          zone: true,
+          charges: {
+            charge: true,
+          },
+        },
         selectedAirAssetPosition: {
           unit: true,
         },
@@ -148,7 +198,7 @@ export class ServiceOrdersService {
     });
 
     if (!item) {
-      throw new NotFoundException('Завдання не знайдено');
+      throw new NotFoundException('Р—Р°РІРґР°РЅРЅСЏ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
     }
 
     if (user) {
@@ -163,12 +213,12 @@ export class ServiceOrdersService {
     user: AuthUser,
   ): Promise<ServiceOrder> {
     if (user.role === 'observer') {
-      throw new BadRequestException('Спостерігач не може створювати заявки');
+      throw new BadRequestException('РЎРїРѕСЃС‚РµСЂС–РіР°С‡ РЅРµ РјРѕР¶Рµ СЃС‚РІРѕСЂСЋРІР°С‚Рё Р·Р°СЏРІРєРё');
     }
 
     if (user.scope === 'ew') {
       throw new BadRequestException(
-        'Оператор РЕБ може працювати з картою та повітряними загрозами, але не створює ВГЗ',
+        'РћРїРµСЂР°С‚РѕСЂ Р Р•Р‘ РјРѕР¶Рµ РїСЂР°С†СЋРІР°С‚Рё Р· РєР°СЂС‚РѕСЋ С‚Р° РїРѕРІС–С‚СЂСЏРЅРёРјРё Р·Р°РіСЂРѕР·Р°РјРё, Р°Р»Рµ РЅРµ СЃС‚РІРѕСЂСЋС” Р’Р“Р—',
       );
     }
 
@@ -181,7 +231,7 @@ export class ServiceOrdersService {
         targetMgrs = normalizeMgrs(targetMgrs);
       } catch {
         throw new BadRequestException(
-          'Некоректний MGRS. Формат: 36U XB 11111 22222',
+          'РќРµРєРѕСЂРµРєС‚РЅРёР№ MGRS. Р¤РѕСЂРјР°С‚: 36U XB 11111 22222',
         );
       }
     }
@@ -193,7 +243,7 @@ export class ServiceOrdersService {
     }
 
     if (targetLat === undefined || targetLng === undefined) {
-      throw new BadRequestException('Потрібно вказати Lat/Lng або MGRS');
+      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё Lat/Lng Р°Р±Рѕ MGRS');
     }
 
     if (!targetMgrs) {
@@ -201,7 +251,7 @@ export class ServiceOrdersService {
     }
 
     if (!data.orderNumber.trim()) {
-      throw new BadRequestException('Вкажіть номер завдання');
+      throw new BadRequestException('Р’РєР°Р¶С–С‚СЊ РЅРѕРјРµСЂ Р·Р°РІРґР°РЅРЅСЏ');
     }
 
     const item = this.repository.create({
@@ -217,7 +267,7 @@ export class ServiceOrdersService {
 
     const savedItem = await this.repository.save(item);
 
-    await this.writeOrderEvent(savedItem, user, 'created', 'Створено заявку');
+    await this.writeOrderEvent(savedItem, user, 'created', 'РЎС‚РІРѕСЂРµРЅРѕ Р·Р°СЏРІРєСѓ');
 
     this.notifyRealtime(savedItem, 'created');
 
@@ -244,7 +294,7 @@ export class ServiceOrdersService {
       | undefined;
 
     if (!source?.lat || !source?.lng) {
-      throw new BadRequestException('У пропозиції ПУАР немає координат');
+      throw new BadRequestException('РЈ РїСЂРѕРїРѕР·РёС†С–С— РџРЈРђР  РЅРµРјР°С” РєРѕРѕСЂРґРёРЅР°С‚');
     }
 
     const orderNumber = `PUAR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${proposal.id.slice(0, 8)}`;
@@ -267,7 +317,7 @@ export class ServiceOrdersService {
     });
 
     const savedItem = await this.repository.save(item);
-    await this.writeOrderEvent(savedItem, user, 'created', 'Створено чернетку ВГЗ з ПУАР');
+    await this.writeOrderEvent(savedItem, user, 'created', 'РЎС‚РІРѕСЂРµРЅРѕ С‡РµСЂРЅРµС‚РєСѓ Р’Р“Р— Р· РџРЈРђР ');
     this.notifyRealtime(savedItem, 'created');
     this.realtimeEvents.emitMany(['missions', 'recon', 'events'], 'created', {
       entity: 'service_order',
@@ -301,7 +351,7 @@ export class ServiceOrdersService {
         targetMgrs = normalizeMgrs(data.targetMgrs);
       } catch {
         throw new BadRequestException(
-          'Некоректний MGRS. Формат: 36U XB 11111 22222',
+          'РќРµРєРѕСЂРµРєС‚РЅРёР№ MGRS. Р¤РѕСЂРјР°С‚: 36U XB 11111 22222',
         );
       }
     }
@@ -316,7 +366,7 @@ export class ServiceOrdersService {
     }
 
     if (targetLat === undefined || targetLng === undefined) {
-      throw new BadRequestException('Потрібно вказати Lat/Lng або MGRS');
+      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё Lat/Lng Р°Р±Рѕ MGRS');
     }
 
     if (!targetMgrs) {
@@ -336,7 +386,7 @@ export class ServiceOrdersService {
 
     const savedItem = await this.repository.save(item);
 
-    await this.writeOrderEvent(savedItem, user, 'updated', 'Оновлено заявку');
+    await this.writeOrderEvent(savedItem, user, 'updated', 'РћРЅРѕРІР»РµРЅРѕ Р·Р°СЏРІРєСѓ');
 
     this.notifyRealtime(savedItem, 'updated');
 
@@ -347,18 +397,18 @@ export class ServiceOrdersService {
     const item = await this.findOne(id, user);
 
     if (item.status !== 'draft') {
-      throw new BadRequestException('Видалити можна тільки чернетку');
+      throw new BadRequestException('Р’РёРґР°Р»РёС‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё С‡РµСЂРЅРµС‚РєСѓ');
     }
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'Видаляти чернетки може тільки ОКП або адміністратор',
+        'Р’РёРґР°Р»СЏС‚Рё С‡РµСЂРЅРµС‚РєРё РјРѕР¶Рµ С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
       );
     }
 
     await this.repository.remove(item);
 
-    await this.writeOrderEvent(item, user, 'deleted', 'Видалено чернетку');
+    await this.writeOrderEvent(item, user, 'deleted', 'Р’РёРґР°Р»РµРЅРѕ С‡РµСЂРЅРµС‚РєСѓ');
 
     this.notifyRealtime(item, 'deleted');
   }
@@ -368,13 +418,13 @@ export class ServiceOrdersService {
 
     if (order.status !== 'draft' && order.status !== 'proposed') {
       throw new BadRequestException(
-        'Підбір точок доступний тільки для чернетки або пропозиції',
+        'РџС–РґР±С–СЂ С‚РѕС‡РѕРє РґРѕСЃС‚СѓРїРЅРёР№ С‚С–Р»СЊРєРё РґР»СЏ С‡РµСЂРЅРµС‚РєРё Р°Р±Рѕ РїСЂРѕРїРѕР·РёС†С–С—',
       );
     }
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'Підбір ВП виконує головний оператор або адміністратор',
+        'РџС–РґР±С–СЂ Р’Рџ РІРёРєРѕРЅСѓС” РіРѕР»РѕРІРЅРёР№ РѕРїРµСЂР°С‚РѕСЂ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
       );
     }
 
@@ -385,9 +435,10 @@ export class ServiceOrdersService {
     id: string,
     body: {
       firePositionId: string;
-      shellId: string;
-      chargeId: string;
-      zoneId: string | null;
+      shotConfigurationId?: string;
+      shellId?: string;
+      chargeId?: string;
+      zoneId?: string | null;
     },
     user: AuthUser,
   ) {
@@ -395,12 +446,12 @@ export class ServiceOrdersService {
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'Обирати ВП для заявки може тільки ОКП або адміністратор',
+        'РћР±РёСЂР°С‚Рё Р’Рџ РґР»СЏ Р·Р°СЏРІРєРё РјРѕР¶Рµ С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
       );
     }
 
     if (!['draft', 'proposed', 'rejected'].includes(order.status)) {
-      throw new BadRequestException('Вибір виконавця можливий тільки для чернетки, пропозиції або відхиленої заявки');
+      throw new BadRequestException('Р’РёР±С–СЂ РІРёРєРѕРЅР°РІС†СЏ РјРѕР¶Р»РёРІРёР№ С‚С–Р»СЊРєРё РґР»СЏ С‡РµСЂРЅРµС‚РєРё, РїСЂРѕРїРѕР·РёС†С–С— Р°Р±Рѕ РІС–РґС…РёР»РµРЅРѕС— Р·Р°СЏРІРєРё');
     }
 
     const activeStatuses = [
@@ -424,14 +475,27 @@ export class ServiceOrdersService {
       .getOne();
 
     if (activeOrder) {
-      throw new BadRequestException('На цю точку вже є активне завдання');
+      throw new BadRequestException('РќР° С†СЋ С‚РѕС‡РєСѓ РІР¶Рµ С” Р°РєС‚РёРІРЅРµ Р·Р°РІРґР°РЅРЅСЏ');
     }
+
+    const firePosition = await this.dataSource.getRepository(FirePosition).findOne({
+      where: { id: body.firePositionId },
+    });
+
+    if (!firePosition) {
+      throw new BadRequestException('Р’РѕРіРЅРµРІСѓ РїРѕР·РёС†С–СЋ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+    }
+
+    const selectedConfiguration = await this.dataSource.transaction((manager) =>
+      this.resolveShotConfigurationForSelection(manager, firePosition, order, body),
+    );
 
     order.executorType = 'fire_position';
     order.selectedFirePositionId = body.firePositionId;
-    order.selectedShellId = body.shellId;
-    order.selectedChargeId = body.chargeId;
-    order.selectedZoneId = body.zoneId;
+    order.selectedShotConfigurationId = selectedConfiguration.id;
+    order.selectedShellId = selectedConfiguration.shellId;
+    order.selectedChargeId = selectedConfiguration.charges[0]?.chargeId ?? null;
+    order.selectedZoneId = selectedConfiguration.zoneId;
     order.selectedAirAssetPositionId = null;
     order.selectedDroneModelId = null;
     order.selectedWarheadTypeId = null;
@@ -451,7 +515,7 @@ export class ServiceOrdersService {
       savedOrder,
       user,
       'updated',
-      'Обрано ВП для заявки',
+      'РћР±СЂР°РЅРѕ Р’Рџ РґР»СЏ Р·Р°СЏРІРєРё',
     );
 
     this.notifyRealtime(savedOrder, 'updated');
@@ -468,20 +532,20 @@ export class ServiceOrdersService {
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'Надсилати заявку виконавцю може тільки головний оператор або адміністратор',
+        'РќР°РґСЃРёР»Р°С‚Рё Р·Р°СЏРІРєСѓ РІРёРєРѕРЅР°РІС†СЋ РјРѕР¶Рµ С‚С–Р»СЊРєРё РіРѕР»РѕРІРЅРёР№ РѕРїРµСЂР°С‚РѕСЂ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
       );
     }
 
     if (item.status !== 'proposed') {
       throw new BadRequestException(
-        'Надіслати можна тільки заявку, для якої вже обрано виконавця',
+        'РќР°РґС–СЃР»Р°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё Р·Р°СЏРІРєСѓ, РґР»СЏ СЏРєРѕС— РІР¶Рµ РѕР±СЂР°РЅРѕ РІРёРєРѕРЅР°РІС†СЏ',
       );
     }
 
     if (item.executorType === 'air_asset_position') {
       if (!item.selectedAirAssetPositionId || !item.selectedAirAssetPosition?.unitId) {
         throw new BadRequestException(
-          'Передача можлива тільки після вибору виконавця. Підрозділ виконавця визначається автоматично',
+          'РџРµСЂРµРґР°С‡Р° РјРѕР¶Р»РёРІР° С‚С–Р»СЊРєРё РїС–СЃР»СЏ РІРёР±РѕСЂСѓ РІРёРєРѕРЅР°РІС†СЏ. РџС–РґСЂРѕР·РґС–Р» РІРёРєРѕРЅР°РІС†СЏ РІРёР·РЅР°С‡Р°С”С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ',
         );
       }
 
@@ -490,7 +554,7 @@ export class ServiceOrdersService {
     } else {
       if (!item.selectedFirePositionId || !item.selectedFirePosition?.unitId) {
         throw new BadRequestException(
-          'Передача можлива тільки після вибору виконавця. Оператор підрозділу виконавця визначається автоматично',
+          'РџРµСЂРµРґР°С‡Р° РјРѕР¶Р»РёРІР° С‚С–Р»СЊРєРё РїС–СЃР»СЏ РІРёР±РѕСЂСѓ РІРёРєРѕРЅР°РІС†СЏ. РћРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РІРёР·РЅР°С‡Р°С”С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ',
         );
       }
 
@@ -508,8 +572,8 @@ export class ServiceOrdersService {
       user,
       'sent',
       item.executorType === 'air_asset_position'
-        ? `Заявку передано виконавцю ${item.selectedAirAssetPosition?.callsign || item.selectedAirAssetPosition?.name || ''}. Оператор підрозділу виконавця отримує її автоматично`
-        : `Заявку передано на ПУВБ за ВП ${item.selectedFirePosition?.name || ''}. Оператор підрозділу виконавця отримує її автоматично`,
+        ? `Р—Р°СЏРІРєСѓ РїРµСЂРµРґР°РЅРѕ РІРёРєРѕРЅР°РІС†СЋ ${item.selectedAirAssetPosition?.callsign || item.selectedAirAssetPosition?.name || ''}. РћРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РѕС‚СЂРёРјСѓС” С—С— Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ`
+        : `Р—Р°СЏРІРєСѓ РїРµСЂРµРґР°РЅРѕ РЅР° РџРЈР’Р‘ Р·Р° Р’Рџ ${item.selectedFirePosition?.name || ''}. РћРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РѕС‚СЂРёРјСѓС” С—С— Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ`,
     );
 
     this.notifyRealtime(saved, 'sent');
@@ -526,7 +590,7 @@ export class ServiceOrdersService {
       order.status !== 'sent_to_battery' &&
       order.status !== 'sent'
     ) {
-      throw new BadRequestException('Прийняти можна тільки передану заявку');
+      throw new BadRequestException('РџСЂРёР№РЅСЏС‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё РїРµСЂРµРґР°РЅСѓ Р·Р°СЏРІРєСѓ');
     }
 
     order.status = 'accepted';
@@ -535,7 +599,7 @@ export class ServiceOrdersService {
 
     const savedOrder = await this.repository.save(order);
 
-    await this.writeOrderEvent(savedOrder, user, 'accepted', 'Заявку прийнято');
+    await this.writeOrderEvent(savedOrder, user, 'accepted', 'Р—Р°СЏРІРєСѓ РїСЂРёР№РЅСЏС‚Рѕ');
 
     this.notifyRealtime(savedOrder, 'accepted');
 
@@ -557,11 +621,11 @@ export class ServiceOrdersService {
       order.status !== 'sent' &&
       order.status !== 'accepted'
     ) {
-      throw new BadRequestException('Відхилити можна тільки передану заявку');
+      throw new BadRequestException('Р’С–РґС…РёР»РёС‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё РїРµСЂРµРґР°РЅСѓ Р·Р°СЏРІРєСѓ');
     }
 
     if (!reason.trim()) {
-      throw new BadRequestException('Потрібно вказати причину відхилення');
+      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РїСЂРёС‡РёРЅСѓ РІС–РґС…РёР»РµРЅРЅСЏ');
     }
 
     order.status = 'rejected';
@@ -575,7 +639,7 @@ export class ServiceOrdersService {
       savedOrder,
       user,
       'rejected',
-      'Заявку відхилено',
+      'Р—Р°СЏРІРєСѓ РІС–РґС…РёР»РµРЅРѕ',
     );
 
     this.notifyRealtime(savedOrder, 'rejected');
@@ -588,13 +652,13 @@ export class ServiceOrdersService {
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'Повторний підбір може виконати тільки ОКП або адміністратор',
+        'РџРѕРІС‚РѕСЂРЅРёР№ РїС–РґР±С–СЂ РјРѕР¶Рµ РІРёРєРѕРЅР°С‚Рё С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
       );
     }
 
     if (order.status !== 'rejected') {
       throw new BadRequestException(
-        'Повторний підбір доступний тільки для відхиленого завдання',
+        'РџРѕРІС‚РѕСЂРЅРёР№ РїС–РґР±С–СЂ РґРѕСЃС‚СѓРїРЅРёР№ С‚С–Р»СЊРєРё РґР»СЏ РІС–РґС…РёР»РµРЅРѕРіРѕ Р·Р°РІРґР°РЅРЅСЏ',
       );
     }
 
@@ -608,6 +672,7 @@ export class ServiceOrdersService {
     order.selectedShellId = null;
     order.selectedChargeId = null;
     order.selectedZoneId = null;
+    order.selectedShotConfigurationId = null;
     order.executorType = null;
 order.selectedAirAssetPositionId = null;
 order.selectedDroneModelId = null;
@@ -622,7 +687,7 @@ order.linkedAirTaskId = null;
       savedOrder,
       user,
       'reopened',
-      'Заявку повернуто на повторний підбір',
+      'Р—Р°СЏРІРєСѓ РїРѕРІРµСЂРЅСѓС‚Рѕ РЅР° РїРѕРІС‚РѕСЂРЅРёР№ РїС–РґР±С–СЂ',
     );
     this.notifyRealtime(savedOrder, 'updated');
     return savedOrder;
@@ -641,12 +706,12 @@ async selectAirAsset(
 
   if (user.role !== 'admin' && user.scope !== 'main') {
     throw new BadRequestException(
-      'Обирати бойовий БпЛА для заявки може тільки ОКП або адміністратор',
+      'РћР±РёСЂР°С‚Рё Р±РѕР№РѕРІРёР№ Р‘РїР›Рђ РґР»СЏ Р·Р°СЏРІРєРё РјРѕР¶Рµ С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
     );
   }
 
   if (!['draft', 'proposed', 'rejected'].includes(order.status)) {
-      throw new BadRequestException('Вибір виконавця можливий тільки для чернетки, пропозиції або відхиленої заявки');
+      throw new BadRequestException('Р’РёР±С–СЂ РІРёРєРѕРЅР°РІС†СЏ РјРѕР¶Р»РёРІРёР№ С‚С–Р»СЊРєРё РґР»СЏ С‡РµСЂРЅРµС‚РєРё, РїСЂРѕРїРѕР·РёС†С–С— Р°Р±Рѕ РІС–РґС…РёР»РµРЅРѕС— Р·Р°СЏРІРєРё');
     }
 
   order.executorType = 'air_asset_position';
@@ -663,6 +728,7 @@ async selectAirAsset(
   order.selectedShellId = null;
   order.selectedChargeId = null;
   order.selectedZoneId = null;
+  order.selectedShotConfigurationId = null;
 
   order.selectedAirAssetPositionId = body.airAssetPositionId;
   order.selectedDroneModelId = body.droneModelId;
@@ -677,7 +743,7 @@ async selectAirAsset(
     savedOrder,
     user,
     'updated',
-    'Обрано бойовий БпЛА для заявки',
+    'РћР±СЂР°РЅРѕ Р±РѕР№РѕРІРёР№ Р‘РїР›Рђ РґР»СЏ Р·Р°СЏРІРєРё',
   );
 
   this.notifyRealtime(savedOrder, 'updated');
@@ -692,15 +758,15 @@ async selectAirAsset(
     await this.ensureCanExecuteOrder(order, user);
 
     if (order.status !== 'accepted') {
-      throw new BadRequestException('Почати можна тільки прийняте завдання');
+      throw new BadRequestException('РџРѕС‡Р°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё РїСЂРёР№РЅСЏС‚Рµ Р·Р°РІРґР°РЅРЅСЏ');
     }
 
     if (order.executorType === 'air_asset_position') {
       if (!order.selectedAirAssetPositionId) {
-        throw new BadRequestException('Неможливо почати завдання без обраного виконавця');
+        throw new BadRequestException('РќРµРјРѕР¶Р»РёРІРѕ РїРѕС‡Р°С‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕРіРѕ РІРёРєРѕРЅР°РІС†СЏ');
       }
     } else if (!order.selectedFirePositionId) {
-      throw new BadRequestException('Неможливо почати завдання без обраного виконавця');
+      throw new BadRequestException('РќРµРјРѕР¶Р»РёРІРѕ РїРѕС‡Р°С‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕРіРѕ РІРёРєРѕРЅР°РІС†СЏ');
     }
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
@@ -716,7 +782,7 @@ async selectAirAsset(
       return manager.save(ServiceOrder, order);
     });
 
-    await this.writeOrderEvent(savedOrder, user, 'started', 'Заявку розпочато');
+    await this.writeOrderEvent(savedOrder, user, 'started', 'Р—Р°СЏРІРєСѓ СЂРѕР·РїРѕС‡Р°С‚Рѕ');
 
     this.notifyRealtime(savedOrder, 'started');
 
@@ -736,7 +802,7 @@ async selectAirAsset(
 
     if (!isFirstCompletion && !isEditingCompleted) {
       throw new BadRequestException(
-        'Завершити або редагувати можна тільки завдання в роботі чи завершене завдання',
+        'Р—Р°РІРµСЂС€РёС‚Рё Р°Р±Рѕ СЂРµРґР°РіСѓРІР°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё Р·Р°РІРґР°РЅРЅСЏ РІ СЂРѕР±РѕС‚С– С‡Рё Р·Р°РІРµСЂС€РµРЅРµ Р·Р°РІРґР°РЅРЅСЏ',
       );
     }
 
@@ -746,7 +812,7 @@ async selectAirAsset(
 
     if (!order.selectedFirePositionId) {
       throw new BadRequestException(
-        'Неможливо завершити завдання без обраної ВП',
+        'РќРµРјРѕР¶Р»РёРІРѕ Р·Р°РІРµСЂС€РёС‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕС— Р’Рџ',
       );
     }
 
@@ -757,12 +823,12 @@ async selectAirAsset(
       Number.isNaN(startedAt.getTime()) ||
       Number.isNaN(completedAt.getTime())
     ) {
-      throw new BadRequestException('Некоректна дата початку або завершення');
+      throw new BadRequestException('РќРµРєРѕСЂРµРєС‚РЅР° РґР°С‚Р° РїРѕС‡Р°С‚РєСѓ Р°Р±Рѕ Р·Р°РІРµСЂС€РµРЅРЅСЏ');
     }
 
     if (completedAt < startedAt) {
       throw new BadRequestException(
-        'Дата завершення не може бути раніше дати початку',
+        'Р”Р°С‚Р° Р·Р°РІРµСЂС€РµРЅРЅСЏ РЅРµ РјРѕР¶Рµ Р±СѓС‚Рё СЂР°РЅС–С€Рµ РґР°С‚Рё РїРѕС‡Р°С‚РєСѓ',
       );
     }
 
@@ -794,7 +860,7 @@ async selectAirAsset(
       )
     ) {
       throw new BadRequestException(
-        'Неможливо завершити завдання без фактичного снаряда та заряду',
+        'РќРµРјРѕР¶Р»РёРІРѕ Р·Р°РІРµСЂС€РёС‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· С„Р°РєС‚РёС‡РЅРѕРіРѕ СЃРЅР°СЂСЏРґР° С‚Р° Р·Р°СЂСЏРґСѓ',
       );
     }
 
@@ -804,7 +870,7 @@ async selectAirAsset(
       });
 
       if (!firePosition?.ammoDepotId) {
-        throw new BadRequestException('У вибраної ВП немає локального БК');
+        throw new BadRequestException('РЈ РІРёР±СЂР°РЅРѕС— Р’Рџ РЅРµРјР°С” Р»РѕРєР°Р»СЊРЅРѕРіРѕ Р‘Рљ');
       }
 
       const shellAdjustments = new Map<string, number>();
@@ -847,7 +913,7 @@ async selectAirAsset(
 
         if (!compatiblePair) {
           throw new BadRequestException(
-            'Фактичний снаряд і заряд не мають налаштованої сумісності',
+            'Р¤Р°РєС‚РёС‡РЅРёР№ СЃРЅР°СЂСЏРґ С– Р·Р°СЂСЏРґ РЅРµ РјР°СЋС‚СЊ РЅР°Р»Р°С€С‚РѕРІР°РЅРѕС— СЃСѓРјС–СЃРЅРѕСЃС‚С–',
           );
         }
 
@@ -857,7 +923,7 @@ async selectAirAsset(
 
         if (!actualCharge) {
           throw new BadRequestException(
-            'Фактичний заряд не знайдено в довіднику',
+            'Р¤Р°РєС‚РёС‡РЅРёР№ Р·Р°СЂСЏРґ РЅРµ Р·РЅР°Р№РґРµРЅРѕ РІ РґРѕРІС–РґРЅРёРєСѓ',
           );
         }
 
@@ -943,7 +1009,7 @@ async selectAirAsset(
       savedOrder,
       user,
       'completed',
-      'Заявку завершено',
+      'Р—Р°СЏРІРєСѓ Р·Р°РІРµСЂС€РµРЅРѕ',
     );
 
     this.notifyRealtime(savedOrder, 'completed', [
@@ -955,6 +1021,350 @@ async selectAirAsset(
     ]);
 
     return savedOrder;
+  }
+
+  private async resolveShotConfigurationForSelection(
+    manager: EntityManager,
+    firePosition: FirePosition,
+    order: ServiceOrder,
+    body: {
+      shotConfigurationId?: string;
+      shellId?: string;
+      chargeId?: string;
+      zoneId?: string | null;
+    },
+  ): Promise<ResolvedShotConfiguration> {
+    const distanceM = Math.ceil(
+      this.getDistanceM(
+        firePosition.lat,
+        firePosition.lng,
+        order.targetLat,
+        order.targetLng,
+      ),
+    );
+
+    return this.resolveShotConfiguration(manager, firePosition, {
+      shotConfigurationId: body.shotConfigurationId,
+      shellId: body.shellId,
+      chargeId: body.chargeId,
+      zoneId: body.zoneId,
+      distanceM,
+    });
+  }
+
+  private async resolveShotConfigurationForCompletion(
+    manager: EntityManager,
+    firePosition: FirePosition,
+    order: ServiceOrder,
+    body: CompleteServiceOrderDto,
+  ): Promise<ResolvedShotConfiguration> {
+    const distanceM = Math.ceil(
+      this.getDistanceM(
+        firePosition.lat,
+        firePosition.lng,
+        order.targetLat,
+        order.targetLng,
+      ),
+    );
+
+    return this.resolveShotConfiguration(manager, firePosition, {
+      shotConfigurationId:
+        body.actualShotConfigurationId ?? order.selectedShotConfigurationId ?? undefined,
+      shellId: body.actualShellId ?? order.selectedShellId ?? undefined,
+      chargeId: body.actualChargeId ?? order.selectedChargeId ?? undefined,
+      zoneId: order.selectedZoneId,
+      distanceM,
+    });
+  }
+
+  private async resolveShotConfiguration(
+    manager: EntityManager,
+    firePosition: FirePosition,
+    criteria: {
+      shotConfigurationId?: string;
+      shellId?: string;
+      chargeId?: string;
+      zoneId?: string | null;
+      distanceM: number;
+    },
+  ): Promise<ResolvedShotConfiguration> {
+    const weaponSystems = await manager.find(WeaponSystem, {
+      where: {
+        firePositionId: firePosition.id,
+        locationType: 'fire_position',
+      },
+    });
+
+    const weaponModelIds = new Set(weaponSystems.map((item) => item.weaponModelId));
+
+    if (weaponModelIds.size === 0) {
+      throw new BadRequestException('Для ВП не налаштовано модель озброєння');
+    }
+
+    let configuration: ShotConfiguration | null = null;
+
+    if (criteria.shotConfigurationId) {
+      configuration = await manager.findOne(ShotConfiguration, {
+        where: { id: criteria.shotConfigurationId },
+        relations: {
+          shell: true,
+          fuze: true,
+          primer: true,
+          zone: true,
+          charges: {
+            charge: true,
+          },
+        },
+        order: {
+          charges: {
+            sortOrder: 'ASC',
+          },
+        },
+      });
+
+      if (!configuration) {
+        throw new BadRequestException('Комплект пострілу не знайдено');
+      }
+    } else if (criteria.shellId && criteria.chargeId) {
+      const matches = await manager
+        .getRepository(ShotConfiguration)
+        .createQueryBuilder('configuration')
+        .leftJoinAndSelect('configuration.shell', 'shell')
+        .leftJoinAndSelect('configuration.fuze', 'fuze')
+        .leftJoinAndSelect('configuration.primer', 'primer')
+        .leftJoinAndSelect('configuration.zone', 'zone')
+        .leftJoinAndSelect('configuration.charges', 'charges')
+        .leftJoinAndSelect('charges.charge', 'charge')
+        .where('configuration.shellId = :shellId', { shellId: criteria.shellId })
+        .andWhere('charges.chargeId = :chargeId', { chargeId: criteria.chargeId })
+        .andWhere(
+          criteria.zoneId === undefined
+            ? '1=1'
+            : 'configuration.zoneId IS NOT DISTINCT FROM :zoneId',
+          { zoneId: criteria.zoneId ?? null },
+        )
+        .orderBy('charges.sortOrder', 'ASC')
+        .getMany();
+
+      if (matches.length === 0) {
+        throw new BadRequestException(
+          'Не знайдено комплект пострілу для переданих legacy полів',
+        );
+      }
+
+      if (matches.length > 1) {
+        throw new BadRequestException(
+          'Legacy комбінація shell/charge/zone неоднозначна. Оберіть комплект пострілу явно',
+        );
+      }
+
+      configuration = matches[0];
+    }
+
+    if (!configuration) {
+      throw new BadRequestException('Потрібно обрати комплект пострілу');
+    }
+
+    if (!weaponModelIds.has(configuration.weaponModelId)) {
+      throw new BadRequestException(
+        'Комплект пострілу не належить до моделі озброєння обраної ВП',
+      );
+    }
+
+    if (criteria.distanceM > Number(configuration.maxRangeM)) {
+      throw new BadRequestException(
+        'Комплект пострілу не покриває дальність до цілі',
+      );
+    }
+
+    if (!configuration.charges.length) {
+      throw new BadRequestException('Комплект пострілу не містить жодного компонента заряду');
+    }
+
+    return this.mapShotConfiguration(configuration);
+  }
+
+  private mapShotConfiguration(configuration: ShotConfiguration): ResolvedShotConfiguration {
+    return {
+      id: configuration.id,
+      name: configuration.name,
+      weaponModelId: configuration.weaponModelId,
+      shellId: configuration.shellId,
+      shellMarking: configuration.shell.marking,
+      fuzeId: configuration.fuzeId,
+      fuzeMarking: configuration.fuze?.marking ?? null,
+      primerId: configuration.primerId,
+      primerMarking: configuration.primer?.marking ?? null,
+      zoneId: configuration.zoneId,
+      zoneNumber: configuration.zone?.zoneNumber ?? null,
+      maxRangeM: Number(configuration.maxRangeM),
+      charges: configuration.charges
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((item) => ({
+          chargeId: item.chargeId,
+          charge: item.charge,
+          quantityPerShot: Number(item.quantityPerShot),
+          sortOrder: Number(item.sortOrder),
+          accountingUnit: item.charge.chargeKind === 'modular' ? 'module' : 'piece',
+        })),
+    };
+  }
+
+  private buildShotConfigurationSnapshot(
+    configuration: ResolvedShotConfiguration,
+  ): Record<string, unknown> {
+    return {
+      id: configuration.id,
+      name: configuration.name,
+      weaponModelId: configuration.weaponModelId,
+      shellId: configuration.shellId,
+      shellMarking: configuration.shellMarking,
+      fuzeId: configuration.fuzeId,
+      fuzeMarking: configuration.fuzeMarking,
+      primerId: configuration.primerId,
+      primerMarking: configuration.primerMarking,
+      zoneId: configuration.zoneId,
+      zoneNumber: configuration.zoneNumber,
+      maxRangeM: configuration.maxRangeM,
+      charges: configuration.charges.map((item) => ({
+        chargeId: item.chargeId,
+        chargeMarking: item.charge.marking,
+        accountingUnit: item.accountingUnit,
+        quantityPerShot: item.quantityPerShot,
+        sortOrder: item.sortOrder,
+      })),
+    };
+  }
+
+  private async saveActualShotConfigurationSnapshot(
+    manager: EntityManager,
+    serviceOrderId: string,
+    configuration: ResolvedShotConfiguration,
+  ): Promise<void> {
+    await manager.delete(ServiceOrderActualShotConfiguration, { serviceOrderId });
+
+    const snapshot = manager.create(ServiceOrderActualShotConfiguration, {
+      serviceOrderId,
+      shotConfigurationId: configuration.id,
+      configurationName: configuration.name,
+      weaponModelId: configuration.weaponModelId,
+      shellId: configuration.shellId,
+      shellMarking: configuration.shellMarking,
+      fuzeId: configuration.fuzeId,
+      fuzeMarking: configuration.fuzeMarking,
+      primerId: configuration.primerId,
+      primerMarking: configuration.primerMarking,
+      zoneId: configuration.zoneId,
+      zoneNumber: configuration.zoneNumber,
+      maxRangeM: configuration.maxRangeM,
+      snapshot: this.buildShotConfigurationSnapshot(configuration),
+    });
+
+    const savedSnapshot = await manager.save(ServiceOrderActualShotConfiguration, snapshot);
+    await manager.save(
+      ServiceOrderActualShotConfigurationCharge,
+      configuration.charges.map((item) =>
+        manager.create(ServiceOrderActualShotConfigurationCharge, {
+          actualShotConfigurationId: savedSnapshot.id,
+          chargeId: item.chargeId,
+          chargeMarking: item.charge.marking,
+          accountingUnit: item.accountingUnit,
+          quantityPerShot: item.quantityPerShot,
+          sortOrder: item.sortOrder,
+        }),
+      ),
+    );
+  }
+
+  private async restorePreviousCompletionState(
+    manager: EntityManager,
+    order: ServiceOrder,
+    shellAdjustments: Map<string, number>,
+    chargeAdjustments: Map<string, number>,
+    fuzeAdjustments: Map<string, number>,
+    primerAdjustments: Map<string, number>,
+  ): Promise<void> {
+    const previousSnapshot = await manager.findOne(ServiceOrderActualShotConfiguration, {
+      where: { serviceOrderId: order.id },
+      relations: {
+        charges: true,
+      },
+      order: {
+        charges: {
+          sortOrder: 'ASC',
+        },
+      },
+    });
+
+    if (previousSnapshot && order.actualQuantity) {
+      this.addStockAdjustment(
+        shellAdjustments,
+        previousSnapshot.shellId,
+        Number(order.actualQuantity),
+      );
+
+      if (previousSnapshot.fuzeId) {
+        this.addStockAdjustment(
+          fuzeAdjustments,
+          previousSnapshot.fuzeId,
+          Number(order.actualQuantity),
+        );
+      }
+
+      if (previousSnapshot.primerId) {
+        this.addStockAdjustment(
+          primerAdjustments,
+          previousSnapshot.primerId,
+          Number(order.actualQuantity),
+        );
+      }
+
+      for (const component of previousSnapshot.charges) {
+        this.addStockAdjustment(
+          chargeAdjustments,
+          component.chargeId,
+          Number(order.actualQuantity) * Number(component.quantityPerShot),
+        );
+      }
+
+      await manager.delete(ServiceOrderActualShotConfiguration, {
+        serviceOrderId: order.id,
+      });
+      return;
+    }
+
+    const previousAmmo = await manager.find(ServiceOrderActualAmmo, {
+      where: { serviceOrderId: order.id },
+    });
+
+    if (previousAmmo.length > 0) {
+      for (const item of previousAmmo) {
+        this.addStockAdjustment(
+          shellAdjustments,
+          item.shellId,
+          Number(item.shotQuantity ?? 0),
+        );
+        this.addStockAdjustment(
+          chargeAdjustments,
+          item.chargeId,
+          Number(item.chargeQuantity ?? 0),
+        );
+      }
+    } else {
+      this.addStockAdjustment(
+        shellAdjustments,
+        order.selectedShellId,
+        Number(order.actualQuantity ?? 0),
+      );
+      this.addStockAdjustment(
+        chargeAdjustments,
+        order.selectedChargeId,
+        Number(order.actualChargeQuantity ?? order.actualQuantity ?? 0),
+      );
+    }
+
+    await manager.delete(ServiceOrderActualAmmo, { serviceOrderId: order.id });
   }
 
   private calculateActualChargeUsage(
@@ -974,7 +1384,7 @@ async selectAirAsset(
 
     if (!Number.isInteger(modulesPerCharge) || modulesPerCharge <= 0) {
       throw new BadRequestException(
-        'Для модульного заряду не налаштована кількість модулів у повному заряді',
+        'Р”Р»СЏ РјРѕРґСѓР»СЊРЅРѕРіРѕ Р·Р°СЂСЏРґСѓ РЅРµ РЅР°Р»Р°С€С‚РѕРІР°РЅР° РєС–Р»СЊРєС–СЃС‚СЊ РјРѕРґСѓР»С–РІ Сѓ РїРѕРІРЅРѕРјСѓ Р·Р°СЂСЏРґС–',
       );
     }
 
@@ -990,7 +1400,7 @@ async selectAirAsset(
       modulesPerShot > maxUsableModules
     ) {
       throw new BadRequestException(
-        `Некоректна кількість модулів заряду. Доступно: 1-${Math.min(
+        `РќРµРєРѕСЂРµРєС‚РЅР° РєС–Р»СЊРєС–СЃС‚СЊ РјРѕРґСѓР»С–РІ Р·Р°СЂСЏРґСѓ. Р”РѕСЃС‚СѓРїРЅРѕ: 1-${Math.min(
           modulesPerCharge,
           maxUsableModules,
         )}`,
@@ -1032,7 +1442,7 @@ async selectAirAsset(
 
       if (!stock) {
         throw new BadRequestException(
-          'На локальному БК ВП немає фактичного снаряда',
+          'РќР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ РЅРµРјР°С” С„Р°РєС‚РёС‡РЅРѕРіРѕ СЃРЅР°СЂСЏРґР°',
         );
       }
 
@@ -1042,7 +1452,7 @@ async selectAirAsset(
 
       if (nextQuantity < 0) {
         throw new BadRequestException(
-          `Недостатньо фактичних снарядів на локальному БК ВП. Потрібно додатково: ${this.roundStockQuantity(
+          `РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ С„Р°РєС‚РёС‡РЅРёС… СЃРЅР°СЂСЏРґС–РІ РЅР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ. РџРѕС‚СЂС–Р±РЅРѕ РґРѕРґР°С‚РєРѕРІРѕ: ${this.roundStockQuantity(
             Math.abs(nextQuantity),
           )}`,
         );
@@ -1068,7 +1478,7 @@ async selectAirAsset(
 
       if (!stock) {
         throw new BadRequestException(
-          'На локальному БК ВП немає фактичного заряду',
+          'РќР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ РЅРµРјР°С” С„Р°РєС‚РёС‡РЅРѕРіРѕ Р·Р°СЂСЏРґСѓ',
         );
       }
 
@@ -1078,7 +1488,7 @@ async selectAirAsset(
 
       if (nextQuantity < 0) {
         throw new BadRequestException(
-          `Недостатньо фактичних зарядів на локальному БК ВП. Потрібно додатково: ${this.roundStockQuantity(
+          `РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ С„Р°РєС‚РёС‡РЅРёС… Р·Р°СЂСЏРґС–РІ РЅР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ. РџРѕС‚СЂС–Р±РЅРѕ РґРѕРґР°С‚РєРѕРІРѕ: ${this.roundStockQuantity(
             Math.abs(nextQuantity),
           )}`,
         );
@@ -1086,6 +1496,60 @@ async selectAirAsset(
 
       stock.quantity = nextQuantity;
       await manager.save(DepotChargeStock, stock);
+    }
+  }
+
+  private async applyFuzeStockAdjustments(
+    manager: EntityManager,
+    depotId: string,
+    adjustments: Map<string, number>,
+  ): Promise<void> {
+    for (const [fuzeId, delta] of adjustments) {
+      if (delta === 0) continue;
+
+      const stock = await manager.findOne(DepotFuzeStock, {
+        where: { depotId, fuzeId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!stock) {
+        throw new BadRequestException('На локальному БК ВП немає фактичного підривника');
+      }
+
+      const nextQuantity = Number(stock.quantity) + delta;
+      if (nextQuantity < 0) {
+        throw new BadRequestException('Недостатньо підривників на локальному БК ВП');
+      }
+
+      stock.quantity = nextQuantity;
+      await manager.save(DepotFuzeStock, stock);
+    }
+  }
+
+  private async applyPrimerStockAdjustments(
+    manager: EntityManager,
+    depotId: string,
+    adjustments: Map<string, number>,
+  ): Promise<void> {
+    for (const [primerId, delta] of adjustments) {
+      if (delta === 0) continue;
+
+      const stock = await manager.findOne(DepotPrimerStock, {
+        where: { depotId, primerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!stock) {
+        throw new BadRequestException('На локальному БК ВП немає фактичного капсуля');
+      }
+
+      const nextQuantity = Number(stock.quantity) + delta;
+      if (nextQuantity < 0) {
+        throw new BadRequestException('Недостатньо капсулів на локальному БК ВП');
+      }
+
+      stock.quantity = nextQuantity;
+      await manager.save(DepotPrimerStock, stock);
     }
   }
 
@@ -1110,7 +1574,7 @@ async selectAirAsset(
           movementType: 'write_off',
           movementGroupId,
           documentNumber,
-          comment: `Списання за ВГЗ ${serviceOrderId}`,
+          comment: `РЎРїРёСЃР°РЅРЅСЏ Р·Р° Р’Р“Р— ${serviceOrderId}`,
         });
       }
 
@@ -1124,7 +1588,7 @@ async selectAirAsset(
           movementType: 'write_off',
           movementGroupId,
           documentNumber,
-          comment: `Списання за ВГЗ ${serviceOrderId}`,
+          comment: `РЎРїРёСЃР°РЅРЅСЏ Р·Р° Р’Р“Р— ${serviceOrderId}`,
         });
       }
     }
@@ -1132,6 +1596,100 @@ async selectAirAsset(
     if (movements.length > 0) {
       await manager.save(StockMovement, movements.map((item) => manager.create(StockMovement, item)));
     }
+  }
+
+  private async writeShotConfigurationStockMovements(
+    manager: EntityManager,
+    depotId: string,
+    serviceOrderId: string,
+    shotQuantity: number,
+    configuration: ResolvedShotConfiguration,
+  ): Promise<void> {
+    const movementGroupId = randomUUID();
+    const documentNumber = `VGZ-${serviceOrderId.slice(0, 8)}`;
+    const movements: Array<Partial<StockMovement>> = [
+      {
+        fromDepotId: depotId,
+        toDepotId: null,
+        itemType: 'shell',
+        itemId: configuration.shellId,
+        quantity: shotQuantity,
+        movementType: 'write_off',
+        movementGroupId,
+        documentNumber,
+        comment: `Списання за ВГЗ ${serviceOrderId}`,
+      },
+    ];
+
+    if (configuration.fuzeId) {
+      movements.push({
+        fromDepotId: depotId,
+        toDepotId: null,
+        itemType: 'fuze',
+        itemId: configuration.fuzeId,
+        quantity: shotQuantity,
+        movementType: 'write_off',
+        movementGroupId,
+        documentNumber,
+        comment: `Списання за ВГЗ ${serviceOrderId}`,
+      });
+    }
+
+    if (configuration.primerId) {
+      movements.push({
+        fromDepotId: depotId,
+        toDepotId: null,
+        itemType: 'primer',
+        itemId: configuration.primerId,
+        quantity: shotQuantity,
+        movementType: 'write_off',
+        movementGroupId,
+        documentNumber,
+        comment: `Списання за ВГЗ ${serviceOrderId}`,
+      });
+    }
+
+    for (const component of configuration.charges) {
+      movements.push({
+        fromDepotId: depotId,
+        toDepotId: null,
+        itemType: 'charge',
+        itemId: component.chargeId,
+        quantity: shotQuantity * component.quantityPerShot,
+        movementType: 'write_off',
+        movementGroupId,
+        documentNumber,
+        comment: `Списання за ВГЗ ${serviceOrderId}`,
+      });
+    }
+
+    await manager.save(
+      StockMovement,
+      movements.map((item) => manager.create(StockMovement, item)),
+    );
+  }
+
+  private getDistanceM(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
+    const earthRadiusM = 6371000;
+    const dLat = this.toRad(lat2 - lat1);
+    const dLng = this.toRad(lng2 - lng1);
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(this.toRad(lat1)) *
+        Math.cos(this.toRad(lat2)) *
+        Math.sin(dLng / 2) ** 2;
+
+    return earthRadiusM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  private toRad(value: number): number {
+    return (value * Math.PI) / 180;
   }
 
   private roundStockQuantity(value: number): number {
@@ -1148,11 +1706,11 @@ async selectAirAsset(
     await this.ensureCanChangeOrder(order, user);
 
     if (order.status === 'completed') {
-      throw new BadRequestException('Завершене завдання не можна скасувати');
+      throw new BadRequestException('Р—Р°РІРµСЂС€РµРЅРµ Р·Р°РІРґР°РЅРЅСЏ РЅРµ РјРѕР¶РЅР° СЃРєР°СЃСѓРІР°С‚Рё');
     }
 
     if (order.status === 'cancelled') {
-      throw new BadRequestException('Завдання вже скасоване');
+      throw new BadRequestException('Р—Р°РІРґР°РЅРЅСЏ РІР¶Рµ СЃРєР°СЃРѕРІР°РЅРµ');
     }
 
     if (order.status === 'in_progress' && order.selectedFirePositionId) {
@@ -1164,7 +1722,7 @@ async selectAirAsset(
     }
 
     order.status = 'cancelled';
-    order.rejectionReason = reason?.trim() || 'Скасовано оператором';
+    order.rejectionReason = reason?.trim() || 'РЎРєР°СЃРѕРІР°РЅРѕ РѕРїРµСЂР°С‚РѕСЂРѕРј';
 
     const savedOrder = await this.repository.save(order);
 
@@ -1172,7 +1730,7 @@ async selectAirAsset(
       savedOrder,
       user,
       'cancelled',
-      'Заявку скасовано',
+      'Р—Р°СЏРІРєСѓ СЃРєР°СЃРѕРІР°РЅРѕ',
     );
 
     this.notifyRealtime(savedOrder, 'updated');
@@ -1236,7 +1794,7 @@ async selectAirAsset(
         shellMarking: item.selectedShell?.marking ?? null,
         chargeMarking: item.selectedCharge?.marking ?? null,
         zoneName: item.selectedZone
-          ? `Зона ${item.selectedZone.zoneNumber} (${item.selectedZone.distanceFromM}-${item.selectedZone.distanceToM} м)`
+          ? `Р—РѕРЅР° ${item.selectedZone.zoneNumber} (${item.selectedZone.distanceFromM}-${item.selectedZone.distanceToM} Рј)`
           : null,
       }),
     );
@@ -1244,13 +1802,13 @@ async selectAirAsset(
 
   private assertCanEdit(item: ServiceOrder): void {
     if (item.status === 'cancelled') {
-      throw new BadRequestException('Скасоване завдання не можна редагувати');
+      throw new BadRequestException('РЎРєР°СЃРѕРІР°РЅРµ Р·Р°РІРґР°РЅРЅСЏ РЅРµ РјРѕР¶РЅР° СЂРµРґР°РіСѓРІР°С‚Рё');
     }
 
     if (item.status === 'completed') {
       if (!item.completedAt) {
         throw new BadRequestException(
-          'Завершене завдання має некоректну дату завершення',
+          'Р—Р°РІРµСЂС€РµРЅРµ Р·Р°РІРґР°РЅРЅСЏ РјР°С” РЅРµРєРѕСЂРµРєС‚РЅСѓ РґР°С‚Сѓ Р·Р°РІРµСЂС€РµРЅРЅСЏ',
         );
       }
 
@@ -1260,7 +1818,7 @@ async selectAirAsset(
 
       if (now - completedAt > editWindowMs) {
         throw new BadRequestException(
-          'Редагування завершеного завдання доступне тільки протягом 30 хвилин після завершення',
+          'Р РµРґР°РіСѓРІР°РЅРЅСЏ Р·Р°РІРµСЂС€РµРЅРѕРіРѕ Р·Р°РІРґР°РЅРЅСЏ РґРѕСЃС‚СѓРїРЅРµ С‚С–Р»СЊРєРё РїСЂРѕС‚СЏРіРѕРј 30 С…РІРёР»РёРЅ РїС–СЃР»СЏ Р·Р°РІРµСЂС€РµРЅРЅСЏ',
         );
       }
     }
@@ -1274,7 +1832,7 @@ async selectAirAsset(
       return;
     }
 
-    throw new BadRequestException('Немає доступу до цієї заявки');
+    throw new BadRequestException('РќРµРјР°С” РґРѕСЃС‚СѓРїСѓ РґРѕ С†С–С”С— Р·Р°СЏРІРєРё');
   }
 
   private async canViewOrder(
@@ -1285,8 +1843,8 @@ async selectAirAsset(
       return true;
     }
 
-    // До натискання "Надіслати на ПУВБ" молодші пункти не бачать заявку,
-    // навіть якщо головний оператор уже підібрав ВП.
+    // Р”Рѕ РЅР°С‚РёСЃРєР°РЅРЅСЏ "РќР°РґС–СЃР»Р°С‚Рё РЅР° РџРЈР’Р‘" РјРѕР»РѕРґС€С– РїСѓРЅРєС‚Рё РЅРµ Р±Р°С‡Р°С‚СЊ Р·Р°СЏРІРєСѓ,
+    // РЅР°РІС–С‚СЊ СЏРєС‰Рѕ РіРѕР»РѕРІРЅРёР№ РѕРїРµСЂР°С‚РѕСЂ СѓР¶Рµ РїС–РґС–Р±СЂР°РІ Р’Рџ.
     if (order.status === 'draft' || order.status === 'proposed') {
       return false;
     }
@@ -1303,7 +1861,7 @@ async selectAirAsset(
     user: AuthUser,
   ): Promise<void> {
     if (user.role === 'observer') {
-      throw new BadRequestException('Спостерігач не може змінювати заявки');
+      throw new BadRequestException('РЎРїРѕСЃС‚РµСЂС–РіР°С‡ РЅРµ РјРѕР¶Рµ Р·РјС–РЅСЋРІР°С‚Рё Р·Р°СЏРІРєРё');
     }
 
     if (user.role === 'admin' || user.scope === 'main') {
@@ -1311,7 +1869,7 @@ async selectAirAsset(
     }
 
     if (!order.assignedUnitId) {
-      throw new BadRequestException('Заявка ще не призначена підрозділу');
+      throw new BadRequestException('Р—Р°СЏРІРєР° С‰Рµ РЅРµ РїСЂРёР·РЅР°С‡РµРЅР° РїС–РґСЂРѕР·РґС–Р»Сѓ');
     }
 
     const canAccess = await this.accessScope.canAccessUnit(
@@ -1320,7 +1878,7 @@ async selectAirAsset(
     );
 
     if (!canAccess) {
-      throw new BadRequestException('Немає доступу до цієї заявки');
+      throw new BadRequestException('РќРµРјР°С” РґРѕСЃС‚СѓРїСѓ РґРѕ С†С–С”С— Р·Р°СЏРІРєРё');
     }
   }
 
@@ -1330,35 +1888,35 @@ async selectAirAsset(
   ): Promise<void> {
     if (user.role !== 'operator') {
       throw new BadRequestException(
-        'Виконавчі дії доступні тільки оператору підрозділу виконавця',
+        'Р’РёРєРѕРЅР°РІС‡С– РґС–С— РґРѕСЃС‚СѓРїРЅС– С‚С–Р»СЊРєРё РѕРїРµСЂР°С‚РѕСЂСѓ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ',
       );
     }
 
     if (user.scope === 'main' || user.scope === 'division') {
       throw new BadRequestException(
-        'Головний пункт і дивізіон тільки контролюють виконання. Приймати, починати, завершувати і редагувати звіт може оператор підрозділу виконавця',
+        'Р“РѕР»РѕРІРЅРёР№ РїСѓРЅРєС‚ С– РґРёРІС–Р·С–РѕРЅ С‚С–Р»СЊРєРё РєРѕРЅС‚СЂРѕР»СЋСЋС‚СЊ РІРёРєРѕРЅР°РЅРЅСЏ. РџСЂРёР№РјР°С‚Рё, РїРѕС‡РёРЅР°С‚Рё, Р·Р°РІРµСЂС€СѓРІР°С‚Рё С– СЂРµРґР°РіСѓРІР°С‚Рё Р·РІС–С‚ РјРѕР¶Рµ РѕРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ',
       );
     }
 
     if (user.scope !== 'battery') {
       throw new BadRequestException(
-        'Виконавчі дії доступні тільки оператору підрозділу виконавця',
+        'Р’РёРєРѕРЅР°РІС‡С– РґС–С— РґРѕСЃС‚СѓРїРЅС– С‚С–Р»СЊРєРё РѕРїРµСЂР°С‚РѕСЂСѓ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ',
       );
     }
 
     if (!user.unitId) {
       throw new BadRequestException(
-        'Для оператора підрозділу виконавця не визначено підрозділ',
+        'Р”Р»СЏ РѕРїРµСЂР°С‚РѕСЂР° РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РЅРµ РІРёР·РЅР°С‡РµРЅРѕ РїС–РґСЂРѕР·РґС–Р»',
       );
     }
 
     if (!order.assignedUnitId) {
-      throw new BadRequestException('Заявка ще не надіслана виконавцю');
+      throw new BadRequestException('Р—Р°СЏРІРєР° С‰Рµ РЅРµ РЅР°РґС–СЃР»Р°РЅР° РІРёРєРѕРЅР°РІС†СЋ');
     }
 
     if (order.assignedUnitId !== user.unitId) {
       throw new BadRequestException(
-        'Ця заявка належить іншому підрозділу виконавця і недоступна для виконання',
+        'Р¦СЏ Р·Р°СЏРІРєР° РЅР°Р»РµР¶РёС‚СЊ С–РЅС€РѕРјСѓ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ С– РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ РІРёРєРѕРЅР°РЅРЅСЏ',
       );
     }
   }
@@ -1424,3 +1982,4 @@ async selectAirAsset(
     });
   }
 }
+

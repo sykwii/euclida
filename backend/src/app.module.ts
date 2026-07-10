@@ -41,6 +41,7 @@ import { AirAssetsModule } from './air-assets/air-assets.module';
 import { DroneLogisticsModule } from './drone-logistics/drone-logistics.module';
 import { PlannedTripsModule } from './planned-trips/planned-trips.module';
 import { ReconModule } from './modules/recon/recon.module';
+import { ShotConfigurationsModule } from './shot-configurations/shot-configurations.module';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ AirAssetsModule,
 DroneLogisticsModule,
 PlannedTripsModule,
 ReconModule,
+ShotConfigurationsModule,
   ],
   providers: [
     {

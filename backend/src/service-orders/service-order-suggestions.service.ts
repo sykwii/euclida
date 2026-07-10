@@ -1,30 +1,48 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entity';
-import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
-import { FirePosition } from '../fire-positions/fire-position.entity';
-import { ShellCompatibleCharge } from '../shell-compatible-charges/shell-compatible-charge.entity';
-import { ServiceOrder } from './service-order.entity';
-import { Shell } from '../shells/shell.entity';
-import { Charge } from '../charges/charge.entity';
-import { Zone } from '../zones/zone.entity';
 import { AirAssetPosition } from '../air-assets/air-asset-position.entity';
+import { Charge } from '../charges/charge.entity';
+import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entity';
+import { DepotFuzeStock } from '../depot-fuze-stock/depot-fuze-stock.entity';
+import { DepotPrimerStock } from '../depot-primer-stock/depot-primer-stock.entity';
+import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { AirAssetDroneStock } from '../drone-logistics/air-asset-drone-stock.entity';
 import { AirAssetWarheadStock } from '../drone-logistics/air-asset-warhead-stock.entity';
+import { FirePosition } from '../fire-positions/fire-position.entity';
+import { Fuze } from '../fuzes/fuze.entity';
+import { Primer } from '../primers/primer.entity';
+import { Shell } from '../shells/shell.entity';
+import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
+import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
+import { Zone } from '../zones/zone.entity';
+import { ServiceOrder } from './service-order.entity';
 
-
+export interface ServiceOrderSuggestionChargeComponent {
+  chargeId: string;
+  quantityPerShot: number;
+  sortOrder: number;
+  accountingUnit: 'piece' | 'module';
+  charge: Charge;
+}
 
 export interface ServiceOrderSuggestionVariant {
+  shotConfigurationId: string;
+  shotConfigurationName: string;
   shellId: string;
   chargeId: string;
   zoneId: string | null;
+  fuzeId: string | null;
+  primerId: string | null;
   maxRangeM: number;
   rangeReserveM: number;
   availableQuantity: number;
   shell: Shell;
   charge: Charge;
   zone: Zone | null;
+  fuze: Fuze | null;
+  primer: Primer | null;
+  charges: ServiceOrderSuggestionChargeComponent[];
   priority: number;
 }
 
@@ -98,7 +116,9 @@ export class ServiceOrderSuggestionsService {
     const suggestions: ServiceOrderSuggestion[] = [];
 
     for (const position of positions) {
-      if (!position.ammoDepotId) continue;
+      if (!position.ammoDepotId) {
+        continue;
+      }
 
       const activeOrder = await this.dataSource
         .getRepository(ServiceOrder)
@@ -114,9 +134,8 @@ export class ServiceOrderSuggestionsService {
       if (activeOrder) {
         continue;
       }
-      if (
-        !this.isTargetInsideSector(position, order.targetLat, order.targetLng)
-      ) {
+
+      if (!this.isTargetInsideSector(position, order.targetLat, order.targetLng)) {
         continue;
       }
 
@@ -130,9 +149,9 @@ export class ServiceOrderSuggestionsService {
       );
 
       const variants = await this.findResourcePairs(
+        position.id,
         position.ammoDepotId,
         distanceM,
-        Number(order.plannedQuantity),
       );
 
       if (variants.length === 0) {
@@ -140,154 +159,196 @@ export class ServiceOrderSuggestionsService {
       }
 
       suggestions.push({
-  executorType: 'fire_position',
-  firePosition: position,
-  distanceM,
-  completedVgzCount: position.completedVgzCount ?? 0,
-  variants,
-});
+        executorType: 'fire_position',
+        firePosition: position,
+        distanceM,
+        completedVgzCount: position.completedVgzCount ?? 0,
+        variants,
+      });
     }
 
-const combatAssets = await this.dataSource
-  .getRepository(AirAssetPosition)
-  .createQueryBuilder('asset')
-  .leftJoinAndSelect('asset.unit', 'unit')
-  .where('asset.assetGroup = :assetGroup', { assetGroup: 'combat' })
-  .andWhere(
-    '(asset.readinessStatus IS NULL OR asset.readinessStatus IN (:...readyStatuses))',
-    { readyStatuses },
-  )
-  .getMany();
+    const combatAssets = await this.dataSource
+      .getRepository(AirAssetPosition)
+      .createQueryBuilder('asset')
+      .leftJoinAndSelect('asset.unit', 'unit')
+      .where('asset.assetGroup = :assetGroup', { assetGroup: 'combat' })
+      .andWhere(
+        '(asset.readinessStatus IS NULL OR asset.readinessStatus IN (:...readyStatuses))',
+        { readyStatuses },
+      )
+      .getMany();
 
-for (const asset of combatAssets) {
-  if (!this.isTargetInsideSector(asset, order.targetLat, order.targetLng)) {
-    continue;
-  }
+    for (const asset of combatAssets) {
+      if (!this.isTargetInsideSector(asset, order.targetLat, order.targetLng)) {
+        continue;
+      }
 
-  const distanceM = Math.ceil(
-    this.getDistanceM(asset.lat, asset.lng, order.targetLat, order.targetLng),
-  );
+      const distanceM = Math.ceil(
+        this.getDistanceM(asset.lat, asset.lng, order.targetLat, order.targetLng),
+      );
 
-  const payloadVariants = await this.findCombatDronePayloadVariants(
-    asset.id,
-    distanceM,
-    Number(order.plannedQuantity || 1),
-  );
+      const payloadVariants = await this.findCombatDronePayloadVariants(
+        asset.id,
+        distanceM,
+        Number(order.plannedQuantity || 1),
+      );
 
-  if (payloadVariants.length === 0) {
-    continue;
-  }
+      if (payloadVariants.length === 0) {
+        continue;
+      }
 
-  suggestions.push({
-    executorType: 'air_asset_position',
-    airAssetPosition: asset,
-    distanceM,
-    completedVgzCount: 0,
-    variants: [],
-    payloadVariants,
-  });
-}
+      suggestions.push({
+        executorType: 'air_asset_position',
+        airAssetPosition: asset,
+        distanceM,
+        completedVgzCount: 0,
+        variants: [],
+        payloadVariants,
+      });
+    }
 
     return suggestions.sort((a, b) => {
-  if (a.executorType !== b.executorType) {
-    return a.executorType === 'fire_position' ? -1 : 1;
-  }
+      if (a.executorType !== b.executorType) {
+        return a.executorType === 'fire_position' ? -1 : 1;
+      }
 
-  if (a.distanceM !== b.distanceM) {
-    return a.distanceM - b.distanceM;
-  }
+      if (a.distanceM !== b.distanceM) {
+        return a.distanceM - b.distanceM;
+      }
 
-  if (a.completedVgzCount !== b.completedVgzCount) {
-    return a.completedVgzCount - b.completedVgzCount;
-  }
+      if (a.completedVgzCount !== b.completedVgzCount) {
+        return a.completedVgzCount - b.completedVgzCount;
+      }
 
-  const availableA =
-    a.variants[0]?.availableQuantity ??
-    a.payloadVariants?.[0]?.availableQuantity ??
-    0;
+      const availableA =
+        a.variants[0]?.availableQuantity ??
+        a.payloadVariants?.[0]?.availableQuantity ??
+        0;
 
-  const availableB =
-    b.variants[0]?.availableQuantity ??
-    b.payloadVariants?.[0]?.availableQuantity ??
-    0;
+      const availableB =
+        b.variants[0]?.availableQuantity ??
+        b.payloadVariants?.[0]?.availableQuantity ??
+        0;
 
-  return availableB - availableA;
-});
+      return availableB - availableA;
+    });
   }
 
   private async findResourcePairs(
+    firePositionId: string,
     depotId: string,
     distanceM: number,
-    plannedQuantity: number,
   ): Promise<ServiceOrderSuggestionVariant[]> {
-    const shells = await this.dataSource.getRepository(DepotShellStock).find({
-      where: { depotId },
+    const weaponSystems = await this.dataSource.getRepository(WeaponSystem).find({
+      where: {
+        firePositionId,
+        locationType: 'fire_position',
+      },
     });
 
-    const charges = await this.dataSource.getRepository(DepotChargeStock).find({
-      where: { depotId },
-    });
-
-    const availableShells = shells.filter(
-      (item) => Number(item.quantity) >= plannedQuantity,
+    const weaponModelIds = Array.from(
+      new Set(
+        weaponSystems
+          .map((item) => item.weaponModelId)
+          .filter((item): item is string => Boolean(item)),
+      ),
     );
 
-    const availableCharges = charges.filter(
-      (item) => Number(item.quantity) >= plannedQuantity,
-    );
-
-    const shellIds = availableShells.map((item) => item.shellId);
-    const chargeIds = availableCharges.map((item) => item.chargeId);
-
-    if (shellIds.length === 0 || chargeIds.length === 0) {
+    if (weaponModelIds.length === 0) {
       return [];
     }
 
-    const roundedDistanceM = Math.ceil(distanceM);
-
-    const compatiblePairs = await this.dataSource
-      .getRepository(ShellCompatibleCharge)
-      .createQueryBuilder('compatibility')
-      .leftJoinAndSelect('compatibility.shell', 'shell')
-      .leftJoinAndSelect('compatibility.charge', 'charge')
-      .leftJoinAndSelect('compatibility.zone', 'zone')
-      .where('compatibility.shellId IN (:...shellIds)', { shellIds })
-      .andWhere('compatibility.chargeId IN (:...chargeIds)', { chargeIds })
-      .andWhere('compatibility.maxRangeM >= :distanceM', {
-        distanceM: roundedDistanceM,
-      })
-      .orderBy('compatibility.maxRangeM', 'ASC')
-      .getMany();
-
-    const variants = compatiblePairs.map((pair) => {
-      const shellStock = availableShells.find(
-        (item) => item.shellId === pair.shellId,
-      );
-
-      const chargeStock = availableCharges.find(
-        (item) => item.chargeId === pair.chargeId,
-      );
-
-      const availableQuantity = Math.min(
-        Number(shellStock?.quantity ?? 0),
-        Number(chargeStock?.quantity ?? 0),
-      );
-
-      return {
-        shellId: pair.shellId,
-        chargeId: pair.chargeId,
-        zoneId: pair.zoneId,
-        maxRangeM: Number(pair.maxRangeM),
-        rangeReserveM: Number(pair.maxRangeM) - roundedDistanceM,
-        availableQuantity,
-        shell: pair.shell,
-        charge: pair.charge,
-        zone: pair.zone,
-        priority: 0,
-      };
+    const configurations = await this.dataSource.getRepository(ShotConfiguration).find({
+      where: weaponModelIds.map((weaponModelId) => ({
+        weaponModelId,
+        isActive: true,
+      })),
+      relations: {
+        shell: true,
+        fuze: true,
+        primer: true,
+        zone: true,
+        charges: {
+          charge: true,
+        },
+      },
+      order: {
+        maxRangeM: 'ASC',
+        charges: {
+          sortOrder: 'ASC',
+        },
+      },
     });
 
-    return variants
+    const candidateConfigurations = configurations.filter(
+      (item) =>
+        Number(item.maxRangeM) >= Math.ceil(distanceM) &&
+        item.charges.length > 0,
+    );
+
+    if (candidateConfigurations.length === 0) {
+      return [];
+    }
+
+    const [shells, charges, fuzes, primers] = await Promise.all([
+      this.dataSource.getRepository(DepotShellStock).find({ where: { depotId } }),
+      this.dataSource.getRepository(DepotChargeStock).find({ where: { depotId } }),
+      this.dataSource.getRepository(DepotFuzeStock).find({ where: { depotId } }),
+      this.dataSource.getRepository(DepotPrimerStock).find({ where: { depotId } }),
+    ]);
+
+    const shellStock = new Map<string, number>(
+      shells.map((item) => [item.shellId, Number(item.quantity)]),
+    );
+    const chargeStock = new Map<string, number>(
+      charges.map((item) => [item.chargeId, Number(item.quantity)]),
+    );
+    const fuzeStock = new Map<string, number>(
+      fuzes.map((item) => [item.fuzeId, Number(item.quantity)]),
+    );
+    const primerStock = new Map<string, number>(
+      primers.map((item) => [item.primerId, Number(item.quantity)]),
+    );
+
+    return candidateConfigurations
+      .map((configuration) => {
+        const primaryCharge = configuration.charges[0];
+        return {
+          shotConfigurationId: configuration.id,
+          shotConfigurationName: configuration.name,
+          shellId: configuration.shellId,
+          chargeId: primaryCharge.chargeId,
+          zoneId: configuration.zoneId,
+          fuzeId: configuration.fuzeId,
+          primerId: configuration.primerId,
+          maxRangeM: Number(configuration.maxRangeM),
+          rangeReserveM: Math.max(
+            Number(configuration.maxRangeM) - Math.ceil(distanceM),
+            0,
+          ),
+          availableQuantity: this.getAvailableShotsForConfiguration(
+            configuration,
+            shellStock,
+            chargeStock,
+            fuzeStock,
+            primerStock,
+          ),
+          shell: configuration.shell,
+          charge: primaryCharge.charge,
+          zone: configuration.zone,
+          fuze: configuration.fuze,
+          primer: configuration.primer,
+          charges: configuration.charges.map((component) => ({
+            chargeId: component.chargeId,
+            quantityPerShot: Number(component.quantityPerShot),
+            sortOrder: Number(component.sortOrder),
+            accountingUnit: this.normalizeChargeAccountingUnit(component.charge),
+            charge: component.charge,
+          })),
+          priority: 0,
+        };
+      })
+      .filter((item) => item.availableQuantity > 0)
       .sort((a, b) => {
         if (a.maxRangeM !== b.maxRangeM) {
           return a.maxRangeM - b.maxRangeM;
@@ -305,84 +366,113 @@ for (const asset of combatAssets) {
       }));
   }
 
-private async findCombatDronePayloadVariants(
-  airAssetPositionId: string,
-  distanceM: number,
-  plannedQuantity: number,
-): Promise<ServiceOrderAirPayloadVariant[]> {
-  const drones = await this.dataSource.getRepository(AirAssetDroneStock).find({
-    where: { airAssetPositionId },
-  });
+  private getAvailableShotsForConfiguration(
+    configuration: ShotConfiguration,
+    shellStock: Map<string, number>,
+    chargeStock: Map<string, number>,
+    fuzeStock: Map<string, number>,
+    primerStock: Map<string, number>,
+  ): number {
+    const totals: number[] = [];
+    totals.push(Math.floor(Number(shellStock.get(configuration.shellId) ?? 0)));
 
-  const warheads = await this.dataSource.getRepository(AirAssetWarheadStock).find({
-    where: { airAssetPositionId },
-  });
-
-  const availableDrones = drones.filter((row) => {
-    const quantity = Number(row.quantity || 0);
-    const maxRangeM = Number(row.droneModel?.maxRangeM || 0);
-
-    return quantity >= plannedQuantity && maxRangeM > 0 && distanceM <= maxRangeM;
-  });
-
-  const availableWarheads = warheads.filter((row) => {
-    const quantity = Number(row.quantity || 0);
-    const measureUnit = row.warheadType?.measureUnit;
-
-    if (measureUnit === 'kg') {
-      return quantity > 0;
+    if (configuration.fuzeId) {
+      totals.push(Math.floor(Number(fuzeStock.get(configuration.fuzeId) ?? 0)));
     }
 
-    return quantity >= plannedQuantity;
-  });
-
-  const variants: ServiceOrderAirPayloadVariant[] = [];
-
-  for (const drone of availableDrones) {
-    for (const warhead of availableWarheads) {
-      const maxRangeM = Number(drone.droneModel?.maxRangeM || 0);
-      const warheadQuantity = Number(warhead.quantity || 0);
-      const droneQuantity = Number(drone.quantity || 0);
-      const availableQuantity =
-        warhead.warheadType?.measureUnit === 'kg'
-          ? droneQuantity
-          : Math.min(droneQuantity, warheadQuantity);
-
-      variants.push({
-        droneModelId: drone.droneModelId,
-        warheadTypeId: warhead.warheadTypeId,
-        maxRangeM,
-        rangeReserveM: maxRangeM - distanceM,
-        availableQuantity,
-        droneModel: drone.droneModel,
-        warheadType: warhead.warheadType,
-        priority: variants.length + 1,
-      });
+    if (configuration.primerId) {
+      totals.push(Math.floor(Number(primerStock.get(configuration.primerId) ?? 0)));
     }
+
+    for (const component of configuration.charges) {
+      const available = Number(chargeStock.get(component.chargeId) ?? 0);
+      totals.push(Math.floor(available / Number(component.quantityPerShot)));
+    }
+
+    return totals.length > 0 ? Math.max(Math.min(...totals), 0) : 0;
   }
 
-  return variants.sort((a, b) => {
-    if (a.maxRangeM !== b.maxRangeM) {
-      return a.maxRangeM - b.maxRangeM;
+  private normalizeChargeAccountingUnit(charge: Charge): 'piece' | 'module' {
+    return charge.chargeKind === 'modular' ? 'module' : 'piece';
+  }
+
+  private async findCombatDronePayloadVariants(
+    airAssetPositionId: string,
+    distanceM: number,
+    plannedQuantity: number,
+  ): Promise<ServiceOrderAirPayloadVariant[]> {
+    const drones = await this.dataSource.getRepository(AirAssetDroneStock).find({
+      where: { airAssetPositionId },
+    });
+
+    const warheads = await this.dataSource.getRepository(AirAssetWarheadStock).find({
+      where: { airAssetPositionId },
+    });
+
+    const availableDrones = drones.filter((row) => {
+      const quantity = Number(row.quantity || 0);
+      const maxRangeM = Number(row.droneModel?.maxRangeM || 0);
+
+      return quantity >= plannedQuantity && maxRangeM > 0 && distanceM <= maxRangeM;
+    });
+
+    const availableWarheads = warheads.filter((row) => {
+      const quantity = Number(row.quantity || 0);
+      const measureUnit = row.warheadType?.measureUnit;
+
+      if (measureUnit === 'kg') {
+        return quantity > 0;
+      }
+
+      return quantity >= plannedQuantity;
+    });
+
+    const variants: ServiceOrderAirPayloadVariant[] = [];
+
+    for (const drone of availableDrones) {
+      for (const warhead of availableWarheads) {
+        const maxRangeM = Number(drone.droneModel?.maxRangeM || 0);
+        const warheadQuantity = Number(warhead.quantity || 0);
+        const droneQuantity = Number(drone.quantity || 0);
+        const availableQuantity =
+          warhead.warheadType?.measureUnit === 'kg'
+            ? droneQuantity
+            : Math.min(droneQuantity, warheadQuantity);
+
+        variants.push({
+          droneModelId: drone.droneModelId,
+          warheadTypeId: warhead.warheadTypeId,
+          maxRangeM,
+          rangeReserveM: maxRangeM - distanceM,
+          availableQuantity,
+          droneModel: drone.droneModel,
+          warheadType: warhead.warheadType,
+          priority: variants.length + 1,
+        });
+      }
     }
 
-    if (a.rangeReserveM !== b.rangeReserveM) {
-      return a.rangeReserveM - b.rangeReserveM;
-    }
+    return variants.sort((a, b) => {
+      if (a.maxRangeM !== b.maxRangeM) {
+        return a.maxRangeM - b.maxRangeM;
+      }
 
-    return b.availableQuantity - a.availableQuantity;
-  });
-}
+      if (a.rangeReserveM !== b.rangeReserveM) {
+        return a.rangeReserveM - b.rangeReserveM;
+      }
 
+      return b.availableQuantity - a.availableQuantity;
+    });
+  }
 
   private isTargetInsideSector(
-  position: Pick<
-    FirePosition | AirAssetPosition,
-    'lat' | 'lng' | 'sectorLeftDegrees' | 'sectorRightDegrees'
-  >,
-  targetLat: number,
-  targetLng: number,
-): boolean {
+    position: Pick<
+      FirePosition | AirAssetPosition,
+      'lat' | 'lng' | 'sectorLeftDegrees' | 'sectorRightDegrees'
+    >,
+    targetLat: number,
+    targetLng: number,
+  ): boolean {
     if (
       position.sectorLeftDegrees === null ||
       position.sectorRightDegrees === null

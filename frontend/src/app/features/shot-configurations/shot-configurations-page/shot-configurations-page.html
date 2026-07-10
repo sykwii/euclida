@@ -1,0 +1,122 @@
+<div class="eu-page">
+  <header class="eu-page-header">
+    <div>
+      <h1>Комплекти пострілу</h1>
+      <p>Канонічні конфігурації пострілу для ВГЗ: снаряд, підривник, капсуль, зона і склад зарядів.</p>
+    </div>
+  </header>
+
+  <form class="form eu-page-toolbar shot-config-form" (ngSubmit)="save()">
+    <input name="name" [(ngModel)]="form.name" placeholder="Назва комплекту" />
+
+    <select name="weaponModelId" [(ngModel)]="form.weaponModelId">
+      <option value="">Модель озброєння</option>
+      <option *ngFor="let item of weaponModels" [value]="item.id">{{ item.name }}</option>
+    </select>
+
+    <select name="shellId" [(ngModel)]="form.shellId">
+      <option value="">Снаряд</option>
+      <option *ngFor="let item of shells" [value]="item.id">{{ item.marking }}</option>
+    </select>
+
+    <select name="fuzeId" [(ngModel)]="form.fuzeId">
+      <option value="">Підривник</option>
+      <option *ngFor="let item of fuzes" [value]="item.id">{{ item.marking }}</option>
+    </select>
+
+    <select name="primerId" [(ngModel)]="form.primerId">
+      <option value="">Капсуль</option>
+      <option *ngFor="let item of primers" [value]="item.id">{{ item.marking }}</option>
+    </select>
+
+    <select name="zoneId" [(ngModel)]="form.zoneId">
+      <option value="">Зона</option>
+      <option *ngFor="let item of availableZones" [value]="item.id">
+        Зона {{ item.zoneNumber }} ({{ item.distanceFromM }}-{{ item.distanceToM }} м)
+      </option>
+    </select>
+
+    <input name="maxRangeM" type="number" min="1" [(ngModel)]="form.maxRangeM" placeholder="Макс. дальність, м" />
+    <input name="note" [(ngModel)]="form.note" placeholder="Примітка" />
+
+    <label class="shot-config-active">
+      <input name="isActive" type="checkbox" [(ngModel)]="form.isActive" />
+      <span>Активний</span>
+    </label>
+
+    <div class="shot-config-charges">
+      <div class="shot-config-charge-row" *ngFor="let item of form.charges; let i = index">
+        <select [name]="'chargeId' + i" [(ngModel)]="item.chargeId">
+          <option value="">Заряд</option>
+          <option *ngFor="let charge of charges" [value]="charge.id">
+            {{ charge.marking }} · {{ charge.chargeKind === 'modular' ? 'module' : 'piece' }}
+          </option>
+        </select>
+        <input [name]="'quantityPerShot' + i" type="number" min="1" [(ngModel)]="item.quantityPerShot" placeholder="Кількість" />
+        <button type="button" class="ghost-button" (click)="removeChargeRow(i)">−</button>
+      </div>
+      <button type="button" class="ghost-button" (click)="addChargeRow()">Додати заряд</button>
+    </div>
+
+    <button type="submit" class="primary-button" [disabled]="saving">
+      {{ editingId ? 'Оновити' : 'Створити' }}
+    </button>
+    <button *ngIf="editingId" type="button" class="ghost-button" (click)="resetForm()">Скасувати</button>
+  </form>
+
+  <section class="ui-state error" *ngIf="errorMessage && !loading">
+    <span class="ui-state-icon">!</span>
+    <strong>Не вдалося виконати дію</strong>
+    <small>{{ errorMessage }}</small>
+  </section>
+
+  <div class="ui-skeleton-grid" *ngIf="loading">
+    <article class="ui-skeleton-card" *ngFor="let row of [1, 2, 3]">
+      <span class="ui-skeleton-line medium"></span>
+      <span class="ui-skeleton-line long"></span>
+      <span class="ui-skeleton-line short"></span>
+    </article>
+  </div>
+
+  <section class="ui-state" *ngIf="!loading && items.length === 0">
+    <span class="ui-state-icon">∅</span>
+    <strong>Комплекти пострілу ще не додані</strong>
+    <small>Створіть перший комплект, щоб він став доступний у підборі ВП.</small>
+  </section>
+
+  <table *ngIf="!loading && items.length > 0">
+    <thead>
+      <tr>
+        <th>Назва</th>
+        <th>Модель</th>
+        <th>Склад</th>
+        <th>Зона</th>
+        <th>Макс. дальність</th>
+        <th>Статус</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let item of items">
+        <td>{{ item.name }}</td>
+        <td>{{ item.weaponModel.name || '—' }}</td>
+        <td>
+          {{ item.shell.marking }}
+          <span *ngIf="item.fuze"> · {{ item.fuze.marking }}</span>
+          <span *ngIf="item.primer"> · {{ item.primer.marking }}</span>
+          <div>{{ getChargeLabel(item) }}</div>
+        </td>
+        <td>{{ item.zone ? ('Зона ' + item.zone.zoneNumber) : '—' }}</td>
+        <td>{{ item.maxRangeM }}</td>
+        <td>{{ item.isActive ? 'Активний' : 'Неактивний' }}</td>
+        <td class="shot-config-actions">
+          <button type="button" class="ghost-button" (click)="edit(item)">Редагувати</button>
+          <button type="button" class="ghost-button" (click)="toggleActive(item)">
+            {{ item.isActive ? 'Вимкнути' : 'Увімкнути' }}
+          </button>
+          <button type="button" class="danger-button" (click)="remove(item.id)">Видалити</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
