@@ -79,6 +79,11 @@ export class RealtimeService implements OnDestroy {
 
     this.socket = io(API_URL, {
       transports: ['websocket', 'polling'],
+      auth: (callback) => {
+        callback({
+          token: this.getRealtimeToken(),
+        });
+      },
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 500,
@@ -327,5 +332,13 @@ export class RealtimeService implements OnDestroy {
       'threats',
       'logistics',
     ].includes(String(scope));
+  }
+
+  private getRealtimeToken(): string | null {
+    if (typeof localStorage === 'undefined') {
+      return null;
+    }
+
+    return localStorage.getItem('euclida_access_token');
   }
 }

@@ -1,11 +1,14 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user.types';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { WriteAccessGuard } from '../auth/write-access.guard';
 import { CreateStockMovementBatchDto } from './dto/create-stock-movement-batch.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { StockMovement } from './stock-movement.entity';
 import { StockMovementsService } from './stock-movements.service';
 
+@UseGuards(JwtAuthGuard)
 @Controller('stock-movements')
 export class StockMovementsController {
   constructor(private readonly service: StockMovementsService) {}
@@ -20,6 +23,7 @@ findGrouped(@CurrentUser() user: AuthUser) {
     return this.service.findAll(user);
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('batch')
   createBatch(
     @Body() body: CreateStockMovementBatchDto,
@@ -28,6 +32,7 @@ findGrouped(@CurrentUser() user: AuthUser) {
     return this.service.createBatch(body, user);
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post()
   create(
     @Body() body: CreateStockMovementDto,

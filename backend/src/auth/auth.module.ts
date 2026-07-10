@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { HttpWriteGuard } from './http-write.guard';
+import { MainScopeGuard } from './main-scope.guard';
 import { WriteAccessGuard } from './write-access.guard';
 
 @Module({
@@ -32,6 +33,7 @@ import { WriteAccessGuard } from './write-access.guard';
     HttpWriteGuard,
     WriteAccessGuard,
     AdminOnlyGuard,
+    MainScopeGuard,
   ],
   exports: [
     JwtModule,
@@ -39,6 +41,7 @@ import { WriteAccessGuard } from './write-access.guard';
     HttpWriteGuard,
     WriteAccessGuard,
     AdminOnlyGuard,
+    MainScopeGuard,
   ],
 })
 export class AuthModule {}

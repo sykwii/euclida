@@ -15,6 +15,8 @@ import { WriteAccessGuard } from '../auth/write-access.guard';
 import { CreateWeaponSystemDto } from './dto/create-weapon-system.dto';
 import { UpdateWeaponSystemDto } from './dto/update-weapon-system.dto';
 import { AssignWeaponToFirePositionDto } from './dto/assign-weapon-to-fire-position.dto';
+import { ExtendMaintenanceDto } from './dto/extend-maintenance.dto';
+import { RequestMaintenanceDto } from './dto/request-maintenance.dto';
 import { WeaponSystem } from './weapon-system.entity';
 import { WeaponSystemsService } from './weapon-systems.service';
 
@@ -97,7 +99,7 @@ moveToReserve(
 requestMaintenance(
   @CurrentUser() user: AuthUser,
   @Param('id') id: string,
-  @Body() body: { requestedStartAt?: string; durationMinutes?: number; note?: string },
+  @Body() body: RequestMaintenanceDto,
 ): Promise<WeaponSystem> {
   return this.service.requestMaintenance(id, body, user);
 }
@@ -125,7 +127,7 @@ rejectMaintenance(
 extendMaintenance(
   @CurrentUser() user: AuthUser,
   @Param('id') id: string,
-  @Body() body: { extraMinutes?: number; note?: string },
+  @Body() body: ExtendMaintenanceDto,
 ): Promise<WeaponSystem> {
   return this.service.extendMaintenance(id, body, user);
 }

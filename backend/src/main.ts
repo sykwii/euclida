@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 
 function isAllowedOrigin(origin: string | undefined, allowedOrigins: string[]): boolean {
   if (!origin) {
@@ -55,9 +56,11 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
+      forbidUnknownValues: true,
       transform: true,
     }),
   );
+  app.useGlobalFilters(new ApiExceptionFilter());
 
   await app.listen(
     Number(config.get<string>('PORT', '3000')),

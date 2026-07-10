@@ -1,4 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { MainScopeGuard } from '../auth/main-scope.guard';
+import { WriteAccessGuard } from '../auth/write-access.guard';
 import { DroneLogisticsService } from './drone-logistics.service';
 import {
   AddDroneStockDto,
@@ -11,6 +14,7 @@ import {
   TransferWarheadToAirAssetDto,
 } from './dto/drone-logistics.dto';
 
+@UseGuards(JwtAuthGuard, MainScopeGuard)
 @Controller('drone-logistics')
 export class DroneLogisticsController {
   constructor(private readonly service: DroneLogisticsService) {}
@@ -20,6 +24,7 @@ export class DroneLogisticsController {
     return this.service.getDroneModels();
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('models')
   createDroneModel(@Body() body: CreateDroneModelDto) {
     return this.service.createDroneModel(body);
@@ -30,6 +35,7 @@ export class DroneLogisticsController {
     return this.service.getWarheadTypes();
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('warhead-types')
   createWarheadType(@Body() body: CreateDroneWarheadTypeDto) {
     return this.service.createWarheadType(body);
@@ -70,26 +76,31 @@ export class DroneLogisticsController {
     return this.service.getMovements();
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('depot-drone-stock/add')
   addDroneToDepot(@Body() body: AddDroneStockDto) {
     return this.service.addDroneToDepot(body);
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('depot-warhead-stock/add')
   addWarheadToDepot(@Body() body: AddWarheadStockDto) {
     return this.service.addWarheadToDepot(body);
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('transfer-drone-to-air-asset')
   transferDroneToAirAsset(@Body() body: TransferDroneToAirAssetDto) {
     return this.service.transferDroneToAirAsset(body);
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('transfer-warhead-to-air-asset')
   transferWarheadToAirAsset(@Body() body: TransferWarheadToAirAssetDto) {
     return this.service.transferWarheadToAirAsset(body);
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('air-assets/:airAssetId/drone-stock/correction')
   correctAirAssetDroneStock(
     @Param('airAssetId') airAssetId: string,
@@ -98,6 +109,7 @@ export class DroneLogisticsController {
     return this.service.correctAirAssetDroneStock(airAssetId, body);
   }
 
+  @UseGuards(WriteAccessGuard)
   @Post('air-assets/:airAssetId/warhead-stock/correction')
   correctAirAssetWarheadStock(
     @Param('airAssetId') airAssetId: string,

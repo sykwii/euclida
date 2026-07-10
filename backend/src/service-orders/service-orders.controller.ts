@@ -12,8 +12,10 @@ import type { AuthUser } from '../auth/auth-user.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WriteAccessGuard } from '../auth/write-access.guard';
+import { CancelServiceOrderDto } from './dto/cancel-service-order.dto';
 import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
+import { RejectServiceOrderDto } from './dto/reject-service-order.dto';
 import { SendServiceOrderDto } from './dto/send-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
 import { ServiceOrder } from './service-order.entity';
@@ -154,9 +156,9 @@ selectAirAsset(
   reject(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body('reason') reason: string,
+    @Body() body: RejectServiceOrderDto,
   ): Promise<ServiceOrder> {
-    return this.service.reject(id, reason, user);
+    return this.service.reject(id, body.reason, user);
   }
 
   @UseGuards(WriteAccessGuard)
@@ -183,7 +185,7 @@ selectAirAsset(
   cancel(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: CancelServiceOrderDto,
   ): Promise<ServiceOrder> {
     return this.service.cancel(id, body.reason, user);
   }
