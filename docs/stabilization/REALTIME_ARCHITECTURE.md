@@ -64,6 +64,61 @@ Single backend publisher:
 - `emitMany()` always includes `all` exactly once
 - uses one shared timestamp for the whole fanout batch
 
+## Frontend lifecycle
+
+Frontend `RealtimeService` listens only to:
+
+- `connect`
+- `disconnect`
+- `connect_error`
+- `realtime:event`
+
+There are no named socket listeners on the frontend transport anymore.
+
+### Incoming event flow
+
+1. socket receives `realtime:event`
+2. payload is normalized to the unified protocol
+3. duplicate handling suppresses repeated processing of the same incoming event
+4. unified stream is published to internal watchers
+5. compatibility adapters route the event to legacy public callbacks
+
+### Reconnect behavior
+
+After a real disconnect, the next successful reconnect publishes one local synthetic event:
+
+```json
+{
+  "version": 1,
+  "scope": "all",
+  "entity": "system",
+  "action": "changed",
+  "reason": "reconnect",
+  "at": "2026-07-10T09:00:00.000Z"
+}
+```
+
+This is frontend-local and does not require backend changes.
+
+### Compatibility adapters
+
+Legacy public methods remain available and are derived from the unified stream:
+
+- `onThreatsChanged()` -> `scope === 'threats'`
+- `onServiceOrdersChanged()` -> `scope === 'missions' && entity === 'service_order'`
+- `onFireMissionsChanged()` -> `scope === 'missions' && entity === 'fire_mission'`
+- `onMapChanged()` -> `scope === 'map'`
+- `onStockChanged()` -> `scope === 'stock'`
+- `onEventCreated()` -> `scope === 'events'`
+- `onAnalyticsChanged()` -> `scope === 'analytics'`
+- `onReferenceChanged()` -> `scope === 'reference'`
+- `onUsersChanged()` -> `scope === 'users'`
+- `onSettingsChanged()` -> `scope === 'settings'`
+- `onAllChanged()` -> `scope === 'all'`
+- `onAnyChanged()` -> derived from the unified stream through compatibility event-name mapping
+
+`AutoRefreshService` remains the standard page refresh layer and preserves the existing `500ms` debounce.
+
 ## Fanout rules
 
 Use:
@@ -93,9 +148,10 @@ Direct `RealtimeGateway` imports/injections were removed from:
 - `backend/src/service-orders/service-orders.service.ts`
 - `backend/src/fire-missions/fire-missions.service.ts`
 - `backend/src/weapon-systems/weapon-systems.service.ts`
+- `frontend/src/app/core/realtime.service.ts`
 - `docs/stabilization/REALTIME_ARCHITECTURE.md`
 
 ## Notes
 
 - Named socket emits such as `*_changed`, `event_created`, and `all_changed` are removed from backend transport.
-- Frontend was not modified in this refactor.
+- Frontend uses compatibility adapters so existing page subscriptions can remain unchanged.

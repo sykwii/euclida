@@ -20,6 +20,7 @@ export type RealtimeScope =
   | 'logistics';
 
 export interface RealtimeEventPayload {
+  version?: number;
   scope: RealtimeScope;
   action?: string;
   entity?: string;
@@ -43,27 +44,29 @@ export type RealtimeEventName =
   | 'all_changed';
 
 export interface RealtimePayload {
+  version?: number;
   scope?: string;
   action?: string;
   entity?: string;
   id?: string;
+  unitId?: string;
+  reason?: string;
   at?: string;
   [key: string]: unknown;
 }
+
+type RealtimeCallback = (payload?: RealtimePayload) => void;
+type AnyRealtimeCallback = (eventName: RealtimeEventName, payload?: RealtimePayload) => void;
 
 @Injectable({ providedIn: 'root' })
 export class RealtimeService implements OnDestroy {
   private socket: Socket | null = null;
   private readonly realtimeEvents$ = new Subject<RealtimeEventPayload>();
-  private readonly callbacks = new Map<
-    RealtimeEventName,
-    Set<(payload?: RealtimePayload) => void>
-  >();
-  private readonly anyCallbacks = new Set<
-    (eventName: RealtimeEventName, payload?: RealtimePayload) => void
-  >();
+  private readonly callbacks = new Map<RealtimeEventName, Set<RealtimeCallback>>();
+  private readonly anyCallbacks = new Set<AnyRealtimeCallback>();
   private lastRealtimeKey = '';
   private lastRealtimeAt = 0;
+  private hadDisconnect = false;
   readonly connected$ = new BehaviorSubject<boolean>(false);
 
   constructor(
@@ -83,13 +86,42 @@ export class RealtimeService implements OnDestroy {
       timeout: 8000,
     });
 
-    this.socket.on('connect', () => this.zone.run(() => this.connected$.next(true)));
-    this.socket.on('disconnect', () => this.zone.run(() => this.connected$.next(false)));
-    this.socket.on('connect_error', () => this.zone.run(() => this.connected$.next(false)));
-    this.socket.on('realtime:event', (payload?: Partial<RealtimeEventPayload>) => {
-      this.zone.run(() => this.emitRealtimePayload(this.normalizeRealtimePayload(payload)));
+    this.socket.on('connect', () => {
+      this.zone.run(() => {
+        const wasDisconnected = this.hadDisconnect;
+        this.connected$.next(true);
+        this.hadDisconnect = false;
+
+        if (wasDisconnected) {
+          this.processIncomingRealtimeEvent({
+            version: 1,
+            scope: 'all',
+            entity: 'system',
+            action: 'changed',
+            reason: 'reconnect',
+            at: new Date().toISOString(),
+          });
+        }
+      });
     });
-    this.eventNames().forEach((eventName) => this.bindSocketEvent(eventName));
+
+    this.socket.on('disconnect', () => {
+      this.zone.run(() => {
+        this.hadDisconnect = true;
+        this.connected$.next(false);
+      });
+    });
+
+    this.socket.on('connect_error', () => {
+      this.zone.run(() => {
+        this.hadDisconnect = true;
+        this.connected$.next(false);
+      });
+    });
+
+    this.socket.on('realtime:event', (payload?: Partial<RealtimeEventPayload>) => {
+      this.zone.run(() => this.processIncomingRealtimeEvent(this.normalizeRealtimePayload(payload)));
+    });
   }
 
   onThreatsChanged(callback: (payload?: RealtimePayload) => void): () => void {
@@ -136,9 +168,7 @@ export class RealtimeService implements OnDestroy {
     return this.register('all_changed', callback);
   }
 
-  onAnyChanged(
-    callback: (eventName: RealtimeEventName, payload?: RealtimePayload) => void,
-  ): () => void {
+  onAnyChanged(callback: AnyRealtimeCallback): () => void {
     this.anyCallbacks.add(callback);
     return () => this.anyCallbacks.delete(callback);
   }
@@ -155,56 +185,56 @@ export class RealtimeService implements OnDestroy {
     this.disconnect();
   }
 
-  private eventNames(): RealtimeEventName[] {
-    return [
-      'threat_changed',
-      'service_order_changed',
-      'fire_mission_changed',
-      'map_changed',
-      'stock_changed',
-      'event_created',
-      'analytics_changed',
-      'reference_changed',
-      'user_changed',
-      'settings_changed',
-      'all_changed',
-    ];
+  watch(scope: RealtimeScope): Observable<RealtimeEventPayload> {
+    return this.realtimeEvents$.pipe(
+      filter((event) => event.scope === scope || event.scope === 'all'),
+    );
   }
 
-  private bindSocketEvent(eventName: RealtimeEventName): void {
-    this.socket?.on(eventName, (payload?: RealtimePayload) => {
-      this.zone.run(() => {
-        const realtimePayload = this.toRealtimePayload(eventName, payload);
-        this.emitRealtimePayload(realtimePayload);
-        this.runCallbacks(eventName, payload);
-        this.runAnyCallbacks(eventName, payload);
-      });
-    });
+  watchMany(scopes: RealtimeScope[]): Observable<RealtimeEventPayload> {
+    const normalizedScopes = Array.from(new Set(scopes));
+
+    return this.realtimeEvents$.pipe(
+      filter((event) => event.scope === 'all' || normalizedScopes.includes(event.scope)),
+    );
   }
 
-  private emitRealtimePayload(payload: RealtimeEventPayload): void {
+  private processIncomingRealtimeEvent(payload: RealtimeEventPayload): void {
+    if (!this.emitRealtimePayload(payload)) {
+      return;
+    }
+
+    const eventNames = this.compatibilityEventNames(payload);
+    const compatPayload = this.toCompatibilityPayload(payload);
+
+    eventNames.forEach((eventName) => this.runCallbacks(eventName, compatPayload));
+    eventNames.forEach((eventName) => this.runAnyCallbacks(eventName, compatPayload));
+  }
+
+  private emitRealtimePayload(payload: RealtimeEventPayload): boolean {
     const key = [
+      payload.version || 1,
       payload.scope,
       payload.entity || '',
+      payload.action || '',
       payload.id || '',
       payload.unitId || '',
-      payload.reason || payload.action || '',
+      payload.reason || '',
+      payload.at || '',
     ].join('|');
     const now = Date.now();
 
     if (key === this.lastRealtimeKey && now - this.lastRealtimeAt < 500) {
-      return;
+      return false;
     }
 
     this.lastRealtimeKey = key;
     this.lastRealtimeAt = now;
     this.realtimeEvents$.next(payload);
+    return true;
   }
 
-  private register(
-    eventName: RealtimeEventName,
-    callback: (payload?: RealtimePayload) => void,
-  ): () => void {
+  private register(eventName: RealtimeEventName, callback: RealtimeCallback): () => void {
     if (!this.callbacks.has(eventName)) {
       this.callbacks.set(eventName, new Set());
     }
@@ -235,6 +265,7 @@ export class RealtimeService implements OnDestroy {
 
   private normalizeRealtimePayload(payload?: Partial<RealtimeEventPayload>): RealtimeEventPayload {
     return {
+      version: typeof payload?.version === 'number' ? payload.version : 1,
       scope: this.isRealtimeScope(payload?.scope) ? payload.scope : 'all',
       action: typeof payload?.action === 'string' ? payload.action : undefined,
       entity: typeof payload?.entity === 'string' ? payload.entity : undefined,
@@ -245,36 +276,67 @@ export class RealtimeService implements OnDestroy {
     };
   }
 
-  private toRealtimePayload(
-    eventName: RealtimeEventName,
-    payload?: RealtimePayload,
-  ): RealtimeEventPayload {
-    const fallbackScope = this.scopeFromEventName(eventName);
-    const payloadScope = typeof payload?.['scope'] === 'string' ? payload['scope'] : undefined;
-
+  private toCompatibilityPayload(payload: RealtimeEventPayload): RealtimePayload {
     return {
-      scope: this.isRealtimeScope(payloadScope) ? payloadScope : fallbackScope,
-      action: typeof payload?.['action'] === 'string' ? payload['action'] : eventName,
-      entity: typeof payload?.['entity'] === 'string' ? payload['entity'] : undefined,
-      id: typeof payload?.['id'] === 'string' ? payload['id'] : undefined,
-      unitId: typeof payload?.['unitId'] === 'string' ? payload['unitId'] : undefined,
-      reason: typeof payload?.['reason'] === 'string' ? payload['reason'] : eventName,
-      at: typeof payload?.['at'] === 'string' ? payload['at'] : new Date().toISOString(),
+      version: payload.version || 1,
+      scope: payload.scope,
+      action: payload.action,
+      entity: payload.entity,
+      id: payload.id,
+      unitId: payload.unitId,
+      reason: payload.reason,
+      at: payload.at,
     };
   }
 
-  private scopeFromEventName(eventName: RealtimeEventName): RealtimeScope {
-    if (eventName === 'threat_changed') return 'threats';
-    if (eventName === 'service_order_changed' || eventName === 'fire_mission_changed')
-      return 'missions';
-    if (eventName === 'map_changed') return 'map';
-    if (eventName === 'stock_changed') return 'stock';
-    if (eventName === 'event_created') return 'events';
-    if (eventName === 'analytics_changed') return 'analytics';
-    if (eventName === 'reference_changed') return 'reference';
-    if (eventName === 'user_changed') return 'users';
-    if (eventName === 'settings_changed') return 'settings';
-    return 'all';
+  private compatibilityEventNames(payload: RealtimeEventPayload): RealtimeEventName[] {
+    const names: RealtimeEventName[] = [];
+
+    if (payload.scope === 'all') {
+      names.push('all_changed');
+    }
+
+    if (payload.scope === 'map') {
+      names.push('map_changed');
+    }
+
+    if (payload.scope === 'stock') {
+      names.push('stock_changed');
+    }
+
+    if (payload.scope === 'analytics') {
+      names.push('analytics_changed');
+    }
+
+    if (payload.scope === 'reference') {
+      names.push('reference_changed');
+    }
+
+    if (payload.scope === 'users') {
+      names.push('user_changed');
+    }
+
+    if (payload.scope === 'settings') {
+      names.push('settings_changed');
+    }
+
+    if (payload.scope === 'events') {
+      names.push('event_created');
+    }
+
+    if (payload.scope === 'threats') {
+      names.push('threat_changed');
+    }
+
+    if (payload.scope === 'missions' && payload.entity === 'service_order') {
+      names.push('service_order_changed');
+    }
+
+    if (payload.scope === 'missions' && payload.entity === 'fire_mission') {
+      names.push('fire_mission_changed');
+    }
+
+    return Array.from(new Set(names));
   }
 
   private isRealtimeScope(scope: unknown): scope is RealtimeScope {
@@ -293,19 +355,5 @@ export class RealtimeService implements OnDestroy {
       'threats',
       'logistics',
     ].includes(String(scope));
-  }
-
-  watch(scope: RealtimeScope): Observable<RealtimeEventPayload> {
-    return this.realtimeEvents$.pipe(
-      filter((event) => event.scope === scope || event.scope === 'all'),
-    );
-  }
-
-  watchMany(scopes: RealtimeScope[]): Observable<RealtimeEventPayload> {
-    const normalizedScopes = Array.from(new Set(scopes));
-
-    return this.realtimeEvents$.pipe(
-      filter((event) => event.scope === 'all' || normalizedScopes.includes(event.scope)),
-    );
   }
 }
