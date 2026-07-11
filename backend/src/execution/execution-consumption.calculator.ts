@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { StockResourceRef } from '../stock-engine/stock-resource.types';
+import type { StockResourceRef } from '../stock-engine/contracts';
 import type { ExecutionPipelineContext } from './execution-pipeline-context.type';
 
 @Injectable()

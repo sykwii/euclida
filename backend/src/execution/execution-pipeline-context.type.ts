@@ -1,6 +1,6 @@
 import type { AuthUser } from '../auth/auth-user.types';
 import type { StockOperation } from '../stock-engine/stock-operation.entity';
-import type { StockResourceRef } from '../stock-engine/stock-resource.types';
+import type { StockResourceRef } from '../stock-engine/contracts';
 import type { ServiceOrder } from '../service-orders/service-order.entity';
 import type { CreateExecutionRecordDto } from './dto/create-execution-record.dto';
 import type { ExecutionHandler } from './execution-handler.interface';

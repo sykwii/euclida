@@ -1,16 +1,14 @@
-import type { StockResourceRef } from './stock-resource.types';
+import type {
+  StockTransactionRequest,
+} from './contracts';
 
-export type StockOperationType =
-  | 'receipt'
-  | 'transfer'
-  | 'write_off'
-  | 'return'
-  | 'correction';
+export {
+  type StockOperationType,
+  type StockTransactionRequest,
+} from './contracts';
 
-export interface StockOperationRequest {
-  idempotencyKey: string;
-  operationType: StockOperationType;
-
+export interface StockOperationRequest
+  extends StockTransactionRequest {
   /**
    * Optional legacy/audit label for StockMovement.
    * The canonical operation type remains operationType.
@@ -19,9 +17,4 @@ export interface StockOperationRequest {
 
   fromDepotId?: string | null;
   toDepotId?: string | null;
-  documentNumber?: string | null;
-  comment?: string | null;
-  reason?: string | null;
-  unitId?: string | null;
-  resources: StockResourceRef[];
 }

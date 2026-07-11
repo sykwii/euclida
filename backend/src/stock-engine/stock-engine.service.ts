@@ -19,10 +19,13 @@ import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { StockMovement } from '../stock-movements/stock-movement.entity';
 import { AmmoStockAdapter } from './adapters/ammo-stock.adapter';
 import { DroneStockAdapter } from './adapters/drone-stock.adapter';
+import type {
+  StorageLocationRef,
+  StockResourceType,
+} from './contracts';
 import type { StockAdapter } from './stock-adapter.interface';
 import { StockOperation } from './stock-operation.entity';
 import type { StockOperationRequest } from './stock-operation.types';
-import type { StockResourceType } from './stock-resource.types';
 
 interface TransactionResult {
   operation: StockOperation;
@@ -102,10 +105,11 @@ export class StockEngineService {
     input: StockOperationRequest,
     user: AuthUser,
   ): Promise<StockOperation> {
-    this.validateOperation(input);
+    const request = this.normalizeRequest(input);
+    this.validateOperation(request);
 
     const existing = await this.operations.findOne({
-      where: { idempotencyKey: input.idempotencyKey },
+      where: { idempotencyKey: request.idempotencyKey },
     });
 
     if (existing) {
@@ -118,7 +122,7 @@ export class StockEngineService {
       transactionResult = await this.dataSource.transaction(
         async (manager): Promise<TransactionResult> => {
           const duplicate = await manager.findOne(StockOperation, {
-            where: { idempotencyKey: input.idempotencyKey },
+            where: { idempotencyKey: request.idempotencyKey },
           });
 
           if (duplicate) {
@@ -128,53 +132,53 @@ export class StockEngineService {
             };
           }
 
-          const fromDepot = input.fromDepotId
+          const fromDepot = request.source
             ? await manager.findOne(Depot, {
-                where: { id: input.fromDepotId },
+                where: { id: request.source.id },
                 lock: { mode: 'pessimistic_read' },
               })
             : null;
 
-          const toDepot = input.toDepotId
+          const toDepot = request.destination
             ? await manager.findOne(Depot, {
-                where: { id: input.toDepotId },
+                where: { id: request.destination.id },
                 lock: { mode: 'pessimistic_read' },
               })
             : null;
 
-          if (input.fromDepotId && !fromDepot) {
-            throw new NotFoundException('Склад-відправник не знайдено');
+          if (request.source && !fromDepot) {
+            throw new NotFoundException('РЎРєР»Р°Рґ-РІС–РґРїСЂР°РІРЅРёРє РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
           }
 
-          if (input.toDepotId && !toDepot) {
-            throw new NotFoundException('Склад-отримувач не знайдено');
+          if (request.destination && !toDepot) {
+            throw new NotFoundException('РЎРєР»Р°Рґ-РѕС‚СЂРёРјСѓРІР°С‡ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
           }
 
           await this.ensureCanOperate(user, fromDepot, toDepot);
 
           const movementGroupId = randomUUID();
 
-          /*
-           * The operation is inserted before balances are changed.
-           * Its unique idempotency key serializes concurrent retries.
-           * Any later error rolls the complete transaction back.
-           */
           const operation = await manager.save(
             StockOperation,
             manager.create(StockOperation, {
-              idempotencyKey: input.idempotencyKey,
-              operationType: input.operationType,
+              idempotencyKey: request.idempotencyKey,
+              operationType: request.operationType,
               movementGroupId,
-              fromDepotId: input.fromDepotId ?? null,
-              toDepotId: input.toDepotId ?? null,
-              documentNumber: input.documentNumber ?? null,
-              comment: input.comment ?? null,
-              payload: input as unknown as Record<string, unknown>,
+              fromDepotId: request.source?.id ?? null,
+              toDepotId: request.destination?.id ?? null,
+              documentNumber: request.documentNumber ?? null,
+              comment: request.comment ?? null,
+              payload: {
+                ...request,
+                movementType: input.movementType ?? null,
+                fromDepotId: request.source?.id ?? null,
+                toDepotId: request.destination?.id ?? null,
+              },
               createdByUserId: user.sub,
             }),
           );
 
-          const normalizedResources = this.aggregate(input.resources);
+          const normalizedResources = this.aggregate(request.resources);
 
           for (const item of normalizedResources) {
             const adapter = this.adapter(item.resourceType);
@@ -186,20 +190,20 @@ export class StockEngineService {
                 manager,
               ));
 
-            if (input.fromDepotId) {
+            if (request.source) {
               await adapter.decrease(
                 manager,
-                input.fromDepotId,
+                request.source.id,
                 item.resourceType,
                 item.resourceId,
                 item.quantity,
               );
             }
 
-            if (input.toDepotId) {
+            if (request.destination) {
               await adapter.increase(
                 manager,
-                input.toDepotId,
+                request.destination.id,
                 item.resourceType,
                 item.resourceId,
                 item.quantity,
@@ -209,16 +213,16 @@ export class StockEngineService {
             await manager.save(
               StockMovement,
               manager.create(StockMovement, {
-                fromDepotId: input.fromDepotId ?? null,
-                toDepotId: input.toDepotId ?? null,
+                fromDepotId: request.source?.id ?? null,
+                toDepotId: request.destination?.id ?? null,
                 itemType: item.resourceType,
                 itemId: item.resourceId,
                 quantity: item.quantity,
                 movementType:
-                  input.movementType ?? input.operationType,
+                  input.movementType ?? request.operationType,
                 movementGroupId,
-                documentNumber: input.documentNumber ?? null,
-                comment: input.comment ?? null,
+                documentNumber: request.documentNumber ?? null,
+                comment: request.comment ?? null,
                 fireMissionId: null,
                 accountingUnit,
                 stockOperationId: operation.id,
@@ -235,7 +239,7 @@ export class StockEngineService {
     } catch (error: unknown) {
       if (this.isUniqueViolation(error)) {
         const duplicate = await this.operations.findOne({
-          where: { idempotencyKey: input.idempotencyKey },
+          where: { idempotencyKey: request.idempotencyKey },
         });
 
         if (duplicate) {
@@ -252,17 +256,17 @@ export class StockEngineService {
 
     await this.eventLogs.create({
       eventType: 'stock',
-      action: input.operationType,
+      action: request.operationType,
       actor: user,
-      unitId: input.unitId ?? user.unitId ?? null,
+      unitId: request.unitId ?? user.unitId ?? null,
       entityType: 'stock_operation',
       entityId: transactionResult.operation.id,
-      title: 'Проведено складську операцію',
-      details: input.comment ?? null,
+      title: 'РџСЂРѕРІРµРґРµРЅРѕ СЃРєР»Р°РґСЃСЊРєСѓ РѕРїРµСЂР°С†С–СЋ',
+      details: request.comment ?? null,
       metadata: {
         movementGroupId:
           transactionResult.operation.movementGroupId,
-        resources: input.resources,
+        resources: request.resources,
       },
     });
 
@@ -272,8 +276,8 @@ export class StockEngineService {
       {
         entity: 'stock_operation',
         id: transactionResult.operation.id,
-        unitId: input.unitId ?? user.unitId ?? undefined,
-        reason: input.reason ?? input.operationType,
+        unitId: request.unitId ?? user.unitId ?? undefined,
+        reason: request.reason ?? request.operationType,
       },
     );
 
@@ -307,7 +311,7 @@ export class StockEngineService {
 
     if (!adapter) {
       throw new BadRequestException(
-        `Непідтримуваний тип ресурсу: ${type}`,
+        `РќРµРїС–РґС‚СЂРёРјСѓРІР°РЅРёР№ С‚РёРї СЂРµСЃСѓСЂСЃСѓ: ${type}`,
       );
     }
 
@@ -327,7 +331,7 @@ export class StockEngineService {
 
       if (!Number.isFinite(quantity) || quantity <= 0) {
         throw new BadRequestException(
-          'Кількість має бути більше 0',
+          'РљС–Р»СЊРєС–СЃС‚СЊ РјР°С” Р±СѓС‚Рё Р±С–Р»СЊС€Рµ 0',
         );
       }
 
@@ -351,54 +355,104 @@ export class StockEngineService {
   private validateOperation(input: StockOperationRequest): void {
     if (!input.idempotencyKey?.trim()) {
       throw new BadRequestException(
-        'idempotencyKey обов’язковий',
+        'idempotencyKey РѕР±РѕРІвЂ™СЏР·РєРѕРІРёР№',
       );
     }
 
     if (!input.resources?.length) {
       throw new BadRequestException(
-        'Потрібен хоча б один ресурс',
+        'РџРѕС‚СЂС–Р±РµРЅ С…РѕС‡Р° Р± РѕРґРёРЅ СЂРµСЃСѓСЂСЃ',
       );
     }
 
-    if (!input.fromDepotId && !input.toDepotId) {
-      throw new BadRequestException('Потрібно вказати склад');
+    if (!input.source && !input.destination) {
+      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё СЃРєР»Р°Рґ');
     }
 
     if (
-      input.fromDepotId &&
-      input.toDepotId &&
-      input.fromDepotId === input.toDepotId
+      input.source &&
+      input.destination &&
+      input.source.id === input.destination.id
     ) {
       throw new BadRequestException(
-        'Склади мають відрізнятися',
+        'РЎРєР»Р°РґРё РјР°СЋС‚СЊ РІС–РґСЂС–Р·РЅСЏС‚РёСЃСЏ',
       );
     }
 
     if (
       input.operationType === 'transfer' &&
-      (!input.fromDepotId || !input.toDepotId)
+      (!input.source || !input.destination)
     ) {
       throw new BadRequestException(
-        'Для transfer потрібні обидва склади',
+        'Р”Р»СЏ transfer РїРѕС‚СЂС–Р±РЅС– РѕР±РёРґРІР° СЃРєР»Р°РґРё',
       );
     }
 
     if (
       input.operationType === 'write_off' &&
-      !input.fromDepotId
+      !input.source
     ) {
       throw new BadRequestException(
-        'Для write_off потрібен склад-джерело',
+        'Р”Р»СЏ write_off РїРѕС‚СЂС–Р±РµРЅ СЃРєР»Р°Рґ-РґР¶РµСЂРµР»Рѕ',
       );
     }
 
     if (
       input.operationType === 'receipt' &&
-      !input.toDepotId
+      !input.destination
     ) {
       throw new BadRequestException(
-        'Для receipt потрібен склад-отримувач',
+        'Р”Р»СЏ receipt РїРѕС‚СЂС–Р±РµРЅ СЃРєР»Р°Рґ-РѕС‚СЂРёРјСѓРІР°С‡',
+      );
+    }
+  }
+
+  private normalizeRequest(
+    input: StockOperationRequest,
+  ): StockOperationRequest {
+    const source =
+      input.source ??
+      this.normalizeDepotLocation(input.fromDepotId ?? null);
+    const destination =
+      input.destination ??
+      this.normalizeDepotLocation(input.toDepotId ?? null);
+
+    this.assertDepotLocation(source, 'source');
+    this.assertDepotLocation(destination, 'destination');
+
+    return {
+      ...input,
+      source,
+      destination,
+      fromDepotId: source?.id ?? null,
+      toDepotId: destination?.id ?? null,
+    };
+  }
+
+  private normalizeDepotLocation(
+    depotId: string | null,
+  ): StorageLocationRef | null {
+    if (!depotId) {
+      return null;
+    }
+
+    return {
+      type: 'depot',
+      id: depotId,
+    };
+  }
+
+  private assertDepotLocation(
+    location: StorageLocationRef | null | undefined,
+    field: 'source' | 'destination',
+  ): void {
+    if (!location) {
+      return;
+    }
+
+    if (location.type !== 'depot') {
+      throw new BadRequestException(
+        `${field} РїС–РґС‚СЂРёРјСѓС” С‚С–Р»СЊРєРё depot`,
       );
     }
   }
@@ -412,7 +466,7 @@ export class StockEngineService {
       .findOne({ where: { id: depotId } });
 
     if (!depot) {
-      throw new NotFoundException('Склад не знайдено');
+      throw new NotFoundException('РЎРєР»Р°Рґ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
     }
 
     await this.ensureCanOperate(user, depot, depot);
@@ -444,7 +498,7 @@ export class StockEngineService {
         !visible.includes(depot.unitId)
       ) {
         throw new ForbiddenException(
-          'Недостатньо прав для цього складу',
+          'РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ РїСЂР°РІ РґР»СЏ С†СЊРѕРіРѕ СЃРєР»Р°РґСѓ',
         );
       }
     }

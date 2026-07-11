@@ -14,7 +14,7 @@ import type {
   StockOperationType,
   StockOperationRequest,
 } from '../stock-engine/stock-operation.types';
-import type { StockResourceType } from '../stock-engine/stock-resource.types';
+import type { StockResourceType } from '../stock-engine/contracts';
 import { CreateStockMovementBatchDto } from './dto/create-stock-movement-batch.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { StockMovement } from './stock-movement.entity';
@@ -91,16 +91,19 @@ export class StockMovementsService {
           idempotencyKey: `legacy-stock-single:${randomUUID()}`,
           operationType: context.operationType,
           movementType: context.movementType,
-          fromDepotId: data.fromDepotId ?? null,
-          toDepotId: data.toDepotId ?? null,
+          source: data.fromDepotId
+            ? { type: 'depot', id: data.fromDepotId }
+            : null,
+          destination: data.toDepotId
+            ? { type: 'depot', id: data.toDepotId }
+            : null,
           documentNumber: null,
           comment: data.comment ?? null,
           reason: 'legacy-stock-movement',
           unitId: context.unitId,
           resources: [
             {
-              resourceType:
-                data.itemType as StockResourceType,
+              resourceType: this.toStockResourceType(data.itemType),
               resourceId: data.itemId,
               quantity: Number(data.quantity),
             },
@@ -147,8 +150,12 @@ export class StockMovementsService {
         idempotencyKey: `legacy-stock-batch:${randomUUID()}`,
         operationType: context.operationType,
         movementType: context.movementType,
-        fromDepotId: data.fromDepotId ?? null,
-        toDepotId: data.toDepotId ?? null,
+        source: data.fromDepotId
+          ? { type: 'depot', id: data.fromDepotId }
+          : null,
+        destination: data.toDepotId
+          ? { type: 'depot', id: data.toDepotId }
+          : null,
         documentNumber,
         comment: data.comment ?? null,
         reason: 'legacy-stock-movement-batch',
@@ -160,8 +167,7 @@ export class StockMovementsService {
               Number(item.quantity) > 0,
           )
           .map((item) => ({
-            resourceType:
-              item.itemType as StockResourceType,
+            resourceType: this.toStockResourceType(item.itemType),
             resourceId: item.itemId,
             quantity: Number(item.quantity),
           })),
@@ -329,6 +335,20 @@ export class StockMovementsService {
       throw new BadRequestException(
         'Кількість має бути більше 0',
       );
+    }
+  }
+
+  private toStockResourceType(value: string): StockResourceType {
+    switch (value) {
+      case 'shell':
+      case 'charge':
+      case 'fuze':
+      case 'primer':
+        return value;
+      default:
+        throw new BadRequestException(
+          'Непідтримуваний тип ресурсу складу',
+        );
     }
   }
 

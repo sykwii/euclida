@@ -217,16 +217,16 @@ export class ExecutionEngineService {
         );
       }
 
-      const stockOperation = await this.stockEngine.execute(
-        {
-          idempotencyKey: `execution:${lockedRecord.id}`,
-          operationType: 'write_off',
-          movementType: 'execution_post',
-          fromDepotId: ammoDepotId,
-          toDepotId: null,
-          comment: lockedRecord.comment,
-          reason: 'execution_record_posted',
-          unitId: context.unitId,
+    const stockOperation = await this.stockEngine.execute(
+      {
+        idempotencyKey: `execution:${lockedRecord.id}`,
+        operationType: 'write_off',
+        movementType: 'execution_post',
+        source: { type: 'depot', id: ammoDepotId },
+        destination: null,
+        comment: lockedRecord.comment,
+        reason: 'execution_record_posted',
+        unitId: context.unitId,
           resources: context.consumption,
         },
         user,
@@ -340,8 +340,8 @@ export class ExecutionEngineService {
         idempotencyKey: context.body.idempotencyKey,
         operationType: 'write_off',
         movementType: 'execution_consumption',
-        fromDepotId: null,
-        toDepotId: null,
+        source: null,
+        destination: null,
         comment: context.body.comment?.trim() || null,
         reason: 'execution_record_created',
         unitId: context.unitId,

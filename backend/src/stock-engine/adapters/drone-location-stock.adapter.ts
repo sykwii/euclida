@@ -54,7 +54,7 @@ export class DroneLocationStockAdapter {
 
     if (!row) {
       row = repo.create({
-        [cfg.storageProperty]: storage.storageId,
+        [cfg.storageProperty]: storage.id,
         [cfg.resourceProperty]: resourceId,
         quantity: 0,
       } as ObjectLiteral) as DroneBalance;
@@ -116,7 +116,7 @@ export class DroneLocationStockAdapter {
 
     if (!row) {
       row = repo.create({
-        [cfg.storageProperty]: storage.storageId,
+        [cfg.storageProperty]: storage.id,
         [cfg.resourceProperty]: resourceId,
         quantity: 0,
       } as ObjectLiteral) as DroneBalance;
@@ -140,7 +140,7 @@ export class DroneLocationStockAdapter {
       .createQueryBuilder('stock')
       .setLock('pessimistic_write')
       .where(`stock.${cfg.storageColumn} = :storageId`, {
-        storageId: storage.storageId,
+        storageId: storage.id,
       })
       .andWhere(`stock.${cfg.resourceColumn} = :resourceId`, {
         resourceId,
@@ -152,7 +152,7 @@ export class DroneLocationStockAdapter {
     storage: DroneStorageRef,
     resourceType: DroneStockResourceType,
   ): Config {
-    if (storage.storageType === 'depot' && resourceType === 'drone') {
+    if (storage.type === 'depot' && resourceType === 'drone') {
       return {
         entity: DepotDroneStock,
         storageProperty: 'depotId',
@@ -162,7 +162,7 @@ export class DroneLocationStockAdapter {
       };
     }
 
-    if (storage.storageType === 'depot' && resourceType === 'warhead') {
+    if (storage.type === 'depot' && resourceType === 'warhead') {
       return {
         entity: DepotDroneWarheadStock,
         storageProperty: 'depotId',
@@ -172,7 +172,7 @@ export class DroneLocationStockAdapter {
       };
     }
 
-    if (storage.storageType === 'air_asset' && resourceType === 'drone') {
+    if (storage.type === 'air_asset' && resourceType === 'drone') {
       return {
         entity: AirAssetDroneStock,
         storageProperty: 'airAssetPositionId',
@@ -182,7 +182,7 @@ export class DroneLocationStockAdapter {
       };
     }
 
-    if (storage.storageType === 'air_asset' && resourceType === 'warhead') {
+    if (storage.type === 'air_asset' && resourceType === 'warhead') {
       return {
         entity: AirAssetWarheadStock,
         storageProperty: 'airAssetPositionId',

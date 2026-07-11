@@ -19,6 +19,7 @@ import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { DroneLocationStockAdapter } from './adapters/drone-location-stock.adapter';
 import type {
   DroneStockOperationRequest,
+  DroneStockResourceRef,
   DroneStorageRef,
 } from './drone-stock-engine.types';
 import { StockOperation } from './stock-operation.entity';
@@ -41,6 +42,7 @@ export class DroneStockEngineService {
     user: AuthUser,
   ): Promise<DroneStockMovement> {
     this.validate(input);
+    const resource = this.getSingleResource(input.resources);
 
     const existing = await this.movements.findOne({
       where: { idempotencyKey: input.idempotencyKey },
@@ -72,48 +74,48 @@ export class DroneStockEngineService {
             operationType: input.operationType,
             movementGroupId,
             fromDepotId:
-              input.source?.storageType === 'depot'
-                ? input.source.storageId
+              input.source?.type === 'depot'
+                ? input.source.id
                 : null,
             toDepotId:
-              input.destination?.storageType === 'depot'
-                ? input.destination.storageId
+              input.destination?.type === 'depot'
+                ? input.destination.id
                 : null,
             documentNumber: null,
             comment: input.comment ?? null,
-            payload: input as unknown as Record<string, unknown>,
+            payload: { ...input },
             createdByUserId: user.sub,
-            sourceStorageType: input.source?.storageType ?? null,
-            sourceStorageId: input.source?.storageId ?? null,
+            sourceStorageType: input.source?.type ?? null,
+            sourceStorageId: input.source?.id ?? null,
             destinationStorageType:
-              input.destination?.storageType ?? null,
+              input.destination?.type ?? null,
             destinationStorageId:
-              input.destination?.storageId ?? null,
+              input.destination?.id ?? null,
           }),
         );
 
         if (input.operationType === 'correction') {
           if (!input.destination) {
             throw new BadRequestException(
-              'Для корекції потрібне місце зберігання',
+              'Р”Р»СЏ РєРѕСЂРµРєС†С–С— РїРѕС‚СЂС–Р±РЅРµ РјС–СЃС†Рµ Р·Р±РµСЂС–РіР°РЅРЅСЏ',
             );
           }
 
           await this.adapter.setQuantity(
             manager,
             input.destination,
-            input.resourceType,
-            input.resourceId,
-            input.quantity,
+            resource.resourceType,
+            resource.resourceId,
+            resource.quantity,
           );
         } else {
           if (input.source) {
             await this.adapter.decrease(
               manager,
               input.source,
-              input.resourceType,
-              input.resourceId,
-              input.quantity,
+              resource.resourceType,
+              resource.resourceId,
+              resource.quantity,
             );
           }
 
@@ -121,9 +123,9 @@ export class DroneStockEngineService {
             await this.adapter.increase(
               manager,
               input.destination,
-              input.resourceType,
-              input.resourceId,
-              input.quantity,
+              resource.resourceType,
+              resource.resourceId,
+              resource.quantity,
             );
           }
         }
@@ -132,32 +134,32 @@ export class DroneStockEngineService {
           DroneStockMovement,
           manager.create(DroneStockMovement, {
             movementType: input.movementType,
-            itemType: input.resourceType,
+            itemType: resource.resourceType,
             depotFromId:
-              input.source?.storageType === 'depot'
-                ? input.source.storageId
+              input.source?.type === 'depot'
+                ? input.source.id
                 : null,
             depotToId:
-              input.destination?.storageType === 'depot'
-                ? input.destination.storageId
+              input.destination?.type === 'depot'
+                ? input.destination.id
                 : null,
             airAssetFromId:
-              input.source?.storageType === 'air_asset'
-                ? input.source.storageId
+              input.source?.type === 'air_asset'
+                ? input.source.id
                 : null,
             airAssetToId:
-              input.destination?.storageType === 'air_asset'
-                ? input.destination.storageId
+              input.destination?.type === 'air_asset'
+                ? input.destination.id
                 : null,
             droneModelId:
-              input.resourceType === 'drone'
-                ? input.resourceId
+              resource.resourceType === 'drone'
+                ? resource.resourceId
                 : null,
             warheadTypeId:
-              input.resourceType === 'warhead'
-                ? input.resourceId
+              resource.resourceType === 'warhead'
+                ? resource.resourceId
                 : null,
-            quantity: input.quantity,
+            quantity: resource.quantity,
             comment: input.comment ?? null,
             createdById: user.sub,
             movementGroupId,
@@ -174,13 +176,13 @@ export class DroneStockEngineService {
         unitId: input.unitId ?? user.unitId ?? null,
         entityType: 'drone_stock_movement',
         entityId: movement.id,
-        title: 'Проведено рух ресурсу БпЛА',
+        title: 'РџСЂРѕРІРµРґРµРЅРѕ СЂСѓС… СЂРµСЃСѓСЂСЃСѓ Р‘РїР›Рђ',
         details: input.comment ?? null,
         metadata: {
           movementType: input.movementType,
-          resourceType: input.resourceType,
-          resourceId: input.resourceId,
-          quantity: input.quantity,
+          resourceType: resource.resourceType,
+          resourceId: resource.resourceId,
+          quantity: resource.quantity,
         },
       });
 
@@ -212,28 +214,47 @@ export class DroneStockEngineService {
   }
 
   private validate(input: DroneStockOperationRequest): void {
-    const quantity = Number(input.quantity);
+    if (!input.resources?.length) {
+      throw new BadRequestException(
+        'РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё С…РѕС‡Р° Р± РѕРґРёРЅ СЂРµСЃСѓСЂСЃ',
+      );
+    }
+
+    const resource = this.getSingleResource(input.resources);
+    const quantity = Number(resource.quantity);
 
     if (!input.idempotencyKey?.trim()) {
-      throw new BadRequestException('idempotencyKey обов’язковий');
+      throw new BadRequestException('idempotencyKey РѕР±РѕРІвЂ™СЏР·РєРѕРІРёР№');
     }
 
     if (!Number.isFinite(quantity) || quantity < 0) {
-      throw new BadRequestException('Некоректна кількість');
+      throw new BadRequestException('РќРµРєРѕСЂРµРєС‚РЅР° РєС–Р»СЊРєС–СЃС‚СЊ');
     }
 
     if (
       input.operationType !== 'correction' &&
       quantity <= 0
     ) {
-      throw new BadRequestException('Кількість має бути більше 0');
+      throw new BadRequestException('РљС–Р»СЊРєС–СЃС‚СЊ РјР°С” Р±СѓС‚Рё Р±С–Р»СЊС€Рµ 0');
     }
 
     if (!input.source && !input.destination) {
       throw new BadRequestException(
-        'Потрібно вказати джерело або отримувача',
+        'РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РґР¶РµСЂРµР»Рѕ Р°Р±Рѕ РѕС‚СЂРёРјСѓРІР°С‡Р°',
       );
     }
+  }
+
+  private getSingleResource(
+    resources: DroneStockOperationRequest['resources'],
+  ): DroneStockResourceRef {
+    if (resources.length !== 1) {
+      throw new BadRequestException(
+        'DroneStockEngineService РїС–РґС‚СЂРёРјСѓС” РѕРґРёРЅ СЂРµСЃСѓСЂСЃ РЅР° РѕРїРµСЂР°С†С–СЋ',
+      );
+    }
+
+    return resources[0];
   }
 
   private async validateStorage(
@@ -244,18 +265,18 @@ export class DroneStockEngineService {
       return;
     }
 
-    if (storage.storageType === 'depot') {
+    if (storage.type === 'depot') {
       const depot = await manager.findOne(Depot, {
-        where: { id: storage.storageId },
+        where: { id: storage.id },
       });
 
       if (!depot) {
-        throw new NotFoundException('Склад БпЛА не знайдено');
+        throw new NotFoundException('РЎРєР»Р°Рґ Р‘РїР›Рђ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
       }
 
       if (depot.depotType !== 'drone_depot') {
         throw new BadRequestException(
-          'Ресурси БпЛА дозволені тільки на складах БпЛА',
+          'Р РµСЃСѓСЂСЃРё Р‘РїР›Рђ РґРѕР·РІРѕР»РµРЅС– С‚С–Р»СЊРєРё РЅР° СЃРєР»Р°РґР°С… Р‘РїР›Рђ',
         );
       }
 
@@ -263,12 +284,12 @@ export class DroneStockEngineService {
     }
 
     const position = await manager.findOne(AirAssetPosition, {
-      where: { id: storage.storageId },
+      where: { id: storage.id },
     });
 
     if (!position) {
       throw new NotFoundException(
-        'Розрахунок повітряних засобів не знайдено',
+        'Р РѕР·СЂР°С…СѓРЅРѕРє РїРѕРІС–С‚СЂСЏРЅРёС… Р·Р°СЃРѕР±С–РІ РЅРµ Р·РЅР°Р№РґРµРЅРѕ',
       );
     }
   }

@@ -294,7 +294,7 @@ describe('ExecutionEngineService', () => {
       expect.objectContaining({
         idempotencyKey: `execution:${record.id}`,
         operationType: 'write_off',
-        fromDepotId: 'depot-1',
+        source: { type: 'depot', id: 'depot-1' },
         resources: [
           expect.objectContaining({
             resourceType: 'shell',

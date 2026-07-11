@@ -6,7 +6,6 @@ import type { AuthUser } from '../auth/auth-user.types';
 import { DroneStockEngineService } from '../stock-engine/drone-stock-engine.service';
 import type {
   DroneStockOperationRequest,
-  DroneStockResourceType,
   DroneStorageRef,
 } from '../stock-engine/drone-stock-engine.types';
 import { AirAssetDroneStock } from './air-asset-drone-stock.entity';
@@ -55,9 +54,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'receipt',
         movementType: 'external_supply',
-        resourceType: 'drone',
-        resourceId: data.droneModelId,
-        quantity: this.normalizeIntegerQuantity(data.quantity, false),
+        resources: [
+          {
+            resourceType: 'drone',
+            resourceId: data.droneModelId,
+            quantity: this.normalizeIntegerQuantity(data.quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         destination: this.depotRef(data.depotId),
         comment: this.normalizeComment(data.comment),
       },
@@ -80,9 +84,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'receipt',
         movementType: 'external_supply',
-        resourceType: 'warhead',
-        resourceId: data.warheadTypeId,
-        quantity: this.normalizeWarheadQuantity(warheadType, data.quantity, false),
+        resources: [
+          {
+            resourceType: 'warhead',
+            resourceId: data.warheadTypeId,
+            quantity: this.normalizeWarheadQuantity(warheadType, data.quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         destination: this.depotRef(data.depotId),
         comment: this.normalizeComment(data.comment),
       },
@@ -105,9 +114,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'issue',
         movementType: 'depot_to_air_asset',
-        resourceType: 'drone',
-        resourceId: data.droneModelId,
-        quantity: this.normalizeIntegerQuantity(data.quantity, false),
+        resources: [
+          {
+            resourceType: 'drone',
+            resourceId: data.droneModelId,
+            quantity: this.normalizeIntegerQuantity(data.quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         source: this.depotRef(data.depotId),
         destination: this.airAssetRef(data.airAssetPositionId),
         comment: this.normalizeComment(data.comment),
@@ -134,9 +148,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'issue',
         movementType: 'depot_to_air_asset',
-        resourceType: 'warhead',
-        resourceId: data.warheadTypeId,
-        quantity: this.normalizeWarheadQuantity(warheadType, data.quantity, false),
+        resources: [
+          {
+            resourceType: 'warhead',
+            resourceId: data.warheadTypeId,
+            quantity: this.normalizeWarheadQuantity(warheadType, data.quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         source: this.depotRef(data.depotId),
         destination: this.airAssetRef(data.airAssetPositionId),
         comment: this.normalizeComment(data.comment),
@@ -169,9 +188,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'correction',
         movementType: 'correction',
-        resourceType: 'drone',
-        resourceId: data.droneModelId,
-        quantity: this.normalizeIntegerQuantity(data.quantity, true),
+        resources: [
+          {
+            resourceType: 'drone',
+            resourceId: data.droneModelId,
+            quantity: this.normalizeIntegerQuantity(data.quantity, true),
+            accountingUnit: 'piece',
+          },
+        ],
         destination: this.airAssetRef(airAssetPositionId),
         comment: this.normalizeComment(data.comment),
       },
@@ -203,9 +227,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'correction',
         movementType: 'correction',
-        resourceType: 'warhead',
-        resourceId: data.warheadTypeId,
-        quantity: this.normalizeWarheadQuantity(warheadType, data.quantity, true),
+        resources: [
+          {
+            resourceType: 'warhead',
+            resourceId: data.warheadTypeId,
+            quantity: this.normalizeWarheadQuantity(warheadType, data.quantity, true),
+            accountingUnit: 'piece',
+          },
+        ],
         destination: this.airAssetRef(airAssetPositionId),
         comment: this.normalizeComment(data.comment),
       },
@@ -234,9 +263,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'return',
         movementType: 'air_asset_to_depot',
-        resourceType: 'drone',
-        resourceId: droneModelId,
-        quantity: this.normalizeIntegerQuantity(quantity, false),
+        resources: [
+          {
+            resourceType: 'drone',
+            resourceId: droneModelId,
+            quantity: this.normalizeIntegerQuantity(quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         source: this.airAssetRef(airAssetPositionId),
         destination: this.depotRef(depotId),
         comment: null,
@@ -263,9 +297,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'return',
         movementType: 'air_asset_to_depot',
-        resourceType: 'warhead',
-        resourceId: warheadTypeId,
-        quantity: this.normalizeWarheadQuantity(warheadType, quantity, false),
+        resources: [
+          {
+            resourceType: 'warhead',
+            resourceId: warheadTypeId,
+            quantity: this.normalizeWarheadQuantity(warheadType, quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         source: this.airAssetRef(airAssetPositionId),
         destination: this.depotRef(depotId),
         comment: null,
@@ -292,9 +331,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'write_off',
         movementType: 'write_off',
-        resourceType: 'drone',
-        resourceId: droneModelId,
-        quantity: this.normalizeIntegerQuantity(quantity, false),
+        resources: [
+          {
+            resourceType: 'drone',
+            resourceId: droneModelId,
+            quantity: this.normalizeIntegerQuantity(quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         source: this.airAssetRef(airAssetPositionId),
         comment: this.normalizeComment(comment),
       },
@@ -320,9 +364,14 @@ export class DroneTransferService {
         idempotencyKey: this.resolveIdempotencyKey(options),
         operationType: 'write_off',
         movementType: 'write_off',
-        resourceType: 'warhead',
-        resourceId: warheadTypeId,
-        quantity: this.normalizeWarheadQuantity(warheadType, quantity, false),
+        resources: [
+          {
+            resourceType: 'warhead',
+            resourceId: warheadTypeId,
+            quantity: this.normalizeWarheadQuantity(warheadType, quantity, false),
+            accountingUnit: 'piece',
+          },
+        ],
         source: this.airAssetRef(airAssetPositionId),
         comment: this.normalizeComment(comment),
       },
@@ -427,10 +476,10 @@ export class DroneTransferService {
   }
 
   private depotRef(storageId: string): DroneStorageRef {
-    return { storageType: 'depot', storageId };
+    return { type: 'depot', id: storageId };
   }
 
   private airAssetRef(storageId: string): DroneStorageRef {
-    return { storageType: 'air_asset', storageId };
+    return { type: 'air_asset', id: storageId };
   }
 }
