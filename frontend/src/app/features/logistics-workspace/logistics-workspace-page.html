@@ -1,0 +1,290 @@
+<section class="logistics-workspace">
+  <header class="workspace-header">
+    <div>
+      <span class="eyebrow">ЄВКЛІДА · ЛОГІСТИКА</span>
+      <h1>Оперативні залишки</h1>
+      <p>Склади, ресурси та історія руху в одному робочому місці.</p>
+    </div>
+
+    <nav class="workspace-actions">
+      <a routerLink="/stock-movements">Передача БК</a>
+      <a routerLink="/drone-logistics">Операції БпЛА</a>
+      <a routerLink="/planned-trips">Планові поїздки</a>
+    </nav>
+  </header>
+
+  <div class="mode-switcher" role="tablist" aria-label="Тип логістики">
+    <button
+      *ngFor="let item of ['ammunition', 'drone', 'warhead', 'all']"
+      type="button"
+      role="tab"
+      [class.active]="mode === item"
+      [attr.aria-selected]="mode === item"
+      (click)="setMode($any(item))"
+    >
+      {{ modeLabel($any(item)) }}
+    </button>
+  </div>
+
+  <p class="error-banner" *ngIf="errorMessage">
+    {{ errorMessage }}
+    <button type="button" (click)="retry()">Повторити</button>
+  </p>
+
+  <div class="workspace-grid">
+    <aside class="panel depot-panel">
+      <div class="panel-title">
+        <div>
+          <span>Сховище</span>
+          <strong>
+            {{
+              mode === 'ammunition'
+                ? 'Склади боєприпасів'
+                : mode === 'drone'
+                  ? 'Склади БпЛА'
+                  : mode === 'warhead'
+                    ? 'Склади бойових частин'
+                    : 'Усі склади'
+            }}
+          </strong>
+        </div>
+        <span class="count-badge">{{ visibleDepotRows.length }}</span>
+      </div>
+
+      <div class="empty-state" *ngIf="loadingDepots">Завантаження складів…</div>
+
+      <div class="depot-tree" *ngIf="!loadingDepots">
+        <button
+          *ngFor="let row of visibleDepotRows; trackBy: trackDepot"
+          type="button"
+          class="depot-row"
+          [class.active]="selectedDepotId === row.depot.id"
+          [style.padding-left.px]="12 + row.level * 18"
+          (click)="selectDepot(row.depot)"
+        >
+          <span
+            class="tree-toggle"
+            [class.hidden]="!row.hasChildren"
+            (click)="toggleDepot(row.depot.id, $event)"
+          >
+            {{ expandedDepotIds.has(row.depot.id) ? '−' : '+' }}
+          </span>
+
+          <span class="depot-icon" aria-hidden="true">
+            {{ row.depot.depotType === 'drone_depot' ? 'AIR' : '▣' }}
+          </span>
+
+          <span class="depot-copy">
+            <strong>{{ row.depot.name }}</strong>
+            <small>{{ depotTypeLabel(row.depot.depotType) }}</small>
+          </span>
+        </button>
+
+        <div class="empty-state" *ngIf="visibleDepotRows.length === 0">
+          Для цього режиму складів немає.
+        </div>
+      </div>
+    </aside>
+
+    <main class="panel resource-panel">
+      <div class="selected-depot">
+        <div>
+          <span>Обраний склад</span>
+          <h2>{{ selectedDepot?.name || 'Не вибрано' }}</h2>
+          <small *ngIf="selectedDepot">
+            {{ depotTypeLabel(selectedDepot.depotType) }}
+          </small>
+        </div>
+
+        <div class="depot-summary" *ngIf="inventory">
+          <span>
+            <b>{{ filteredResources.length }}</b>
+            позицій
+          </span>
+          <span>
+            <b>{{ inventory.totals.nonZeroPositions }}</b>
+            ненульових
+          </span>
+        </div>
+      </div>
+
+      <div class="resource-toolbar">
+        <label class="search-control">
+          <span>Пошук</span>
+          <input
+            type="search"
+            [(ngModel)]="search"
+            placeholder="Назва або тип ресурсу"
+          />
+        </label>
+
+        <label class="zero-toggle">
+          <input
+            type="checkbox"
+            [(ngModel)]="includeZero"
+            (change)="onIncludeZeroChange()"
+          />
+          Показувати нульові
+        </label>
+      </div>
+
+      <div class="empty-state" *ngIf="loadingInventory">
+        Завантаження залишків…
+      </div>
+
+      <ng-container *ngIf="!loadingInventory">
+        <section
+          class="resource-group"
+          *ngFor="let group of resourceGroups"
+        >
+          <header>
+            <h3>{{ group.label }}</h3>
+            <span>{{ group.items.length }}</span>
+          </header>
+
+          <div class="resource-list">
+            <button
+              *ngFor="let resource of group.items; trackBy: trackResource"
+              type="button"
+              class="resource-row"
+              [class.active]="
+                selectedResource?.resourceType === resource.resourceType &&
+                selectedResource?.resourceId === resource.resourceId
+              "
+              [class.zero]="resource.quantity === 0"
+              (click)="selectResource(resource)"
+            >
+              <span class="resource-kind">
+                {{ resourceTypeLabel(resource.resourceType) }}
+              </span>
+
+              <strong>{{ resource.name }}</strong>
+
+              <span class="movement-time">
+                <ng-container *ngIf="resource.lastMovementAt; else noMovement">
+                  {{ movementLabel(resource.lastMovementType) }}
+                  ·
+                  {{ resource.lastMovementAt | date: 'dd.MM HH:mm' }}
+                </ng-container>
+                <ng-template #noMovement>Рухів немає</ng-template>
+              </span>
+
+              <span class="resource-quantity">
+                <b>{{ resource.quantity | number: '1.0-3' }}</b>
+                {{ accountingUnitLabel(resource) }}
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <div class="empty-state" *ngIf="resourceGroups.length === 0">
+          На цьому складі немає ресурсів у вибраному режимі.
+        </div>
+      </ng-container>
+    </main>
+
+    <aside class="panel detail-panel">
+      <ng-container *ngIf="selectedResource; else selectPrompt">
+        <div class="detail-header">
+          <span>{{ resourceTypeLabel(selectedResource.resourceType) }}</span>
+          <h2>{{ selectedResource.name }}</h2>
+        </div>
+
+        <div class="quantity-cards">
+          <article>
+            <span>Залишок</span>
+            <strong>
+              {{ selectedResource.quantity | number: '1.0-3' }}
+              <small>{{ accountingUnitLabel(selectedResource) }}</small>
+            </strong>
+          </article>
+
+          <article>
+            <span>Доступно</span>
+            <strong>
+              {{ selectedResource.availableQuantity | number: '1.0-3' }}
+              <small>{{ accountingUnitLabel(selectedResource) }}</small>
+            </strong>
+          </article>
+
+          <article>
+            <span>Зарезервовано</span>
+            <strong>
+              {{ selectedResource.reservedQuantity | number: '1.0-3' }}
+              <small>{{ accountingUnitLabel(selectedResource) }}</small>
+            </strong>
+          </article>
+        </div>
+
+        <div class="last-movement">
+          <span>Останній рух</span>
+          <strong>{{ movementLabel(selectedResource.lastMovementType) }}</strong>
+          <small>
+            {{
+              selectedResource.lastMovementAt
+                ? (selectedResource.lastMovementAt | date: 'dd.MM.yyyy HH:mm')
+                : 'Рухів немає'
+            }}
+          </small>
+        </div>
+
+        <section class="history-section">
+          <header>
+            <h3>Історія позиції</h3>
+            <span>{{ history.length }}</span>
+          </header>
+
+          <div class="empty-state compact" *ngIf="loadingHistory">
+            Завантаження…
+          </div>
+
+          <div
+            class="history-row"
+            *ngFor="let item of history; trackBy: trackHistory"
+          >
+            <span
+              class="history-quantity"
+              [class.in]="historyDirection(item) === 'in'"
+              [class.out]="historyDirection(item) === 'out'"
+            >
+              {{ signedQuantity(item) }}
+            </span>
+
+            <span class="history-copy">
+              <strong>{{ movementLabel(item.movementType) }}</strong>
+              <small>
+                {{
+                  historyDate(item)
+                    ? (historyDate(item) | date: 'dd.MM.yyyy HH:mm')
+                    : '—'
+                }}
+                <ng-container *ngIf="item.documentNumber">
+                  · {{ item.documentNumber }}
+                </ng-container>
+              </small>
+              <small *ngIf="item.comment">{{ item.comment }}</small>
+            </span>
+          </div>
+
+          <div
+            class="empty-state compact"
+            *ngIf="!loadingHistory && history.length === 0"
+          >
+            Історія для позиції відсутня.
+          </div>
+        </section>
+      </ng-container>
+
+      <ng-template #selectPrompt>
+        <div class="select-prompt">
+          <span aria-hidden="true">◎</span>
+          <h3>Оберіть позицію</h3>
+          <p>
+            Праворуч з’являться фактичний залишок, остання операція та історія
+            руху.
+          </p>
+        </div>
+      </ng-template>
+    </aside>
+  </div>
+</section>
