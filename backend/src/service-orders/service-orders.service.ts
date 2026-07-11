@@ -20,6 +20,7 @@ import { DepotFuzeStock } from '../depot-fuze-stock/depot-fuze-stock.entity';
 import { DepotPrimerStock } from '../depot-primer-stock/depot-primer-stock.entity';
 import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { EventLogsService } from '../event-logs/event-logs.service';
+import { ExecutionRecord } from '../execution/execution-record.entity';
 import { FirePosition } from '../fire-positions/fire-position.entity';
 import { Fuze } from '../fuzes/fuze.entity';
 import { Primer } from '../primers/primer.entity';
@@ -89,6 +90,8 @@ export class ServiceOrdersService {
   constructor(
     @InjectRepository(ServiceOrder)
     private readonly repository: Repository<ServiceOrder>,
+    @InjectRepository(ExecutionRecord)
+    private readonly executionRecordsRepository: Repository<ExecutionRecord>,
     private readonly suggestionsService: ServiceOrderSuggestionsService,
     private readonly realtimeEvents: RealtimeEventsService,
     private readonly accessScope: AccessScopeService,
@@ -791,9 +794,25 @@ async selectAirAsset(
   async complete(
     id: string,
     body: CompleteServiceOrderDto,
-    user: AuthUser,
+  user: AuthUser,
   ): Promise<ServiceOrder> {
     const order = await this.findOne(id, user);
+    const executionRecords = await this.executionRecordsRepository.find({
+      where: { serviceOrderId: id },
+      relations: {
+        artillery: {
+          charges: true,
+        },
+      },
+      order: {
+        createdAt: 'ASC',
+      },
+    });
+
+    if (executionRecords.length > 0) {
+      return this.completeFromExecutionJournal(order, executionRecords, body, user);
+    }
+
     const shotConfigurationId =
       body.actualShotConfigurationId ?? order.selectedShotConfigurationId;
 
@@ -802,6 +821,149 @@ async selectAirAsset(
     }
 
     return this.completeLegacy(id, body, user);
+  }
+
+  private async completeFromExecutionJournal(
+    order: ServiceOrder,
+    executionRecords: ExecutionRecord[],
+    body: CompleteServiceOrderDto,
+    user: AuthUser,
+  ): Promise<ServiceOrder> {
+    await this.ensureCanExecuteOrder(order, user);
+
+    const isFirstCompletion = order.status === 'in_progress';
+    const isEditingCompleted = order.status === 'completed';
+
+    if (!isFirstCompletion && !isEditingCompleted) {
+      throw new BadRequestException(
+        'Завершити або редагувати можна тільки завдання в роботі чи завершене завдання',
+      );
+    }
+
+    if (isEditingCompleted) {
+      this.assertCanEdit(order);
+    }
+
+    if (!order.selectedFirePositionId) {
+      throw new BadRequestException(
+        'Неможливо завершити завдання без обраної ВП',
+      );
+    }
+
+    const startedAt = new Date(body.startedAt);
+    const completedAt = new Date(body.completedAt);
+
+    if (
+      Number.isNaN(startedAt.getTime()) ||
+      Number.isNaN(completedAt.getTime())
+    ) {
+      throw new BadRequestException('Некоректна дата початку або завершення');
+    }
+
+    if (completedAt < startedAt) {
+      throw new BadRequestException(
+        'Дата завершення не може бути раніше дати початку',
+      );
+    }
+
+    const activeExecutionRecords = executionRecords.filter(
+      (item) => item.status !== 'reversed',
+    );
+    const postedExecutionRecords = activeExecutionRecords.filter(
+      (item) => item.status === 'posted',
+    );
+    const draftConsumableRecords = activeExecutionRecords.filter((item) =>
+      item.status === 'draft' && this.isConsumableExecutionRecord(item),
+    );
+
+    if (postedExecutionRecords.length === 0) {
+      throw new BadRequestException(
+        'Неможливо завершити ВГЗ без хоча б одного проведеного запису журналу виконання',
+      );
+    }
+
+    if (draftConsumableRecords.length > 0) {
+      throw new BadRequestException(
+        'Неможливо завершити ВГЗ, поки існують непроведені витратні записи журналу виконання',
+      );
+    }
+
+    const actualQuantity = this.roundStockQuantity(
+      postedExecutionRecords.reduce(
+        (sum, item) => sum + Number(item.quantity ?? 0),
+        0,
+      ),
+    );
+
+    const savedOrder = await this.dataSource.transaction(async (manager) => {
+      const lockedOrder = await manager.findOne(ServiceOrder, {
+        where: { id: order.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedOrder) {
+        throw new NotFoundException('Вогневе завдання не знайдено');
+      }
+
+      await this.ensureCanExecuteOrder(lockedOrder, user);
+
+      const firstCompletion = lockedOrder.status === 'in_progress';
+      const editingCompleted = lockedOrder.status === 'completed';
+
+      if (!firstCompletion && !editingCompleted) {
+        throw new BadRequestException(
+          'Завершити або редагувати можна тільки завдання в роботі чи завершене завдання',
+        );
+      }
+
+      if (editingCompleted) {
+        this.assertCanEdit(lockedOrder);
+      }
+
+      const firePosition = await manager.findOne(FirePosition, {
+        where: { id: lockedOrder.selectedFirePositionId! },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!firePosition) {
+        throw new BadRequestException('Вогневу позицію не знайдено');
+      }
+
+      lockedOrder.status = 'completed';
+      lockedOrder.startedAt = startedAt;
+      lockedOrder.completedAt = completedAt;
+      lockedOrder.actualQuantity = actualQuantity;
+      lockedOrder.resultType = body.resultType;
+      lockedOrder.resultComment = body.resultComment?.trim() || null;
+      lockedOrder.completedByUserId = user.sub;
+
+      const saved = await manager.save(ServiceOrder, lockedOrder);
+
+      if (firstCompletion) {
+        firePosition.readinessStatus = 'ready';
+        firePosition.completedVgzCount =
+          Number(firePosition.completedVgzCount ?? 0) + 1;
+        await manager.save(FirePosition, firePosition);
+      }
+
+      return saved;
+    });
+
+    await this.writeOrderEvent(
+      savedOrder,
+      user,
+      'completed',
+      'Заявку завершено',
+    );
+
+    this.notifyRealtime(savedOrder, 'completed', [
+      'missions',
+      'map',
+      'analytics',
+      'events',
+    ]);
+
+    return savedOrder;
   }
 
   private async completeCanonical(
@@ -2166,6 +2328,11 @@ async selectAirAsset(
       );
     }
   }
+
+  private isConsumableExecutionRecord(record: ExecutionRecord): boolean {
+    return record.executionType === 'artillery' || record.artillery !== null;
+  }
+
   private async writeOrderEvent(
     order: ServiceOrder,
     user: AuthUser,

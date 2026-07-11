@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Charge } from '../charges/charge.entity';
 import { Shell } from '../shells/shell.entity';
-import { Zone } from 'src/zones/zone.entity';
+import { Zone } from '../zones/zone.entity';
 
 @Entity('shell_compatible_charges')
 export class ShellCompatibleCharge {
