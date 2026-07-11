@@ -6,8 +6,9 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Depot } from '../depots/depot.entity';
 import { AirAssetPosition } from '../air-assets/air-asset-position.entity';
+import { Depot } from '../depots/depot.entity';
+import { StockOperation } from '../stock-engine/stock-operation.entity';
 import { DroneModel } from './drone-model.entity';
 import { DroneWarheadType } from './drone-warhead-type.entity';
 
@@ -72,6 +73,24 @@ export class DroneStockMovement {
 
   @Column({ name: 'created_by_id', type: 'uuid', nullable: true })
   createdById: string | null;
+
+  @Column({ name: 'movement_group_id', type: 'uuid', nullable: true })
+  movementGroupId: string | null;
+
+  @Column({ name: 'stock_operation_id', type: 'uuid', nullable: true })
+  stockOperationId: string | null;
+
+  @ManyToOne(() => StockOperation, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'stock_operation_id' })
+  stockOperation: StockOperation | null;
+
+  @Column({
+    name: 'idempotency_key',
+    type: 'varchar',
+    length: 160,
+    nullable: true,
+  })
+  idempotencyKey: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

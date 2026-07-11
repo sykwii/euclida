@@ -43,3 +43,4 @@ export class ExecutionRecordArtillery {
   @OneToMany(() => ExecutionRecordCharge, (charge) => charge.artillery)
   charges!: ExecutionRecordCharge[];
 }
+

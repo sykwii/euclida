@@ -9,6 +9,7 @@ import {
   ValueTransformer,
 } from 'typeorm';
 import { ServiceOrder } from '../service-orders/service-order.entity';
+import { StockOperation } from '../stock-engine/stock-operation.entity';
 import { ExecutionRecordArtillery } from './execution-record-artillery.entity';
 
 const numericTransformer: ValueTransformer = {
@@ -92,6 +93,10 @@ export class ExecutionRecord {
 
   @Column({ name: 'stock_operation_id', type: 'uuid', nullable: true })
   stockOperationId!: string | null;
+
+  @ManyToOne(() => StockOperation, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'stock_operation_id' })
+  stockOperation!: StockOperation | null;
 
   @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
   postedAt!: Date | null;

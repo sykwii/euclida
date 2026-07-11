@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import type { AuthUser } from '../auth/auth-user.types';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { MainScopeGuard } from '../auth/main-scope.guard';
 import { WriteAccessGuard } from '../auth/write-access.guard';
@@ -78,26 +80,38 @@ export class DroneLogisticsController {
 
   @UseGuards(WriteAccessGuard)
   @Post('depot-drone-stock/add')
-  addDroneToDepot(@Body() body: AddDroneStockDto) {
-    return this.service.addDroneToDepot(body);
+  addDroneToDepot(
+    @Body() body: AddDroneStockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.addDroneToDepot(body, user);
   }
 
   @UseGuards(WriteAccessGuard)
   @Post('depot-warhead-stock/add')
-  addWarheadToDepot(@Body() body: AddWarheadStockDto) {
-    return this.service.addWarheadToDepot(body);
+  addWarheadToDepot(
+    @Body() body: AddWarheadStockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.addWarheadToDepot(body, user);
   }
 
   @UseGuards(WriteAccessGuard)
   @Post('transfer-drone-to-air-asset')
-  transferDroneToAirAsset(@Body() body: TransferDroneToAirAssetDto) {
-    return this.service.transferDroneToAirAsset(body);
+  transferDroneToAirAsset(
+    @Body() body: TransferDroneToAirAssetDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.transferDroneToAirAsset(body, user);
   }
 
   @UseGuards(WriteAccessGuard)
   @Post('transfer-warhead-to-air-asset')
-  transferWarheadToAirAsset(@Body() body: TransferWarheadToAirAssetDto) {
-    return this.service.transferWarheadToAirAsset(body);
+  transferWarheadToAirAsset(
+    @Body() body: TransferWarheadToAirAssetDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.transferWarheadToAirAsset(body, user);
   }
 
   @UseGuards(WriteAccessGuard)
@@ -105,8 +119,9 @@ export class DroneLogisticsController {
   correctAirAssetDroneStock(
     @Param('airAssetId') airAssetId: string,
     @Body() body: CorrectAirAssetDroneStockDto,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.service.correctAirAssetDroneStock(airAssetId, body);
+    return this.service.correctAirAssetDroneStock(airAssetId, body, user);
   }
 
   @UseGuards(WriteAccessGuard)
@@ -114,7 +129,8 @@ export class DroneLogisticsController {
   correctAirAssetWarheadStock(
     @Param('airAssetId') airAssetId: string,
     @Body() body: CorrectAirAssetWarheadStockDto,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.service.correctAirAssetWarheadStock(airAssetId, body);
+    return this.service.correctAirAssetWarheadStock(airAssetId, body, user);
   }
 }
