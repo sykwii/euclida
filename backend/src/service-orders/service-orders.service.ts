@@ -119,7 +119,6 @@ export class ServiceOrdersService {
           shell: true,
           fuze: true,
           primer: true,
-          zone: true,
           charges: {
             charge: true,
           },
@@ -187,7 +186,6 @@ export class ServiceOrdersService {
           shell: true,
           fuze: true,
           primer: true,
-          zone: true,
           charges: {
             charge: true,
           },
@@ -1045,7 +1043,7 @@ async selectAirAsset(
         !configuration.id ||
         !configuration.fuzeId ||
         !configuration.primerId ||
-        !configuration.zoneId ||
+        configuration.zoneNumber === null ||
         configuration.charges.length === 0
       ) {
         throw new BadRequestException(
@@ -1518,7 +1516,6 @@ async selectAirAsset(
           shell: true,
           fuze: true,
           primer: true,
-          zone: true,
           charges: {
             charge: true,
           },
@@ -1540,7 +1537,6 @@ async selectAirAsset(
         .leftJoinAndSelect('configuration.shell', 'shell')
         .leftJoinAndSelect('configuration.fuze', 'fuze')
         .leftJoinAndSelect('configuration.primer', 'primer')
-        .leftJoinAndSelect('configuration.zone', 'zone')
         .leftJoinAndSelect('configuration.charges', 'charges')
         .leftJoinAndSelect('charges.charge', 'charge')
         .where('configuration.shellId = :shellId', { shellId: criteria.shellId })
@@ -1604,7 +1600,7 @@ async selectAirAsset(
       primerId: configuration.primerId,
       primerMarking: configuration.primer?.marking ?? null,
       zoneId: configuration.zoneId,
-      zoneNumber: configuration.zone?.zoneNumber ?? null,
+      zoneNumber: configuration.zoneNumber ?? null,
       maxRangeM: Number(configuration.maxRangeM),
       charges: configuration.charges
         .slice()

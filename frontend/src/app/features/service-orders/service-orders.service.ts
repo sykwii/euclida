@@ -46,6 +46,7 @@ export interface ServiceOrderSuggestionVariant {
   shellId: string;
   chargeId: string;
   zoneId: string | null;
+  zoneNumber: number | null;
   fuzeId: string | null;
   primerId: string | null;
   maxRangeM: number;
@@ -71,13 +72,6 @@ export interface ServiceOrderSuggestionVariant {
   primer?: {
     id: string;
     marking: string;
-  } | null;
-
-  zone: {
-    id: string;
-    zoneNumber: number;
-    distanceFromM: number;
-    distanceToM: number;
   } | null;
 
   charges: Array<{
@@ -169,6 +163,7 @@ export interface ServiceOrderSuggestion {
   completedVgzCount: number;
   variants: ServiceOrderSuggestionVariant[];
   payloadVariants?: ServiceOrderAirPayloadVariant[];
+  rejectionReasons?: string[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -207,6 +202,7 @@ export class ServiceOrdersService {
       shellId?: string;
       chargeId?: string;
       zoneId?: string | null;
+      zoneNumber?: number | null;
     },
   ): Observable<ServiceOrder> {
     return this.api.post<ServiceOrder>(`/service-orders/${id}/select-position`, body);

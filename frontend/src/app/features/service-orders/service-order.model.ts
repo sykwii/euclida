@@ -108,6 +108,7 @@ linkedAirTaskId?: string | null;
     id: string;
     name: string;
     maxRangeM: number;
+    zoneNumber?: number | null;
     fuzeId?: string | null;
     primerId?: string | null;
     shell?: {
@@ -122,16 +123,11 @@ linkedAirTaskId?: string | null;
       id: string;
       marking: string;
     } | null;
-    zone?: {
-      id: string;
-      zoneNumber: number;
-      distanceFromM: number;
-      distanceToM: number;
-    } | null;
     charges: Array<{
       chargeId: string;
       quantityPerShot: number;
       sortOrder: number;
+      accountingUnit?: 'piece' | 'module';
       charge: {
         id: string;
         marking: string;

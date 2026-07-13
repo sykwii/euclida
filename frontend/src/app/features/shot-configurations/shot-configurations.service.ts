@@ -6,6 +6,7 @@ import { ShotConfiguration } from './shot-configuration.model';
 export interface ShotConfigurationChargeRequest {
   chargeId: string;
   quantityPerShot: number;
+  accountingUnit: 'piece' | 'module';
   sortOrder?: number;
 }
 
@@ -15,7 +16,7 @@ export interface SaveShotConfigurationRequest {
   shellId: string;
   fuzeId?: string | null;
   primerId?: string | null;
-  zoneId?: string | null;
+  zoneNumber?: number | null;
   maxRangeM: number;
   isActive?: boolean;
   note?: string | null;

@@ -1,4 +1,4 @@
-﻿<div class="core2-orders orders-page">
+<div class="core2-orders orders-page">
   <section class="co-board">
     <header class="co-board-header">
       <div>
@@ -384,7 +384,13 @@
 
               <div class="co-empty" *ngIf="!suggestionsLoading && suggestions.length === 0">
                 <b>Доступні виконавці відсутні</b>
-                <span>Перевірте готовність ВП/БпЛА, залишки БК/БЧ та допустиму дальність.</span>
+                <span>
+                  Перевірте готовність ВП, залишки БК, дальність і наявність активного комплекту пострілу
+                  для моделі озброєння.
+                </span>
+                <button type="button" class="co-btn compact" (click)="openShotConfigurations()">
+                  Відкрити комплекти пострілу
+                </button>
               </div>
 
               <div class="co-candidate-list" *ngIf="!suggestionsLoading && suggestions.length > 0">
@@ -428,8 +434,8 @@
                   >
                     <div class="co-best-variant">
                       <b>{{ best.shotConfigurationName }}</b>
-                      <span>{{ best.shell.marking }} + {{ best.charge.marking }}</span>
-                      <span>{{ getZoneLabel(best.zone) }}</span>
+                      <span>{{ getVariantComposition(best) }}</span>
+                      <span>{{ getZoneLabel(best.zoneNumber) }}</span>
                       <span>запас {{ best.rangeReserveM | number: '1.0-0' }} м</span>
                       <span>залишок {{ best.availableQuantity | number: '1.0-0' }}</span>
 
@@ -481,8 +487,8 @@
                     >
                       <div class="co-variant-main">
                         <b>{{ variant.shotConfigurationName }}</b>
-                        <span>{{ variant.shell.marking }} + {{ variant.charge.marking }}</span>
-                        <span>{{ getZoneLabel(variant.zone) }}</span>
+                        <span>{{ getVariantComposition(variant) }}</span>
+                        <span>{{ getZoneLabel(variant.zoneNumber) }}</span>
                       </div>
 
                       <div class="co-variant-metrics">
@@ -1226,5 +1232,4 @@
     </section>
   </div>
 </div>
-
 

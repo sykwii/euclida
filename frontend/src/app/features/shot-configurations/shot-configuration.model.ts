@@ -2,6 +2,7 @@ export interface ShotConfigurationChargeComponent {
   id?: string;
   chargeId: string;
   quantityPerShot: number;
+  accountingUnit: 'piece' | 'module';
   sortOrder: number;
   charge: {
     id: string;
@@ -19,6 +20,7 @@ export interface ShotConfiguration {
   fuzeId: string | null;
   primerId: string | null;
   zoneId: string | null;
+  zoneNumber: number | null;
   maxRangeM: number;
   isActive: boolean;
   note: string | null;
@@ -39,12 +41,6 @@ export interface ShotConfiguration {
   primer: {
     id: string;
     marking: string;
-  } | null;
-  zone: {
-    id: string;
-    zoneNumber: number;
-    distanceFromM: number;
-    distanceToM: number;
   } | null;
   charges: ShotConfigurationChargeComponent[];
 }

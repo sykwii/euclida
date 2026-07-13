@@ -1,13 +1,16 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { WeaponSystemsService } from './weapon-systems.service';
 
-import { WeaponSystems } from './weapon-systems';
-
-describe('WeaponSystems', () => {
-  let service: WeaponSystems;
+describe('WeaponSystemsService', () => {
+  let service: WeaponSystemsService;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
-    service = TestBed.inject(WeaponSystems);
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    service = TestBed.inject(WeaponSystemsService);
   });
 
   it('should be created', () => {

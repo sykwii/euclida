@@ -12,7 +12,6 @@ import { Fuze } from '../fuzes/fuze.entity';
 import { Primer } from '../primers/primer.entity';
 import { Shell } from '../shells/shell.entity';
 import { WeaponModel } from '../weapon-models/weapon-model.entity';
-import { Zone } from '../zones/zone.entity';
 import { ShotConfigurationCharge } from './shot-configuration-charge.entity';
 
 @Entity('shot_configurations')
@@ -51,12 +50,11 @@ export class ShotConfiguration {
   @JoinColumn({ name: 'primer_id' })
   primer!: Primer | null;
 
+  @Column({ name: 'zone_number', type: 'int', nullable: true })
+  zoneNumber!: number | null;
+
   @Column({ name: 'zone_id', type: 'uuid', nullable: true })
   zoneId!: string | null;
-
-  @ManyToOne(() => Zone, { nullable: true })
-  @JoinColumn({ name: 'zone_id' })
-  zone!: Zone | null;
 
   @Column({ name: 'max_range_m', type: 'int' })
   maxRangeM!: number;

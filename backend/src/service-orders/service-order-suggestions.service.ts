@@ -15,7 +15,6 @@ import { Primer } from '../primers/primer.entity';
 import { Shell } from '../shells/shell.entity';
 import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
-import { Zone } from '../zones/zone.entity';
 import { ServiceOrder } from './service-order.entity';
 
 export interface ServiceOrderSuggestionChargeComponent {
@@ -32,6 +31,7 @@ export interface ServiceOrderSuggestionVariant {
   shellId: string;
   chargeId: string;
   zoneId: string | null;
+  zoneNumber: number | null;
   fuzeId: string | null;
   primerId: string | null;
   maxRangeM: number;
@@ -39,11 +39,11 @@ export interface ServiceOrderSuggestionVariant {
   availableQuantity: number;
   shell: Shell;
   charge: Charge;
-  zone: Zone | null;
   fuze: Fuze | null;
   primer: Primer | null;
   charges: ServiceOrderSuggestionChargeComponent[];
   priority: number;
+  rejectionReasons: string[];
 }
 
 export interface ServiceOrderAirPayloadVariant {
@@ -65,6 +65,7 @@ export interface ServiceOrderSuggestion {
   completedVgzCount: number;
   variants: ServiceOrderSuggestionVariant[];
   payloadVariants?: ServiceOrderAirPayloadVariant[];
+  rejectionReasons?: string[];
 }
 
 @Injectable()
@@ -84,6 +85,7 @@ export class ServiceOrderSuggestionsService {
       'accepted',
       'in_progress',
     ];
+    const plannedQuantity = Math.max(Number(order.plannedQuantity || 1), 1);
 
     const positions = await this.dataSource
       .getRepository(FirePosition)
@@ -152,18 +154,16 @@ export class ServiceOrderSuggestionsService {
         position.id,
         position.ammoDepotId,
         distanceM,
+        plannedQuantity,
       );
-
-      if (variants.length === 0) {
-        continue;
-      }
 
       suggestions.push({
         executorType: 'fire_position',
         firePosition: position,
         distanceM,
         completedVgzCount: position.completedVgzCount ?? 0,
-        variants,
+        variants: variants.filter((item) => item.rejectionReasons.length === 0),
+        rejectionReasons: this.collectRejectionReasons(variants),
       });
     }
 
@@ -190,7 +190,7 @@ export class ServiceOrderSuggestionsService {
       const payloadVariants = await this.findCombatDronePayloadVariants(
         asset.id,
         distanceM,
-        Number(order.plannedQuantity || 1),
+        plannedQuantity,
       );
 
       if (payloadVariants.length === 0) {
@@ -238,6 +238,7 @@ export class ServiceOrderSuggestionsService {
     firePositionId: string,
     depotId: string,
     distanceM: number,
+    plannedQuantity: number,
   ): Promise<ServiceOrderSuggestionVariant[]> {
     const weaponSystems = await this.dataSource.getRepository(WeaponSystem).find({
       where: {
@@ -267,7 +268,6 @@ export class ServiceOrderSuggestionsService {
         shell: true,
         fuze: true,
         primer: true,
-        zone: true,
         charges: {
           charge: true,
         },
@@ -313,12 +313,30 @@ export class ServiceOrderSuggestionsService {
     return candidateConfigurations
       .map((configuration) => {
         const primaryCharge = configuration.charges[0];
+        const availableQuantity = this.getAvailableShotsForConfiguration(
+          configuration,
+          shellStock,
+          chargeStock,
+          fuzeStock,
+          primerStock,
+        );
+        const rejectionReasons = this.getConfigurationRejectionReasons(
+          configuration,
+          plannedQuantity,
+          availableQuantity,
+          shellStock,
+          chargeStock,
+          fuzeStock,
+          primerStock,
+        );
+
         return {
           shotConfigurationId: configuration.id,
           shotConfigurationName: configuration.name,
           shellId: configuration.shellId,
           chargeId: primaryCharge.chargeId,
           zoneId: configuration.zoneId,
+          zoneNumber: configuration.zoneNumber,
           fuzeId: configuration.fuzeId,
           primerId: configuration.primerId,
           maxRangeM: Number(configuration.maxRangeM),
@@ -326,30 +344,33 @@ export class ServiceOrderSuggestionsService {
             Number(configuration.maxRangeM) - Math.ceil(distanceM),
             0,
           ),
-          availableQuantity: this.getAvailableShotsForConfiguration(
-            configuration,
-            shellStock,
-            chargeStock,
-            fuzeStock,
-            primerStock,
-          ),
+          availableQuantity,
           shell: configuration.shell,
           charge: primaryCharge.charge,
-          zone: configuration.zone,
           fuze: configuration.fuze,
           primer: configuration.primer,
           charges: configuration.charges.map((component) => ({
             chargeId: component.chargeId,
             quantityPerShot: Number(component.quantityPerShot),
             sortOrder: Number(component.sortOrder),
-            accountingUnit: this.normalizeChargeAccountingUnit(component.charge),
+            accountingUnit:
+              component.accountingUnit ??
+              this.normalizeChargeAccountingUnit(component.charge),
             charge: component.charge,
           })),
           priority: 0,
+          rejectionReasons,
         };
       })
-      .filter((item) => item.availableQuantity > 0)
       .sort((a, b) => {
+        if (a.rejectionReasons.length === 0 && b.rejectionReasons.length > 0) {
+          return -1;
+        }
+
+        if (a.rejectionReasons.length > 0 && b.rejectionReasons.length === 0) {
+          return 1;
+        }
+
         if (a.maxRangeM !== b.maxRangeM) {
           return a.maxRangeM - b.maxRangeM;
         }
@@ -390,6 +411,74 @@ export class ServiceOrderSuggestionsService {
     }
 
     return totals.length > 0 ? Math.max(Math.min(...totals), 0) : 0;
+  }
+
+  private getConfigurationRejectionReasons(
+    configuration: ShotConfiguration,
+    plannedQuantity: number,
+    availableQuantity: number,
+    shellStock: Map<string, number>,
+    chargeStock: Map<string, number>,
+    fuzeStock: Map<string, number>,
+    primerStock: Map<string, number>,
+  ): string[] {
+    const reasons: string[] = [];
+    const requiredShots = Math.max(plannedQuantity, 1);
+    const availableShells = Math.floor(Number(shellStock.get(configuration.shellId) ?? 0));
+
+    if (availableShells < requiredShots) {
+      reasons.push(`Недостатньо снарядів: потрібно ${requiredShots}, доступно ${availableShells}`);
+    }
+
+    if (configuration.fuzeId) {
+      const availableFuzes = Math.floor(
+        Number(fuzeStock.get(configuration.fuzeId) ?? 0),
+      );
+      if (availableFuzes < requiredShots) {
+        reasons.push(
+          `Недостатньо підривників: потрібно ${requiredShots}, доступно ${availableFuzes}`,
+        );
+      }
+    }
+
+    if (configuration.primerId) {
+      const availablePrimers = Math.floor(
+        Number(primerStock.get(configuration.primerId) ?? 0),
+      );
+      if (availablePrimers < requiredShots) {
+        reasons.push(
+          `Недостатньо праймерів: потрібно ${requiredShots}, доступно ${availablePrimers}`,
+        );
+      }
+    }
+
+    for (const component of configuration.charges) {
+      const availableCharge = Math.floor(
+        Number(chargeStock.get(component.chargeId) ?? 0),
+      );
+      const requiredCharge = Number(component.quantityPerShot) * requiredShots;
+      if (availableCharge < requiredCharge) {
+        reasons.push(
+          `Недостатньо заряду ${component.charge.marking}: потрібно ${requiredCharge}, доступно ${availableCharge}`,
+        );
+      }
+    }
+
+    if (availableQuantity < requiredShots && reasons.length === 0) {
+      reasons.push(
+        `Недостатньо повних комплектів пострілу: потрібно ${requiredShots}, доступно ${availableQuantity}`,
+      );
+    }
+
+    return reasons;
+  }
+
+  private collectRejectionReasons(
+    variants: ServiceOrderSuggestionVariant[],
+  ): string[] {
+    return Array.from(
+      new Set(variants.flatMap((item) => item.rejectionReasons)),
+    );
   }
 
   private normalizeChargeAccountingUnit(charge: Charge): 'piece' | 'module' {

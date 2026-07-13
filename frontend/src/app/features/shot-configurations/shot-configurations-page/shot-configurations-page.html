@@ -2,7 +2,7 @@
   <header class="eu-page-header">
     <div>
       <h1>Комплекти пострілу</h1>
-      <p>Канонічні конфігурації пострілу для ВГЗ: снаряд, підривник, капсуль, зона і склад зарядів.</p>
+      <p>Канонічні комплекти для ВГЗ: снаряд, підривник, праймер, номер зони та склад зарядів.</p>
     </div>
   </header>
 
@@ -25,18 +25,25 @@
     </select>
 
     <select name="primerId" [(ngModel)]="form.primerId">
-      <option value="">Капсуль</option>
+      <option value="">Праймер</option>
       <option *ngFor="let item of primers" [value]="item.id">{{ item.marking }}</option>
     </select>
 
-    <select name="zoneId" [(ngModel)]="form.zoneId">
-      <option value="">Зона</option>
-      <option *ngFor="let item of availableZones" [value]="item.id">
-        Зона {{ item.zoneNumber }} ({{ item.distanceFromM }}-{{ item.distanceToM }} м)
-      </option>
-    </select>
+    <input
+      name="zoneNumber"
+      type="number"
+      min="1"
+      [(ngModel)]="form.zoneNumber"
+      placeholder="Номер зони"
+    />
 
-    <input name="maxRangeM" type="number" min="1" [(ngModel)]="form.maxRangeM" placeholder="Макс. дальність, м" />
+    <input
+      name="maxRangeM"
+      type="number"
+      min="1"
+      [(ngModel)]="form.maxRangeM"
+      placeholder="Макс. дальність, м"
+    />
     <input name="note" [(ngModel)]="form.note" placeholder="Примітка" />
 
     <label class="shot-config-active">
@@ -46,13 +53,23 @@
 
     <div class="shot-config-charges">
       <div class="shot-config-charge-row" *ngFor="let item of form.charges; let i = index">
-        <select [name]="'chargeId' + i" [(ngModel)]="item.chargeId">
+        <select [name]="'chargeId' + i" [(ngModel)]="item.chargeId" (ngModelChange)="onChargeChange(item)">
           <option value="">Заряд</option>
           <option *ngFor="let charge of charges" [value]="charge.id">
             {{ charge.marking }} · {{ charge.chargeKind === 'modular' ? 'module' : 'piece' }}
           </option>
         </select>
-        <input [name]="'quantityPerShot' + i" type="number" min="1" [(ngModel)]="item.quantityPerShot" placeholder="Кількість" />
+        <input
+          [name]="'quantityPerShot' + i"
+          type="number"
+          min="1"
+          [(ngModel)]="item.quantityPerShot"
+          placeholder="Кількість"
+        />
+        <select [name]="'accountingUnit' + i" [(ngModel)]="item.accountingUnit">
+          <option value="piece">шт.</option>
+          <option value="module">мод.</option>
+        </select>
         <button type="button" class="ghost-button" (click)="removeChargeRow(i)">−</button>
       </div>
       <button type="button" class="ghost-button" (click)="addChargeRow()">Додати заряд</button>
@@ -79,7 +96,7 @@
   </div>
 
   <section class="ui-state" *ngIf="!loading && items.length === 0">
-    <span class="ui-state-icon">∅</span>
+    <span class="ui-state-icon">⋄</span>
     <strong>Комплекти пострілу ще не додані</strong>
     <small>Створіть перший комплект, щоб він став доступний у підборі ВП.</small>
   </section>
@@ -106,9 +123,14 @@
           <span *ngIf="item.primer"> · {{ item.primer.marking }}</span>
           <div>{{ getChargeLabel(item) }}</div>
         </td>
-        <td>{{ item.zone ? ('Зона ' + item.zone.zoneNumber) : '—' }}</td>
+        <td>{{ item.zoneNumber ? ('Зона ' + item.zoneNumber) : '—' }}</td>
         <td>{{ item.maxRangeM }}</td>
-        <td>{{ item.isActive ? 'Активний' : 'Неактивний' }}</td>
+        <td>
+          {{ item.isActive ? 'Активний' : 'Чернетка' }}
+          <small class="shot-config-warning" *ngIf="!item.fuze || !item.primer || !item.zoneNumber">
+            Неповний склад
+          </small>
+        </td>
         <td class="shot-config-actions">
           <button type="button" class="ghost-button" (click)="edit(item)">Редагувати</button>
           <button type="button" class="ghost-button" (click)="toggleActive(item)">

@@ -10,8 +10,6 @@ import { ToastService } from '../../../core/toast.service';
 import { AuthService, LoginResponse } from '../../auth/auth.service';
 import { FirePositionCard } from '../../fire-positions/fire-position-card.model';
 import { FirePositionsService } from '../../fire-positions/fire-positions.service';
-import { ShellCompatibleCharge } from '../../shell-compatible-charges/shell-compatible-charge.model';
-import { ShellCompatibleChargesService } from '../../shell-compatible-charges/shell-compatible-charges.service';
 import { ReconPuarProposal } from '../../recon/recon.model';
 import { ReconService } from '../../recon/recon.service';
 import { ServiceOrder } from '../service-order.model';
@@ -159,7 +157,6 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
       resultComment: string;
     }
   > = {};
-  compatibleCharges: ShellCompatibleCharge[] = [];
   completeStockByOrderId: Record<
     string,
     {
@@ -181,14 +178,12 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly autoRefresh: AutoRefreshService,
     private readonly firePositions: FirePositionsService,
-    private readonly compatibleChargesService: ShellCompatibleChargesService,
     private readonly reconService: ReconService,
   ) {}
 
   ngOnInit(): void {
     this.currentUser = this.auth.getUser();
     this.restoreViewPreferences();
-    this.loadCompatibleCharges();
     this.loadPlannedPuar();
     this.load();
     this.route.queryParamMap.subscribe((params) => {
@@ -277,17 +272,6 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
         }
 
         this.fail(error, 'Не вдалося завантажити вогневі завдання');
-      },
-    });
-  }
-
-  private loadCompatibleCharges(): void {
-    this.compatibleChargesService.getAll().subscribe({
-      next: (items) => {
-        this.compatibleCharges = items;
-      },
-      error: () => {
-        this.compatibleCharges = [];
       },
     });
   }
@@ -429,6 +413,25 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     });
   }
 
+
+  openShotConfigurations(): void {
+    void this.router.navigate(['/shot-configurations']);
+  }
+
+  getVariantComposition(variant: ServiceOrderSuggestionVariant): string {
+    const charges = variant.charges
+      .map((component) => {
+        const unit = component.accountingUnit === 'module' ? 'мод.' : 'шт.';
+        return `${component.charge.marking} × ${component.quantityPerShot} ${unit}`;
+      })
+      .join(' + ');
+
+    const fuze = variant.fuze?.marking ?? 'підривник не задано';
+    const primer = variant.primer?.marking ?? 'праймер не задано';
+
+    return `${variant.shell.marking}; ${charges}; ${fuze}; ${primer}`;
+  }
+
   loadSuggestions(order: ServiceOrder): void {
     this.selectedOrderId = order.id;
     this.selectedDetailsOrderId = order.id;
@@ -475,7 +478,7 @@ selectSuggestion(
       shotConfigurationId: variant.shotConfigurationId,
       shellId: variant.shellId,
       chargeId: variant.chargeId,
-      zoneId: variant.zoneId,
+      zoneNumber: variant.zoneNumber,
     })
     .subscribe({
       next: () => {
@@ -483,7 +486,7 @@ selectSuggestion(
         this.eventFeed.add({
           type: 'success',
           title: `Для ${order.orderNumber} обрано ВП ${firePosition.name}`,
-          details: `${variant.shell.marking} + ${variant.charge.marking}, ${this.getZoneLabel(variant.zone)}, запас ${variant.rangeReserveM} м`,
+          details: `${variant.shell.marking} + ${variant.charge.marking}, ${this.getZoneLabel(variant.zoneNumber)}, запас ${variant.rangeReserveM} м`,
           route: '/map',
           queryParams: this.getMapQueryParams(order),
         });
@@ -1171,20 +1174,9 @@ selectSuggestion(
 
   getCompatibleCompletionChargeOptions(
     order: ServiceOrder,
-    shellId: string,
+    _shellId: string,
   ): CompletionChargeOption[] {
-    const charges = this.getCompletionChargeOptions(order);
-    if (!shellId) return charges;
-
-    const compatibleChargeIds = new Set(
-      this.compatibleCharges
-        .filter((item) => item.shellId === shellId)
-        .map((item) => item.chargeId),
-    );
-
-    return compatibleChargeIds.size > 0
-      ? charges.filter((charge) => compatibleChargeIds.has(charge.id))
-      : charges;
+    return this.getCompletionChargeOptions(order);
   }
 
   getCompletionAmmoChargeWriteOff(order: ServiceOrder, item: CompletionAmmoFormItem): string {
@@ -1519,9 +1511,7 @@ selectSuggestion(
           item.selectedFirePosition?.name,
           item.selectedShell?.marking,
           item.selectedCharge?.marking,
-          item.selectedZone
-            ? `Зона ${item.selectedZone.zoneNumber} ${item.selectedZone.distanceFromM}-${item.selectedZone.distanceToM}`
-            : null,
+          this.getSelectedZoneLabel(item),
         ]
           .filter(Boolean)
           .join(' ')
@@ -1610,20 +1600,17 @@ selectSuggestion(
   }
 
   getZoneLabel(
-    zone: {
-      id: string;
-      zoneNumber: number;
-      distanceFromM: number;
-      distanceToM: number;
-    } | null,
+    zoneNumber: number | null | undefined,
   ): string {
-    if (!zone) return '?';
+    if (!zoneNumber) return '?';
 
-    return `Зона ${zone.zoneNumber} (${zone.distanceFromM}-${zone.distanceToM} м)`;
+    return `Зона ${zoneNumber}`;
   }
 
   getSelectedZoneLabel(order: ServiceOrder): string {
-    return this.getZoneLabel(order.selectedZone);
+    return this.getZoneLabel(
+      order.selectedShotConfiguration?.zoneNumber ?? order.selectedZone?.zoneNumber,
+    );
   }
 
  isSuggestionExpanded(suggestion: ServiceOrderSuggestion, index: number): boolean {

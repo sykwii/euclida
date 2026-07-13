@@ -15,12 +15,11 @@ import { WeaponModel } from '../../weapon-models/weapon-model.model';
 import { WeaponModelsService } from '../../weapon-models/weapon-models.service';
 import { ShotConfiguration } from '../shot-configuration.model';
 import { ShotConfigurationsService } from '../shot-configurations.service';
-import { Zone } from '../../zones/zone.model';
-import { ZonesService } from '../../zones/zones.service';
 
 interface ShotConfigurationChargeFormItem {
   chargeId: string;
   quantityPerShot: number;
+  accountingUnit: 'piece' | 'module';
 }
 
 @Component({
@@ -42,7 +41,6 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
   charges: Charge[] = [];
   fuzes: Fuze[] = [];
   primers: Primer[] = [];
-  zones: Zone[] = [];
   editingId: string | null = null;
 
   form = {
@@ -51,11 +49,13 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
     shellId: '',
     fuzeId: '',
     primerId: '',
-    zoneId: '',
+    zoneNumber: '' as string | number,
     maxRangeM: 1000,
-    isActive: true,
+    isActive: false,
     note: '',
-    charges: [{ chargeId: '', quantityPerShot: 1 }] as ShotConfigurationChargeFormItem[],
+    charges: [
+      { chargeId: '', quantityPerShot: 1, accountingUnit: 'piece' as const },
+    ] as ShotConfigurationChargeFormItem[],
   };
 
   constructor(
@@ -65,7 +65,6 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
     private readonly chargesService: ChargesService,
     private readonly fuzesService: FuzesService,
     private readonly primersService: PrimersService,
-    private readonly zonesService: ZonesService,
     private readonly autoRefresh: AutoRefreshService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
@@ -92,7 +91,6 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
       charges: this.chargesService.getAll(),
       fuzes: this.fuzesService.getAll(),
       primers: this.primersService.getAll(),
-      zones: this.zonesService.getAll(),
     }).subscribe({
       next: (data) => {
         this.items = data.items;
@@ -101,7 +99,6 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
         this.charges = data.charges;
         this.fuzes = data.fuzes;
         this.primers = data.primers;
-        this.zones = data.zones;
         this.loading = false;
         this.cdr.detectChanges();
       },
@@ -113,16 +110,12 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
     });
   }
 
-  get availableZones(): Zone[] {
-    if (!this.form.weaponModelId) {
-      return this.zones;
-    }
-
-    return this.zones.filter((zone) => zone.weaponModelId === this.form.weaponModelId);
-  }
-
   addChargeRow(): void {
-    this.form.charges.push({ chargeId: '', quantityPerShot: 1 });
+    this.form.charges.push({
+      chargeId: '',
+      quantityPerShot: 1,
+      accountingUnit: 'piece',
+    });
   }
 
   removeChargeRow(index: number): void {
@@ -133,6 +126,11 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
     this.form.charges.splice(index, 1);
   }
 
+  onChargeChange(item: ShotConfigurationChargeFormItem): void {
+    const charge = this.charges.find((entry) => entry.id === item.chargeId);
+    item.accountingUnit = charge?.chargeKind === 'modular' ? 'module' : 'piece';
+  }
+
   edit(item: ShotConfiguration): void {
     this.editingId = item.id;
     this.form = {
@@ -141,13 +139,14 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
       shellId: item.shellId,
       fuzeId: item.fuzeId ?? '',
       primerId: item.primerId ?? '',
-      zoneId: item.zoneId ?? '',
+      zoneNumber: item.zoneNumber ?? '',
       maxRangeM: item.maxRangeM,
       isActive: item.isActive,
       note: item.note ?? '',
       charges: item.charges.map((charge) => ({
         chargeId: charge.chargeId,
         quantityPerShot: charge.quantityPerShot,
+        accountingUnit: charge.accountingUnit,
       })),
     };
   }
@@ -160,11 +159,11 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
       shellId: '',
       fuzeId: '',
       primerId: '',
-      zoneId: '',
+      zoneNumber: '',
       maxRangeM: 1000,
-      isActive: true,
+      isActive: false,
       note: '',
-      charges: [{ chargeId: '', quantityPerShot: 1 }],
+      charges: [{ chargeId: '', quantityPerShot: 1, accountingUnit: 'piece' }],
     };
   }
 
@@ -174,9 +173,12 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
     }
 
     const name = this.form.name.trim();
+    const zoneNumberValue =
+      this.form.zoneNumber === '' ? null : Number(this.form.zoneNumber);
     const charges = this.form.charges.map((item, index) => ({
       chargeId: item.chargeId,
       quantityPerShot: Number(item.quantityPerShot),
+      accountingUnit: item.accountingUnit,
       sortOrder: index,
     }));
 
@@ -191,7 +193,21 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
           item.quantityPerShot <= 0,
       )
     ) {
-      this.errorMessage = 'Заповніть модель, снаряд і всі компоненти заряду';
+      this.errorMessage =
+        'Заповніть назву, модель, снаряд і всі компоненти заряду';
+      return;
+    }
+
+    if (
+      this.form.isActive &&
+      (!this.form.fuzeId ||
+        !this.form.primerId ||
+        !Number.isInteger(zoneNumberValue) ||
+        Number(zoneNumberValue) <= 0 ||
+        Number(this.form.maxRangeM) <= 0)
+    ) {
+      this.errorMessage =
+        'Активний комплект має містити підривник, праймер, номер зони та додатну максимальну дальність';
       return;
     }
 
@@ -203,7 +219,7 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
       shellId: this.form.shellId,
       fuzeId: this.form.fuzeId || null,
       primerId: this.form.primerId || null,
-      zoneId: this.form.zoneId || null,
+      zoneNumber: zoneNumberValue,
       maxRangeM: Number(this.form.maxRangeM),
       isActive: this.form.isActive,
       note: this.form.note.trim() || null,
@@ -222,7 +238,8 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.saving = false;
-        this.errorMessage = error?.error?.message || 'Не вдалося зберегти комплект пострілу';
+        this.errorMessage =
+          error?.error?.message || 'Не вдалося зберегти комплект пострілу';
         this.cdr.detectChanges();
       },
     });
@@ -232,7 +249,8 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
     this.service.activate(item.id, !item.isActive).subscribe({
       next: () => this.load(),
       error: (error) => {
-        this.errorMessage = error?.error?.message || 'Не вдалося оновити статус комплекту';
+        this.errorMessage =
+          error?.error?.message || 'Не вдалося оновити статус комплекту';
         this.cdr.detectChanges();
       },
     });
@@ -242,7 +260,8 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
     this.service.delete(id).subscribe({
       next: () => this.load(),
       error: (error) => {
-        this.errorMessage = error?.error?.message || 'Не вдалося видалити комплект пострілу';
+        this.errorMessage =
+          error?.error?.message || 'Не вдалося видалити комплект пострілу';
         this.cdr.detectChanges();
       },
     });
@@ -250,7 +269,10 @@ export class ShotConfigurationsPage implements OnInit, OnDestroy {
 
   getChargeLabel(item: ShotConfiguration): string {
     return item.charges
-      .map((charge) => `${charge.charge.marking} × ${charge.quantityPerShot}`)
+      .map(
+        (charge) =>
+          `${charge.charge.marking} × ${charge.quantityPerShot} ${charge.accountingUnit === 'module' ? 'мод.' : 'шт.'}`,
+      )
       .join(', ');
   }
 }

@@ -11,7 +11,6 @@ import { Primer } from '../primers/primer.entity';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { Shell } from '../shells/shell.entity';
 import { WeaponModel } from '../weapon-models/weapon-model.entity';
-import { Zone } from '../zones/zone.entity';
 import { CreateShotConfigurationDto } from './dto/create-shot-configuration.dto';
 import { UpdateShotConfigurationDto } from './dto/update-shot-configuration.dto';
 import { ShotConfigurationCharge } from './shot-configuration-charge.entity';
@@ -32,8 +31,6 @@ export class ShotConfigurationsService {
     private readonly fuzeRepository: Repository<Fuze>,
     @InjectRepository(Primer)
     private readonly primerRepository: Repository<Primer>,
-    @InjectRepository(Zone)
-    private readonly zoneRepository: Repository<Zone>,
     @InjectRepository(Charge)
     private readonly chargesRepository: Repository<Charge>,
     private readonly realtimeEvents: RealtimeEventsService,
@@ -46,7 +43,6 @@ export class ShotConfigurationsService {
         shell: true,
         fuze: true,
         primer: true,
-        zone: true,
         charges: {
           charge: true,
         },
@@ -71,7 +67,6 @@ export class ShotConfigurationsService {
         shell: true,
         fuze: true,
         primer: true,
-        zone: true,
         charges: {
           charge: true,
         },
@@ -84,7 +79,7 @@ export class ShotConfigurationsService {
     });
 
     if (!item) {
-      throw new NotFoundException('Комплект пострілу не знайдено');
+      throw new NotFoundException('РљРѕРјРїР»РµРєС‚ РїРѕСЃС‚СЂС–Р»Сѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
     }
 
     return item;
@@ -98,9 +93,10 @@ export class ShotConfigurationsService {
       shellId: data.shellId,
       fuzeId: data.fuzeId ?? null,
       primerId: data.primerId ?? null,
-      zoneId: data.zoneId ?? null,
+      zoneNumber: data.zoneNumber ?? null,
+      zoneId: null,
       maxRangeM: data.maxRangeM,
-      isActive: data.isActive ?? true,
+      isActive: data.isActive ?? false,
       note: data.note?.trim() || null,
     });
     const saved = await this.repository.save(item);
@@ -120,7 +116,8 @@ export class ShotConfigurationsService {
       shellId: data.shellId ?? item.shellId,
       fuzeId: data.fuzeId === undefined ? item.fuzeId : data.fuzeId,
       primerId: data.primerId === undefined ? item.primerId : data.primerId,
-      zoneId: data.zoneId === undefined ? item.zoneId : data.zoneId,
+      zoneNumber:
+        data.zoneNumber === undefined ? item.zoneNumber : data.zoneNumber,
       maxRangeM: data.maxRangeM ?? item.maxRangeM,
       isActive: data.isActive ?? item.isActive,
       note: data.note === undefined ? item.note : data.note,
@@ -129,6 +126,7 @@ export class ShotConfigurationsService {
         item.charges.map((charge) => ({
           chargeId: charge.chargeId,
           quantityPerShot: charge.quantityPerShot,
+          accountingUnit: charge.accountingUnit,
           sortOrder: charge.sortOrder,
         })),
     };
@@ -140,7 +138,8 @@ export class ShotConfigurationsService {
     item.shellId = payload.shellId;
     item.fuzeId = payload.fuzeId ?? null;
     item.primerId = payload.primerId ?? null;
-    item.zoneId = payload.zoneId ?? null;
+    item.zoneNumber = payload.zoneNumber ?? null;
+    item.zoneId = null;
     item.maxRangeM = payload.maxRangeM;
     item.isActive = payload.isActive ?? item.isActive;
     item.note = payload.note?.trim() || null;
@@ -153,6 +152,30 @@ export class ShotConfigurationsService {
 
   async activate(id: string, isActive: boolean): Promise<ShotConfiguration> {
     const item = await this.findOne(id);
+
+    if (isActive) {
+      await this.validateInput(
+        {
+          name: item.name,
+          weaponModelId: item.weaponModelId,
+          shellId: item.shellId,
+          fuzeId: item.fuzeId,
+          primerId: item.primerId,
+          zoneNumber: item.zoneNumber,
+          maxRangeM: item.maxRangeM,
+          isActive,
+          note: item.note,
+          charges: item.charges.map((charge) => ({
+            chargeId: charge.chargeId,
+            quantityPerShot: charge.quantityPerShot,
+            accountingUnit: charge.accountingUnit,
+            sortOrder: charge.sortOrder,
+          })),
+        },
+        item.id,
+      );
+    }
+
     item.isActive = isActive;
     await this.repository.save(item);
     this.emitChanged('updated', item.id);
@@ -172,7 +195,7 @@ export class ShotConfigurationsService {
     const name = data.name.trim();
 
     if (!name) {
-      throw new BadRequestException('Вкажіть назву комплекту пострілу');
+      throw new BadRequestException('Р’РєР°Р¶С–С‚СЊ РЅР°Р·РІСѓ РєРѕРјРїР»РµРєС‚Сѓ РїРѕСЃС‚СЂС–Р»Сѓ');
     }
 
     const duplicate = await this.repository.findOne({
@@ -184,7 +207,7 @@ export class ShotConfigurationsService {
 
     if (duplicate && duplicate.id !== currentId) {
       throw new BadRequestException(
-        'Для цієї моделі озброєння вже існує комплект пострілу з такою назвою',
+        'Р”Р»СЏ С†С–С”С— РјРѕРґРµР»С– РѕР·Р±СЂРѕС”РЅРЅСЏ РІР¶Рµ С–СЃРЅСѓС” РєРѕРјРїР»РµРєС‚ РїРѕСЃС‚СЂС–Р»Сѓ Р· С‚Р°РєРѕСЋ РЅР°Р·РІРѕСЋ',
       );
     }
 
@@ -193,44 +216,39 @@ export class ShotConfigurationsService {
     });
 
     if (!weaponModel) {
-      throw new BadRequestException('Модель озброєння не знайдено');
+      throw new BadRequestException('РњРѕРґРµР»СЊ РѕР·Р±СЂРѕС”РЅРЅСЏ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
     }
 
-    const shell = await this.shellRepository.findOne({ where: { id: data.shellId } });
+    const shell = await this.shellRepository.findOne({
+      where: { id: data.shellId },
+    });
     if (!shell) {
-      throw new BadRequestException('Снаряд не знайдено');
+      throw new BadRequestException('РЎРЅР°СЂСЏРґ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
     }
 
     if (data.fuzeId) {
-      const fuze = await this.fuzeRepository.findOne({ where: { id: data.fuzeId } });
+      const fuze = await this.fuzeRepository.findOne({
+        where: { id: data.fuzeId },
+      });
       if (!fuze) {
-        throw new BadRequestException('Підривник не знайдено');
+        throw new BadRequestException('РџС–РґСЂРёРІРЅРёРє РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
       }
     }
 
     if (data.primerId) {
-      const primer = await this.primerRepository.findOne({ where: { id: data.primerId } });
+      const primer = await this.primerRepository.findOne({
+        where: { id: data.primerId },
+      });
       if (!primer) {
-        throw new BadRequestException('Капсуль не знайдено');
-      }
-    }
-
-    if (data.zoneId) {
-      const zone = await this.zoneRepository.findOne({ where: { id: data.zoneId } });
-      if (!zone) {
-        throw new BadRequestException('Зону не знайдено');
-      }
-
-      if (zone.weaponModelId !== data.weaponModelId) {
-        throw new BadRequestException(
-          'Зона повинна належати тій самій моделі озброєння, що і комплект пострілу',
-        );
+        throw new BadRequestException('РљР°РїСЃСѓР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
       }
     }
 
     const chargeIds = data.charges.map((item) => item.chargeId);
     if (new Set(chargeIds).size !== chargeIds.length) {
-      throw new BadRequestException('У комплекті пострілу не можна дублювати один і той самий заряд');
+      throw new BadRequestException(
+        'РЈ РєРѕРјРїР»РµРєС‚С– РїРѕСЃС‚СЂС–Р»Сѓ РЅРµ РјРѕР¶РЅР° РґСѓР±Р»СЋРІР°С‚Рё РѕРґРёРЅ С– С‚РѕР№ СЃР°РјРёР№ Р·Р°СЂСЏРґ',
+      );
     }
 
     const charges = await this.chargesRepository.find({
@@ -238,7 +256,49 @@ export class ShotConfigurationsService {
     });
 
     if (charges.length !== chargeIds.length) {
-      throw new BadRequestException('Один або кілька зарядів не знайдено');
+      throw new BadRequestException(
+        'РћРґРёРЅ Р°Р±Рѕ РєС–Р»СЊРєР° Р·Р°СЂСЏРґС–РІ РЅРµ Р·РЅР°Р№РґРµРЅРѕ',
+      );
+    }
+
+    const chargesById = new Map(charges.map((item) => [item.id, item]));
+    for (const component of data.charges) {
+      const charge = chargesById.get(component.chargeId);
+      if (!charge) {
+        continue;
+      }
+
+      const expectedAccountingUnit =
+        charge.chargeKind === 'modular' ? 'module' : 'piece';
+      if (component.accountingUnit !== expectedAccountingUnit) {
+        throw new BadRequestException(
+          'РћРґРёРЅ Р°Р±Рѕ РєС–Р»СЊРєР° РєРѕРјРїРѕРЅРµРЅС‚С–РІ РјР°СЋС‚СЊ РЅРµРєРѕСЂРµРєС‚РЅСѓ РѕРґРёРЅРёС†СЋ РѕР±Р»С–РєСѓ',
+        );
+      }
+    }
+
+    if (data.isActive) {
+      if (!data.fuzeId) {
+        throw new BadRequestException(
+          'Р”Р»СЏ Р°РєС‚РёРІРЅРѕРіРѕ РєРѕРјРїР»РµРєС‚Сѓ РїРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РїС–РґСЂРёРІРЅРёРє',
+        );
+      }
+
+      if (!data.primerId) {
+        throw new BadRequestException(
+          'Р”Р»СЏ Р°РєС‚РёРІРЅРѕРіРѕ РєРѕРјРїР»РµРєС‚Сѓ РїРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РїСЂР°Р№РјРµСЂ',
+        );
+      }
+
+      if (
+        !data.zoneNumber ||
+        !Number.isInteger(data.zoneNumber) ||
+        data.zoneNumber <= 0
+      ) {
+        throw new BadRequestException(
+          'Р”Р»СЏ Р°РєС‚РёРІРЅРѕРіРѕ РєРѕРјРїР»РµРєС‚Сѓ РїРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РЅРѕРјРµСЂ Р·РѕРЅРё',
+        );
+      }
     }
   }
 
@@ -251,6 +311,7 @@ export class ShotConfigurationsService {
       this.chargeRepository.create({
         shotConfigurationId,
         chargeId: charge.chargeId,
+        accountingUnit: charge.accountingUnit,
         quantityPerShot: charge.quantityPerShot,
         sortOrder: charge.sortOrder ?? index,
       }),

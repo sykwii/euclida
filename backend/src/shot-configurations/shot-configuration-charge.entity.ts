@@ -37,6 +37,9 @@ export class ShotConfigurationCharge {
   @Column({ name: 'quantity_per_shot', type: 'int' })
   quantityPerShot!: number;
 
+  @Column({ name: 'accounting_unit', type: 'varchar', length: 10 })
+  accountingUnit!: ShotChargeAccountingUnit;
+
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder!: number;
 }

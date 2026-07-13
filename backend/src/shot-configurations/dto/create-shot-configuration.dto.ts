@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -18,6 +19,9 @@ export class ShotConfigurationChargeDto {
   @IsInt()
   @Min(1)
   quantityPerShot!: number;
+
+  @IsIn(['piece', 'module'])
+  accountingUnit!: 'piece' | 'module';
 
   @IsOptional()
   @IsInt()
@@ -44,8 +48,9 @@ export class CreateShotConfigurationDto {
   primerId?: string | null;
 
   @IsOptional()
-  @IsUUID()
-  zoneId?: string | null;
+  @IsInt()
+  @Min(1)
+  zoneNumber?: number | null;
 
   @IsInt()
   @Min(1)
