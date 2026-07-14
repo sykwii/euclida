@@ -35,6 +35,8 @@ export class FirePositionsPage implements OnInit, OnDestroy {
   activeFilter: PositionStatusFilter = 'all';
 pageKind: PositionPageKind = 'fire_positions';
   collapsedForeignUnits: Record<string, boolean> = {};
+  readinessActionId = '';
+  notReadyReasons: Record<string, 'threat' | 'damaged' | 'not_prepared' | 'occupied' | 'other'> = {};
   pageSkeleton = Array.from({ length: 6 });
 
   form = this.getEmptyForm();
@@ -342,6 +344,48 @@ get isAirAssetsPage(): boolean {
     });
   }
 
+  confirmFirePositionReadiness(item: FirePosition, event?: Event): void {
+    event?.stopPropagation();
+    if (this.readinessActionId) {
+      return;
+    }
+
+    this.readinessActionId = item.id;
+    this.service.confirmReadiness(item.id).subscribe({
+      next: () => {
+        this.readinessActionId = '';
+        this.load();
+      },
+      error: (error) => {
+        this.readinessActionId = '';
+        this.fail(error, error?.error?.message || 'Не вдалося підтвердити готовність ВП');
+      },
+    });
+  }
+
+  setFirePositionNotReady(item: FirePosition, event?: Event): void {
+    event?.stopPropagation();
+    if (this.readinessActionId) {
+      return;
+    }
+
+    this.readinessActionId = item.id;
+    this.service
+      .setNotReady(item.id, {
+        notReadyReason: this.notReadyReasons[item.id] || 'not_prepared',
+      })
+      .subscribe({
+        next: () => {
+          this.readinessActionId = '';
+          this.load();
+        },
+        error: (error) => {
+          this.readinessActionId = '';
+          this.fail(error, error?.error?.message || 'Не вдалося змінити готовність ВП');
+        },
+      });
+  }
+
   openDetails(item: FirePosition): void {
     this.detailsPosition = item;
   }
@@ -454,7 +498,8 @@ private syncPageKindFromUrl(url: string): void {
   }
 
   private fail(error: unknown, message: string): void {
-    this.errorMessage = message;
+    const maybeHttpError = error as { error?: { message?: string } };
+    this.errorMessage = maybeHttpError.error?.message || message;
     this.loading = false;
     this.cdr.detectChanges();
   }
@@ -491,6 +536,59 @@ private syncPageKindFromUrl(url: string): void {
     }
 
     return 'Призначено, очікує руху';
+  }
+
+  getFpReadinessLabel(status: string): string {
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'ВП БГ' : 'ВП НЕ БГ';
+  }
+
+  getFpReasonLabel(reason: string | null | undefined): string {
+    const labels: Record<string, string> = {
+      threat: 'Під загрозою',
+      damaged: 'Пошкоджена',
+      not_prepared: 'Не підготовлена',
+      occupied: 'Зайнята',
+      other: 'Інше',
+    };
+
+    return reason ? labels[reason] ?? 'Інше' : '';
+  }
+
+  getWeaponReadinessLabelUa(status: string | undefined): string {
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'СГ БГ' : 'СГ НЕ БГ';
+  }
+
+  getWeaponDeploymentLabelUa(item: FirePosition): string {
+    const status = item.assignedWeapon?.deploymentStatus;
+    const labels: Record<string, string> = {
+      reserve_area: 'Район зосередження',
+      moving_to_fire_position: 'Рух до ВП',
+      at_fire_position: 'На ВП',
+      moving_to_reserve_area: 'Рух до РЗ',
+    };
+
+    return labels[status || 'at_fire_position'] ?? 'На ВП';
+  }
+
+  getAggregateReadinessLabel(item: FirePosition): string {
+    return item.aggregateReady ? 'Готова до вогню' : 'Не готова до вогню';
+  }
+
+  getAggregateReadinessClass(item: FirePosition): string {
+    return item.aggregateReady ? 'ready' : 'danger';
+  }
+
+  getAggregateReasonLabels(item: FirePosition): string[] {
+    const labels: Record<string, string> = {
+      fp_not_prepared: 'ВП не підготовлена',
+      fp_threat: 'ВП під загрозою',
+      weapon_missing: 'СГ не призначена',
+      weapon_moving: 'СГ ще в русі',
+      weapon_not_ready: 'СГ НЕ БГ',
+      weapon_active_maintenance: 'активний ремонт',
+    };
+
+    return (item.aggregateReadinessReasons ?? []).map((reason) => labels[reason] ?? reason);
   }
 
   private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {

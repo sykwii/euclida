@@ -7,10 +7,11 @@ import { Depot } from '../depots/depot.entity';
 import { AuthModule } from '../auth/auth.module';
 import { AccessScopeModule } from '../access-scope/access-scope.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { EventLogsModule } from '../event-logs/event-logs.module';
 
 @Module({
   imports: [RealtimeModule, TypeOrmModule.forFeature([FirePosition, Depot]), AuthModule,
-  AccessScopeModule,],
+  AccessScopeModule, EventLogsModule],
   controllers: [FirePositionsController],
   providers: [FirePositionsService],
 })

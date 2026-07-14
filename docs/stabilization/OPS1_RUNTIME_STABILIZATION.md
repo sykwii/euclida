@@ -44,6 +44,15 @@ Legacy compatibility routes remain available:
 
 The active frontend does not call `assign-to-fire-position`. It uses the canonical planned deployment flow through `/deployment/assign`.
 
+## Fire Position Readiness Endpoints
+
+- `POST /fire-positions/:id/readiness/confirm`
+- `POST /fire-positions/:id/readiness/not-ready`
+
+Fire-position readiness is explicit operator state. Weapon arrival, movement start, withdrawal, and deployment cancellation do not automatically make a fire position combat-ready.
+
+Allowed not-ready reasons are `threat`, `damaged`, `not_prepared`, `occupied`, and `other`.
+
 ## Deployment State Machine
 
 - `assign`: creates a planned `WeaponDeployment` to a fire position. It does not mutate assignment through generic CRUD.
@@ -124,3 +133,21 @@ Result: unauthenticated smoke returned `HTTP 401`, confirming that the route is 
 - Legacy maintenance statuses `pending` and `approved` are still supported as active states for backward compatibility.
 - Legacy deployment routes remain as compatibility aliases.
 - Fire-position pages now expose incoming deployment state in addition to arrived assignment state.
+
+## OPS-1.3 Fire Readiness Presentation
+
+- Fire-position cards now show FP readiness, current weapon, weapon readiness, deployment state, and aggregated `Готовність до вогню` separately.
+- Current weapon remains visible when the FP is `НЕ БГ`; FP readiness no longer implies assignment failure.
+- Aggregated readiness is calculated, not stored. It is ready only when FP is combat-ready, an assigned weapon exists, the weapon is combat-ready, the weapon is physically at that FP, and there is no active weapon maintenance.
+- Aggregated rejection reasons are localized: `ВП не підготовлена`, `ВП під загрозою`, `СГ не призначена`, `СГ ще в русі`, `СГ НЕ БГ`, `активний ремонт`.
+- Raw enum values such as `not_prepared`, `combat_ready`, and `at_fire_position` are mapped to Ukrainian labels in the fire-position UI.
+- Explicit FP actions were added: `Підтвердити готовність ВП` and `Позначити ВП НЕ БГ` with reason.
+- Readiness changes are transactional, audited through `event_logs`, and emit unified realtime after commit.
+
+OPS-1.3 verification:
+
+- Backend focused test: `npm test -- --runInBand fire-positions.service.spec.ts` passed.
+- Backend build: `npm run build` passed.
+- Backend full tests: `npm test -- --runInBand` passed: 9 suites / 48 tests.
+- Frontend build: `npm run build` passed.
+- Frontend tests: `npm test -- --watch=false` passed: 6 files / 8 tests.

@@ -13,6 +13,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WriteAccessGuard } from '../auth/write-access.guard';
 import { CreateFirePositionDto } from './dto/create-fire-position.dto';
+import { ConfirmFirePositionReadinessDto } from './dto/confirm-fire-position-readiness.dto';
 import { UpdateFirePositionDto } from './dto/update-fire-position.dto';
 import { FirePosition } from './fire-position.entity';
 import { FirePositionsService } from './fire-positions.service';
@@ -64,6 +65,33 @@ export class FirePositionsController {
   @Get(':id/sector')
   getSectorInfo(@Param('id') id: string) {
     return this.service.getSectorInfo(id);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/readiness/confirm')
+  confirmReadiness(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<FirePosition> {
+    return this.service.confirmReadiness(
+      id,
+      { readinessStatus: 'combat_ready' },
+      user,
+    );
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/readiness/not-ready')
+  setNotReady(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: ConfirmFirePositionReadinessDto,
+  ): Promise<FirePosition> {
+    return this.service.confirmReadiness(
+      id,
+      { ...body, readinessStatus: 'not_combat_ready' },
+      user,
+    );
   }
 
   @UseGuards(WriteAccessGuard)

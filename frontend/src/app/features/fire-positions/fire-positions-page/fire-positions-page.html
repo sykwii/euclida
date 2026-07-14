@@ -213,7 +213,7 @@
       <div class="card-status-row">
         <span class="status-label" [class]="getReadinessClass(item.readinessStatus)">
           <span class="status-dot" [class]="getReadinessClass(item.readinessStatus)"></span>
-          {{ getReadinessLabel(item.readinessStatus) }}
+          {{ getFpReadinessLabel(item.readinessStatus) }}
         </span>
         <span class="card-code">{{ isAirAssetsPage ? 'ПОВІТРЯ' : isEwPage ? 'РЕБ' : 'ВП' }}</span>
       </div>
@@ -262,13 +262,13 @@
           class="weapon-status"
           [class]="getWeaponReadinessClass(item.assignedWeapon.readinessStatus)"
         >
-          {{ getWeaponReadinessLabel(item.assignedWeapon.readinessStatus) }}
+          {{ getWeaponReadinessLabelUa(item.assignedWeapon.readinessStatus) }}
         </div>
         <div
           class="weapon-status deployment"
           [ngClass]="getWeaponDeploymentClass(item)"
         >
-          {{ getWeaponDeploymentLabel(item) }}
+          {{ getWeaponDeploymentLabelUa(item) }}
         </div>
 
         <div class="weapon-grid">
@@ -323,8 +323,18 @@
       </ng-template>
 
       <div class="reason-box" *ngIf="item.notReadyReason">
-        {{ item.notReadyReason }}
+        {{ getFpReasonLabel(item.notReadyReason) }}
       </div>
+
+      <section class="maintenance-box">
+        <span>Готовність до вогню</span>
+        <strong [ngClass]="getAggregateReadinessClass(item)">
+          {{ getAggregateReadinessLabel(item) }}
+        </strong>
+        <p *ngIf="getAggregateReasonLabels(item).length > 0">
+          {{ getAggregateReasonLabels(item).join(' · ') }}
+        </p>
+      </section>
 
       <div class="card-actions">
         <button
@@ -334,6 +344,39 @@
           (click)="$event.stopPropagation(); startEdit(item.id)"
         >
           Редагувати
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="item.canEdit && item.readinessStatus !== 'combat_ready'"
+          (click)="confirmFirePositionReadiness(item, $event)"
+          [disabled]="readinessActionId === item.id"
+        >
+          Підтвердити готовність ВП
+        </button>
+
+        <select
+          *ngIf="item.canEdit && item.readinessStatus === 'combat_ready'"
+          [(ngModel)]="notReadyReasons[item.id]"
+          [name]="'fp-reason-' + item.id"
+          (click)="$event.stopPropagation()"
+        >
+          <option value="threat">Під загрозою</option>
+          <option value="damaged">Пошкоджена</option>
+          <option value="not_prepared">Не підготовлена</option>
+          <option value="occupied">Зайнята</option>
+          <option value="other">Інше</option>
+        </select>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="item.canEdit && item.readinessStatus === 'combat_ready'"
+          (click)="setFirePositionNotReady(item, $event)"
+          [disabled]="readinessActionId === item.id"
+        >
+          Позначити ВП НЕ БГ
         </button>
 
         <button

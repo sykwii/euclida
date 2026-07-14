@@ -27,6 +27,16 @@ import { In } from 'typeorm';
 import type { AuthUser } from '../auth/auth-user.types';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { EventLogsService } from '../event-logs/event-logs.service';
+import { ConfirmFirePositionReadinessDto } from './dto/confirm-fire-position-readiness.dto';
+
+type FireReadinessReason =
+  | 'fp_not_prepared'
+  | 'fp_threat'
+  | 'weapon_missing'
+  | 'weapon_moving'
+  | 'weapon_not_ready'
+  | 'weapon_active_maintenance';
 
 @Injectable()
 export class FirePositionsService implements OnModuleInit {
@@ -39,6 +49,7 @@ export class FirePositionsService implements OnModuleInit {
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly realtimeEvents: RealtimeEventsService,
+    private readonly eventLogs: EventLogsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -75,6 +86,8 @@ export class FirePositionsService implements OnModuleInit {
         assignedWeapon: WeaponSystem | null;
         incomingWeapon: WeaponSystem | null;
         incomingDeployment: WeaponDeployment | null;
+        aggregateReady: boolean;
+        aggregateReadinessReasons: FireReadinessReason[];
         canEdit: boolean;
         isOwnScope: boolean;
         publicViewOnly: boolean;
@@ -98,6 +111,7 @@ export class FirePositionsService implements OnModuleInit {
           relations: {
             weaponModel: true,
             unit: true,
+            maintenances: true,
           },
         });
 
@@ -117,6 +131,11 @@ export class FirePositionsService implements OnModuleInit {
         assignedWeapon: isOwnScope ? assignedWeapon : null,
         incomingWeapon: isOwnScope ? incomingWeapon : null,
         incomingDeployment: isOwnScope ? incomingDeployment : null,
+        aggregateReady: this.isFireReady(syncedPosition, assignedWeapon),
+        aggregateReadinessReasons: this.getFireReadinessReasons(
+          syncedPosition,
+          assignedWeapon,
+        ),
         canEdit:
           isOwnScope && (user.role === 'admin' || user.role === 'operator'),
         isOwnScope,
@@ -141,6 +160,40 @@ export class FirePositionsService implements OnModuleInit {
     }
 
     return item;
+  }
+
+  async confirmReadiness(
+    id: string,
+    body: ConfirmFirePositionReadinessDto,
+    user: AuthUser,
+  ): Promise<FirePosition> {
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const item = await manager.getRepository(FirePosition).findOne({
+        where: { id },
+        relations: { unit: true, ammoDepot: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!item) {
+        throw new NotFoundException('ВП не знайдено');
+      }
+
+      await this.ensureCanUseUnit(user, item.unitId);
+
+      if (body.readinessStatus === 'combat_ready') {
+        item.readinessStatus = 'combat_ready';
+        item.notReadyReason = null;
+      } else {
+        item.readinessStatus = 'not_combat_ready';
+        item.notReadyReason = this.normalizeNotReadyReason(body.notReadyReason);
+      }
+
+      return manager.save(FirePosition, item);
+    });
+
+    await this.writeReadinessEvent(saved, user);
+    this.emitFirePositionChanged('updated', saved.id);
+    return saved;
   }
 
   async create(
@@ -403,6 +456,7 @@ private normalizePositionType(value: string | null | undefined): string {
         relations: {
           weaponModel: true,
           unit: true,
+          maintenances: true,
         },
       });
     const incomingDeployment = await this.findIncomingDeployment(id);
@@ -427,6 +481,11 @@ private normalizePositionType(value: string | null | undefined): string {
         assignedWeapon,
         incomingWeapon,
         incomingDeployment,
+        aggregateReady: this.isFireReady(syncedFirePosition, assignedWeapon),
+        aggregateReadinessReasons: this.getFireReadinessReasons(
+          syncedFirePosition,
+          assignedWeapon,
+        ),
         localStock: {
           shells: [],
           charges: [],
@@ -489,6 +548,11 @@ private normalizePositionType(value: string | null | undefined): string {
       assignedWeapon,
       incomingWeapon,
       incomingDeployment,
+      aggregateReady: this.isFireReady(firePosition, assignedWeapon),
+      aggregateReadinessReasons: this.getFireReadinessReasons(
+        firePosition,
+        assignedWeapon,
+      ),
       localStock: {
         shells: await this.dataSource.getRepository(DepotShellStock).find({
           where: { depotId: ammoDepotId },
@@ -542,6 +606,8 @@ private normalizePositionType(value: string | null | undefined): string {
         assignedWeapon: WeaponSystem | null;
         incomingWeapon: WeaponSystem | null;
         incomingDeployment: WeaponDeployment | null;
+        aggregateReady: boolean;
+        aggregateReadinessReasons: FireReadinessReason[];
       }
     > = [];
 
@@ -562,6 +628,7 @@ private normalizePositionType(value: string | null | undefined): string {
           relations: {
             weaponModel: true,
             unit: true,
+            maintenances: true,
           },
         });
       const syncedPosition = this.applyWeaponStateToFirePosition(
@@ -579,6 +646,11 @@ private normalizePositionType(value: string | null | undefined): string {
         assignedWeapon,
         incomingWeapon,
         incomingDeployment,
+        aggregateReady: this.isFireReady(syncedPosition, assignedWeapon),
+        aggregateReadinessReasons: this.getFireReadinessReasons(
+          syncedPosition,
+          assignedWeapon,
+        ),
       });
     }
 
@@ -642,6 +714,7 @@ private normalizePositionType(value: string | null | undefined): string {
         weaponSystem: {
           weaponModel: true,
           unit: true,
+          maintenances: true,
         },
       },
       order: { updatedAt: 'DESC' },
@@ -661,6 +734,106 @@ private normalizePositionType(value: string | null | undefined): string {
     if (!canAccess) {
       throw new ForbiddenException('Немає доступу до цього підрозділу');
     }
+  }
+
+  private normalizeNotReadyReason(
+    value: ConfirmFirePositionReadinessDto['notReadyReason'],
+  ): 'threat' | 'damaged' | 'not_prepared' | 'occupied' | 'other' {
+    if (
+      value === 'threat' ||
+      value === 'damaged' ||
+      value === 'not_prepared' ||
+      value === 'occupied' ||
+      value === 'other'
+    ) {
+      return value;
+    }
+
+    throw new BadRequestException('Потрібно вказати причину НЕ БГ для ВП');
+  }
+
+  private isFireReady(
+    firePosition: FirePosition,
+    assignedWeapon: WeaponSystem | null,
+  ): boolean {
+    return this.getFireReadinessReasons(firePosition, assignedWeapon).length === 0;
+  }
+
+  private getFireReadinessReasons(
+    firePosition: FirePosition,
+    assignedWeapon: WeaponSystem | null,
+  ): FireReadinessReason[] {
+    const reasons: FireReadinessReason[] = [];
+
+    if (firePosition.readinessStatus !== 'combat_ready') {
+      reasons.push(
+        firePosition.notReadyReason === 'threat' ? 'fp_threat' : 'fp_not_prepared',
+      );
+    }
+
+    if (!assignedWeapon) {
+      reasons.push('weapon_missing');
+      return reasons;
+    }
+
+    if (
+      assignedWeapon.deploymentStatus !== 'at_fire_position' ||
+      assignedWeapon.currentFirePositionId !== firePosition.id
+    ) {
+      reasons.push('weapon_moving');
+    }
+
+    if (assignedWeapon.readinessStatus !== 'combat_ready') {
+      reasons.push('weapon_not_ready');
+    }
+
+    if (this.hasActiveMaintenance(assignedWeapon)) {
+      reasons.push('weapon_active_maintenance');
+    }
+
+    return reasons;
+  }
+
+  private hasActiveMaintenance(weapon: WeaponSystem): boolean {
+    if (
+      weapon.maintenanceStatus === 'opened' ||
+      weapon.maintenanceStatus === 'in_progress' ||
+      weapon.maintenanceStatus === 'pending' ||
+      weapon.maintenanceStatus === 'approved'
+    ) {
+      return true;
+    }
+
+    return (
+      weapon.maintenances?.some((item) =>
+        item.status === 'opened' || item.status === 'in_progress',
+      ) ?? false
+    );
+  }
+
+  private async writeReadinessEvent(
+    firePosition: FirePosition,
+    user: AuthUser,
+  ): Promise<void> {
+    const ready = firePosition.readinessStatus === 'combat_ready';
+    const title = ready ? 'ВП підтверджено БГ' : 'ВП позначено НЕ БГ';
+
+    await this.eventLogs.create({
+      eventType: 'fire_position_readiness',
+      action: ready ? 'confirmed' : 'not_ready',
+      actor: user,
+      unitId: firePosition.unitId,
+      unitName: firePosition.unit?.name ?? null,
+      entityType: 'fire_position',
+      entityId: firePosition.id,
+      entityName: firePosition.name,
+      title,
+      details: `${user.fullName || user.login}: ${title}`,
+      metadata: {
+        readinessStatus: firePosition.readinessStatus,
+        notReadyReason: firePosition.notReadyReason,
+      },
+    });
   }
 
   private applyWeaponStateToFirePosition(

@@ -52,6 +52,15 @@ export interface FirePosition {
   sectorLeftDegrees: number | null;
   sectorRightDegrees: number | null;
   maxSectorDistanceM?: number;
+  aggregateReady?: boolean;
+  aggregateReadinessReasons?: Array<
+    | 'fp_not_prepared'
+    | 'fp_threat'
+    | 'weapon_missing'
+    | 'weapon_moving'
+    | 'weapon_not_ready'
+    | 'weapon_active_maintenance'
+  >;
 
   assignedWeapon?: {
     id: string;

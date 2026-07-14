@@ -55,4 +55,15 @@ getCard(id: string): Observable<FirePositionCard> {
 getAllForMap(): Observable<FirePosition[]> {
   return this.api.get<FirePosition[]>('/fire-positions/map');
 }
+
+confirmReadiness(id: string): Observable<FirePosition> {
+  return this.api.post<FirePosition>(`/fire-positions/${id}/readiness/confirm`, {});
+}
+
+setNotReady(
+  id: string,
+  body: { notReadyReason: 'threat' | 'damaged' | 'not_prepared' | 'occupied' | 'other'; note?: string },
+): Observable<FirePosition> {
+  return this.api.post<FirePosition>(`/fire-positions/${id}/readiness/not-ready`, body);
+}
 }
