@@ -190,7 +190,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       this.autoRefresh.watch(
-        ['all', 'missions', 'map', 'analytics', 'stock', 'threats', 'weapons'],
+        ['missions', 'threats'],
         () => {
           if (this.auth.isLoggedIn() && !this.isLoginPage) {
             this.loadOperatorCounters();
