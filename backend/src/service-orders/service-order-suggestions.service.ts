@@ -95,7 +95,13 @@ export class ServiceOrderSuggestionsService {
       .leftJoin(
         'weapon_systems',
         'weapon',
-        "weapon.fire_position_id = position.id AND weapon.location_type = 'fire_position'",
+        `(
+          weapon.current_fire_position_id = position.id
+          AND weapon.deployment_status = 'at_fire_position'
+        ) OR (
+          weapon.fire_position_id = position.id
+          AND weapon.location_type = 'fire_position'
+        )`,
       )
       .where('position.hasSg = :hasSg', { hasSg: true })
       .andWhere(
@@ -105,6 +111,13 @@ export class ServiceOrderSuggestionsService {
           OR weapon.readiness_status IN (:...readyStatuses)
         )`,
         { readyStatuses },
+      )
+      .andWhere(
+        `(
+          weapon.id IS NULL
+          OR weapon.deployment_status IS NULL
+          OR weapon.deployment_status = 'at_fire_position'
+        )`,
       )
       .andWhere(
         `NOT (

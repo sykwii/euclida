@@ -1,19 +1,20 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { forkJoin, Subscription } from 'rxjs';
+import { AutoRefreshService } from '../../../core/auto-refresh.service';
+import { AuthService } from '../../auth/auth.service';
+import { FirePosition } from '../../fire-positions/fire-position.model';
+import { FirePositionsService } from '../../fire-positions/fire-positions.service';
 import { Unit } from '../../units/unit.model';
 import { UnitsService } from '../../units/units.service';
 import { WeaponModel } from '../../weapon-models/weapon-model.model';
 import { WeaponModelsService } from '../../weapon-models/weapon-models.service';
 import { WeaponSystem } from '../weapon-system.model';
 import { WeaponSystemsService } from '../weapon-systems.service';
-import { FirePosition } from '../../fire-positions/fire-position.model';
-import { FirePositionsService } from '../../fire-positions/fire-positions.service';
-import { AuthService } from '../../auth/auth.service';
-import { forkJoin, Subscription } from 'rxjs';
-import { AutoRefreshService } from '../../../core/auto-refresh.service';
 
-type WeaponStatusFilter = 'all' | 'ready' | 'not_ready' | 'repair';
+type WeaponStatusFilter = 'all' | 'combat_ready' | 'not_combat_ready' | 'moving';
+type NotReadyReason = 'breakdown' | 'threat' | 'crew' | 'maintenance' | 'other';
 
 @Component({
   selector: 'app-weapon-systems-page',
@@ -25,14 +26,18 @@ type WeaponStatusFilter = 'all' | 'ready' | 'not_ready' | 'repair';
 export class WeaponSystemsPage implements OnInit, OnDestroy {
   private readonly autoRefreshSubscription = new Subscription();
   private loadSubscription?: Subscription;
+
   saving = false;
   deletingId = '';
   syncing = false;
   movingId = '';
+  maintenanceId = '';
+  readinessId = '';
   items: WeaponSystem[] = [];
   weaponModels: WeaponModel[] = [];
   units: Unit[] = [];
   firePositions: FirePosition[] = [];
+  deploymentTargets: Record<string, string> = {};
   loading = true;
   errorMessage = '';
   editingId: string | null = null;
@@ -44,10 +49,8 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     serialNumber: '',
     callsign: '',
     unitId: '',
-    readinessStatus: 'unknown',
-    notReadyReason: '',
-    locationType: 'reserve',
-    firePositionId: '',
+    readinessStatus: 'not_combat_ready',
+    notReadyReason: 'other' as NotReadyReason,
   };
 
   constructor(
@@ -67,20 +70,40 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     );
   }
 
-  get totalCount(): number {
-    return this.visibleItems.length;
+  ngOnDestroy(): void {
+    this.autoRefreshSubscription.unsubscribe();
+    this.loadSubscription?.unsubscribe();
   }
 
-  get readyCount(): number {
-    return this.visibleItems.filter((x) => x.readinessStatus === 'ready').length;
-  }
+  get visibleItems(): WeaponSystem[] {
+    const user = this.auth.getUser();
 
-  get notReadyCount(): number {
-    return this.visibleItems.filter((x) => x.readinessStatus === 'not_ready').length;
-  }
+    if (!user) {
+      return [];
+    }
 
-  get repairCount(): number {
-    return this.visibleItems.filter((x) => x.readinessStatus === 'repair').length;
+    if (user.role === 'admin' || user.scope === 'main') {
+      return this.items;
+    }
+
+    if (!user.unitId) {
+      return [];
+    }
+
+    if (user.scope === 'battery') {
+      return this.items.filter((item) => item.unitId === user.unitId);
+    }
+
+    if (user.scope === 'division') {
+      return this.items.filter((item) =>
+        this.units.some(
+          (unit) =>
+            unit.id === item.unitId && (unit.id === user.unitId || unit.parentId === user.unitId),
+        ),
+      );
+    }
+
+    return [];
   }
 
   get filteredItems(): WeaponSystem[] {
@@ -88,23 +111,70 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
       return this.visibleItems;
     }
 
-    return this.visibleItems.filter((item) => item.readinessStatus === this.activeFilter);
+    if (this.activeFilter === 'moving') {
+      return this.visibleItems.filter((item) => this.isMoving(item));
+    }
+
+    return this.visibleItems.filter(
+      (item) => this.normalizeReadiness(item.readinessStatus) === this.activeFilter,
+    );
+  }
+
+  get totalCount(): number {
+    return this.visibleItems.length;
+  }
+
+  get readyCount(): number {
+    return this.visibleItems.filter(
+      (item) => this.normalizeReadiness(item.readinessStatus) === 'combat_ready',
+    ).length;
+  }
+
+  get notReadyCount(): number {
+    return this.visibleItems.filter(
+      (item) => this.normalizeReadiness(item.readinessStatus) === 'not_combat_ready',
+    ).length;
+  }
+
+  get movingCount(): number {
+    return this.visibleItems.filter((item) => this.isMoving(item)).length;
   }
 
   get activeFilterLabel(): string {
     const labels: Record<WeaponStatusFilter, string> = {
-      all: 'Всі',
-      ready: 'БГ',
-      not_ready: 'НЕ БГ',
-      repair: 'Ремонт',
+      all: 'Усі',
+      combat_ready: 'БГ',
+      not_combat_ready: 'НЕ БГ',
+      moving: 'У русі',
     };
 
     return labels[this.activeFilter];
   }
 
-  ngOnDestroy(): void {
-    this.autoRefreshSubscription.unsubscribe();
-    this.loadSubscription?.unsubscribe();
+  get availableUnits(): Unit[] {
+    const user = this.auth.getUser();
+
+    if (!user) {
+      return [];
+    }
+
+    if (user.role === 'admin' || user.scope === 'main') {
+      return this.units;
+    }
+
+    if (!user.unitId) {
+      return [];
+    }
+
+    if (user.scope === 'battery') {
+      return this.units.filter((unit) => unit.id === user.unitId);
+    }
+
+    if (user.scope === 'division') {
+      return this.units.filter((unit) => unit.id === user.unitId || unit.parentId === user.unitId);
+    }
+
+    return [];
   }
 
   load(): void {
@@ -146,59 +216,31 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     if (!this.form.weaponModelId) {
-      this.errorMessage = 'Оберіть зразок Озброєння';
+      this.errorMessage = 'Оберіть зразок озброєння';
       return;
     }
 
-    if (this.form.locationType === 'fire_position' && !this.form.firePositionId) {
-      this.errorMessage = 'Оберіть нову ВП';
+    if (!this.form.unitId) {
+      this.errorMessage = 'Оберіть підрозділ';
       return;
     }
 
+    const readinessStatus = this.normalizeReadiness(this.form.readinessStatus);
     const body = {
       weaponModelId: this.form.weaponModelId,
       serialNumber: this.form.serialNumber.trim() || undefined,
       callsign: this.form.callsign.trim() || undefined,
-
-      locationType: this.form.locationType,
-
-      unitId:
-        this.form.locationType === 'reserve'
-          ? this.form.unitId || undefined
-          : this.form.unitId || undefined,
-
-      firePositionId:
-        this.form.locationType === 'fire_position' ? this.form.firePositionId || undefined : null,
-
-      readinessStatus: this.form.readinessStatus,
+      unitId: this.form.unitId,
+      readinessStatus,
       notReadyReason:
-        this.form.readinessStatus === 'ready'
-          ? undefined
-          : this.form.notReadyReason.trim() || undefined,
+        readinessStatus === 'combat_ready' ? undefined : this.form.notReadyReason || 'other',
     };
 
-    const currentItem = this.editingId
-      ? this.items.find((item) => item.id === this.editingId)
-      : null;
-
-    const isFirePositionReassign =
-      !!this.editingId &&
-      this.form.locationType === 'fire_position' &&
-      !!this.form.firePositionId &&
-      currentItem?.firePositionId !== this.form.firePositionId;
-
-    const request = isFirePositionReassign
-      ? this.service.assignToFirePosition(
-          this.editingId!,
-          this.form.firePositionId,
-          this.form.unitId || undefined,
-        )
-      : this.editingId
-        ? this.service.update(this.editingId, body)
-        : this.service.create(body);
+    const request = this.editingId
+      ? this.service.update(this.editingId, body)
+      : this.service.create(body);
 
     this.saving = true;
-
     request.subscribe({
       next: () => {
         this.saving = false;
@@ -215,36 +257,28 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   startEdit(item: WeaponSystem): void {
     this.editingId = item.id;
     this.formModalOpen = true;
-
     this.form = {
       weaponModelId: item.weaponModelId || '',
       serialNumber: item.serialNumber || '',
       callsign: item.callsign || '',
       unitId: item.unitId || '',
-      locationType: item.locationType || 'reserve',
-      firePositionId: item.firePositionId || '',
-      readinessStatus: item.readinessStatus || 'unknown',
-      notReadyReason: item.notReadyReason || '',
+      readinessStatus: this.normalizeReadiness(item.readinessStatus),
+      notReadyReason: (this.normalizeReason(item.notReadyReason) || 'other') as NotReadyReason,
     };
-
     this.cdr.detectChanges();
   }
 
   cancelEdit(): void {
     this.editingId = null;
     this.formModalOpen = false;
-
     this.form = {
       weaponModelId: '',
       serialNumber: '',
       callsign: '',
       unitId: '',
-      locationType: 'reserve',
-      firePositionId: '',
-      readinessStatus: 'unknown',
-      notReadyReason: '',
+      readinessStatus: 'not_combat_ready',
+      notReadyReason: 'other',
     };
-
     this.cdr.detectChanges();
   }
 
@@ -259,7 +293,6 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     this.deletingId = id;
-
     this.service.delete(id).subscribe({
       next: () => {
         this.deletingId = '';
@@ -272,104 +305,141 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     });
   }
 
-  getReadinessLabel(status: string): string {
-    if (status === 'ready') return 'БГ';
-    if (status === 'not_ready') return 'НЕ БГ';
-    if (status === 'repair') return 'Ремонт';
-    return 'Невідомо';
-  }
+  assignToFirePosition(item: WeaponSystem): void {
+    const targetFirePositionId = this.deploymentTargets[item.id];
+    if (this.movingId || !targetFirePositionId) {
+      return;
+    }
 
-  getReadinessClass(status: string): string {
-    if (status === 'ready') return 'ready';
-    if (status === 'not_ready') return 'danger';
-    if (status === 'repair') return 'repair';
-    return 'unknown';
-  }
+    const force = this.normalizeReadiness(item.readinessStatus) !== 'combat_ready';
+    if (force && !confirm('СГ не БГ. Призначити на ВП з підтвердженням?')) {
+      return;
+    }
 
-  private fail(error: unknown, message: string): void {
-    this.errorMessage = message;
-    this.loading = false;
-    this.cdr.detectChanges();
-  }
-  getAvailableFirePositions(): FirePosition[] {
-    const occupiedIds = this.items
-      .filter((item) => item.locationType === 'fire_position' && item.firePositionId)
-      .map((item) => item.firePositionId);
-
-    return this.firePositions.filter((position) => {
-      if (this.editingId && this.form.firePositionId === position.id) {
-        return true;
-      }
-
-      return !occupiedIds.includes(position.id);
+    this.movingId = item.id;
+    this.service.assignToFirePosition(item.id, targetFirePositionId, item.unitId ?? undefined, force).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося призначити СГ на ВП'),
     });
   }
-  onLocationTypeChange(nextLocationType?: string): void {
-    this.form.locationType = nextLocationType || this.form.locationType;
-    this.form.unitId = '';
-    this.form.firePositionId = '';
 
-    if (this.form.locationType === 'fire_position') {
-      this.form.readinessStatus = 'ready';
-      this.form.notReadyReason = '';
+  moveToReserve(item: WeaponSystem): void {
+    if (this.movingId || !confirm(`Зняти ${item.callsign || item.serialNumber || 'СГ'} з ВП?`)) {
+      return;
     }
+
+    this.movingId = item.id;
+    this.service.moveToReserve(item.id).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося зняти СГ з ВП'),
+    });
   }
 
-  get visibleItems() {
-    const user = this.auth.getUser();
-
-    if (!user) {
-      return [];
+  startMove(item: WeaponSystem): void {
+    if (this.movingId) {
+      return;
     }
 
-    if (user.role === 'admin' || user.scope === 'main') {
-      return this.items;
-    }
+    this.movingId = item.id;
+    const request =
+      item.deploymentStatus === 'moving_to_reserve_area'
+        ? this.service.confirmReserveArrival(item.id)
+        : this.service.confirmFirePositionArrival(item.id);
 
-    if (!user.unitId) {
-      return [];
-    }
-
-    if (user.scope === 'battery') {
-      return this.items.filter((item) => item.unitId === user.unitId);
-    }
-
-    if (user.scope === 'division') {
-      return this.items.filter((item) =>
-        this.units.some(
-          (unit) =>
-            unit.id === item.unitId && (unit.id === user.unitId || unit.parentId === user.unitId),
-        ),
-      );
-    }
-
-    return [];
+    request.subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося підтвердити прибуття СГ'),
+    });
   }
 
-  get availableUnits() {
-    const user = this.auth.getUser();
-
-    if (!user) {
-      return [];
+  setCombatReady(item: WeaponSystem): void {
+    if (this.readinessId) {
+      return;
     }
 
-    if (user.role === 'admin' || user.scope === 'main') {
-      return this.units;
+    this.readinessId = item.id;
+    this.service.confirmReadiness(item.id, { readinessStatus: 'combat_ready' }).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося підтвердити готовність'),
+    });
+  }
+
+  setNotCombatReady(item: WeaponSystem): void {
+    if (this.readinessId) {
+      return;
     }
 
-    if (!user.unitId) {
-      return [];
+    this.readinessId = item.id;
+    this.service
+      .confirmReadiness(item.id, { readinessStatus: 'not_combat_ready', notReadyReason: 'other' })
+      .subscribe({
+        next: () => this.afterAction(),
+        error: (error) => this.failAction(error, 'Не вдалося змінити готовність'),
+      });
+  }
+
+  openRepair(item: WeaponSystem): void {
+    if (this.maintenanceId) {
+      return;
     }
 
-    if (user.scope === 'battery') {
-      return this.units.filter((unit) => unit.id === user.unitId);
+    this.maintenanceId = item.id;
+    this.service.openMaintenance(item.id, { reason: 'breakdown', description: 'Ремонт відкрито оператором' }).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося відкрити ремонт'),
+    });
+  }
+
+  startMaintenance(item: WeaponSystem): void {
+    if (this.maintenanceId) {
+      return;
     }
 
-    if (user.scope === 'division') {
-      return this.units.filter((unit) => unit.id === user.unitId || unit.parentId === user.unitId);
+    this.maintenanceId = item.id;
+    this.service.approveMaintenance(item.id).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося розпочати ТО'),
+    });
+  }
+
+  completeMaintenance(item: WeaponSystem): void {
+    if (this.maintenanceId) {
+      return;
     }
 
-    return [];
+    this.maintenanceId = item.id;
+    this.service.completeMaintenance(item.id, { result: 'Завершено оператором' }).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося завершити ТО'),
+    });
+  }
+
+  syncFirePositionStates(): void {
+    if (this.syncing) {
+      return;
+    }
+
+    this.syncing = true;
+    this.service.syncFirePositionStates().subscribe({
+      next: () => {
+        this.syncing = false;
+        this.errorMessage = '';
+        this.load();
+      },
+      error: (error) => {
+        this.syncing = false;
+        this.fail(error, 'Не вдалося синхронізувати ВП');
+      },
+    });
+  }
+
+  getAvailableFirePositions(item?: WeaponSystem): FirePosition[] {
+    const occupiedIds = this.items
+      .filter((weapon) => this.isAtFirePosition(weapon) && weapon.id !== item?.id)
+      .map((weapon) => weapon.currentFirePositionId ?? weapon.firePositionId)
+      .filter((id): id is string => !!id);
+
+    return this.firePositions.filter((position) => !occupiedIds.includes(position.id));
   }
 
   canEditWeapon(item: { unitId: string | null }): boolean {
@@ -403,51 +473,142 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
 
   canCreateWeapon(): boolean {
     const user = this.auth.getUser();
-
     return !!user && (user.role === 'admin' || user.role === 'operator');
   }
 
-  syncFirePositionStates(): void {
-    if (this.syncing) {
-      return;
-    }
-
-    this.syncing = true;
-
-    this.service.syncFirePositionStates().subscribe({
-      next: () => {
-        this.syncing = false;
-        this.errorMessage = '';
-        this.load();
-      },
-      error: (error) => {
-        this.syncing = false;
-        this.fail(error, 'Не вдалося синхронізувати стан ВП');
-      },
-    });
+  canAssign(item: WeaponSystem): boolean {
+    return this.canEditWeapon(item) && this.getDeploymentStatus(item) === 'reserve_area';
   }
 
-  moveToReserve(item: WeaponSystem): void {
-    if (this.movingId || !confirm(`Зняти ${item.callsign || item.serialNumber || 'СГ'} з ВП?`)) {
-      return;
+  canWithdraw(item: WeaponSystem): boolean {
+    return this.canEditWeapon(item) && this.isAtFirePosition(item);
+  }
+
+  canConfirmArrival(item: WeaponSystem): boolean {
+    return this.canEditWeapon(item) && this.isMoving(item);
+  }
+
+  isAtFirePosition(item: WeaponSystem): boolean {
+    return this.getDeploymentStatus(item) === 'at_fire_position';
+  }
+
+  isMoving(item: WeaponSystem): boolean {
+    return ['moving_to_fire_position', 'moving_to_reserve_area'].includes(
+      this.getDeploymentStatus(item),
+    );
+  }
+
+  hasOpenMaintenance(item: WeaponSystem): boolean {
+    return item.maintenances?.some((maintenance) =>
+      ['opened', 'in_progress'].includes(maintenance.status),
+    ) || ['pending', 'approved'].includes(item.maintenanceStatus || '');
+  }
+
+  getReadinessLabel(status: string): string {
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'БГ' : 'НЕ БГ';
+  }
+
+  getReadinessClass(status: string): string {
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'ready' : 'danger';
+  }
+
+  getReasonLabel(reason: string | null): string {
+    const labels: Record<NotReadyReason, string> = {
+      breakdown: 'поломка',
+      threat: 'загроза',
+      crew: 'екіпаж',
+      maintenance: 'ТО',
+      other: 'інше',
+    };
+
+    const normalized = this.normalizeReason(reason);
+    return normalized ? labels[normalized] : '';
+  }
+
+  getDeploymentLabel(item: WeaponSystem): string {
+    const labels: Record<string, string> = {
+      reserve_area: 'РЗ',
+      moving_to_fire_position: 'рух до ВП',
+      at_fire_position: 'на ВП',
+      moving_to_reserve_area: 'рух до РЗ',
+    };
+
+    return labels[this.getDeploymentStatus(item)] ?? 'РЗ';
+  }
+
+  getDeploymentClass(item: WeaponSystem): string {
+    return this.getDeploymentStatus(item).replace(/_/g, '-');
+  }
+
+  getMaintenanceLabel(item: WeaponSystem): string {
+    const status = item.maintenanceStatus || item.maintenances?.[0]?.status || 'opened';
+    const labels: Record<string, string> = {
+      pending: 'запит',
+      approved: 'у роботі',
+      completed: 'завершено',
+      cancelled: 'скасовано',
+      opened: 'відкрито',
+      in_progress: 'у роботі',
+    };
+
+    return labels[status] ?? status;
+  }
+
+  getLocationName(item: WeaponSystem): string {
+    if (this.isAtFirePosition(item)) {
+      return item.currentFirePosition?.name || item.firePosition?.name || 'ВП';
     }
 
-    this.movingId = item.id;
+    return item.unit?.name || 'РЗ';
+  }
 
-    this.service.moveToReserve(item.id).subscribe({
-      next: () => {
-        this.movingId = '';
+  private getDeploymentStatus(item: WeaponSystem): string {
+    if (item.deploymentStatus) {
+      return item.deploymentStatus;
+    }
 
-        if (this.editingId === item.id) {
-          this.cancelEdit();
-        }
+    return item.locationType === 'fire_position' ? 'at_fire_position' : 'reserve_area';
+  }
 
-        this.load();
-      },
-      error: (error) => {
-        this.movingId = '';
-        this.fail(error, 'Не вдалося зняти СГ з ВП');
-      },
-    });
+  private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {
+    return status === 'combat_ready' || status === 'ready' || status === 'ready_for_combat'
+      ? 'combat_ready'
+      : 'not_combat_ready';
+  }
+
+  private normalizeReason(reason: string | null | undefined): NotReadyReason | null {
+    if (
+      reason === 'breakdown' ||
+      reason === 'threat' ||
+      reason === 'crew' ||
+      reason === 'maintenance' ||
+      reason === 'other'
+    ) {
+      return reason;
+    }
+
+    return null;
+  }
+
+  private afterAction(): void {
+    this.movingId = '';
+    this.maintenanceId = '';
+    this.readinessId = '';
+    this.errorMessage = '';
+    this.load();
+  }
+
+  private failAction(error: unknown, fallback: string): void {
+    this.movingId = '';
+    this.maintenanceId = '';
+    this.readinessId = '';
+    this.fail(error, fallback);
+  }
+
+  private fail(error: unknown, message: string): void {
+    const maybeHttpError = error as { error?: { message?: string } };
+    this.errorMessage = maybeHttpError.error?.message || message;
+    this.loading = false;
+    this.cdr.detectChanges();
   }
 }

@@ -2,19 +2,14 @@
   <header class="page-header">
     <div>
       <h1>Озброєння</h1>
-      <p>Стан готовності, прив’язка до підрозділу та швидке редагування</p>
+      <p>Окремо готовність, дислокація, ТО та історія переміщень СГ</p>
     </div>
 
     <div class="header-actions">
       <button type="button" class="primary-button" *ngIf="canCreateWeapon()" (click)="openCreate()">
         Додати СГ
       </button>
-      <button
-        type="button"
-        class="ghost-button"
-        (click)="syncFirePositionStates()"
-        [disabled]="syncing"
-      >
+      <button type="button" class="ghost-button" (click)="syncFirePositionStates()" [disabled]="syncing">
         {{ syncing ? 'Синхронізація...' : 'Синхронізувати ВП' }}
       </button>
       <button type="button" class="ghost-button" (click)="load()" [disabled]="loading">
@@ -24,21 +19,16 @@
   </header>
 
   <section class="stats-grid">
-    <button
-      type="button"
-      class="stat-card"
-      [class.active]="activeFilter === 'all'"
-      (click)="setFilter('all')"
-    >
+    <button type="button" class="stat-card" [class.active]="activeFilter === 'all'" (click)="setFilter('all')">
       <strong>{{ totalCount }}</strong>
-      <span>Всього</span>
+      <span>Усього</span>
     </button>
 
     <button
       type="button"
       class="stat-card ready"
-      [class.active]="activeFilter === 'ready'"
-      (click)="setFilter('ready')"
+      [class.active]="activeFilter === 'combat_ready'"
+      (click)="setFilter('combat_ready')"
     >
       <strong>{{ readyCount }}</strong>
       <span>БГ</span>
@@ -47,8 +37,8 @@
     <button
       type="button"
       class="stat-card danger"
-      [class.active]="activeFilter === 'not_ready'"
-      (click)="setFilter('not_ready')"
+      [class.active]="activeFilter === 'not_combat_ready'"
+      (click)="setFilter('not_combat_ready')"
     >
       <strong>{{ notReadyCount }}</strong>
       <span>НЕ БГ</span>
@@ -56,12 +46,12 @@
 
     <button
       type="button"
-      class="stat-card repair"
-      [class.active]="activeFilter === 'repair'"
-      (click)="setFilter('repair')"
+      class="stat-card moving"
+      [class.active]="activeFilter === 'moving'"
+      (click)="setFilter('moving')"
     >
-      <strong>{{ repairCount }}</strong>
-      <span>Ремонт</span>
+      <strong>{{ movingCount }}</strong>
+      <span>У русі</span>
     </button>
   </section>
 
@@ -74,13 +64,11 @@
     <section class="editor-card equipment-dialog" (click)="$event.stopPropagation()">
       <div class="editor-head">
         <div>
-          <span>{{ editingId ? 'Редагування' : 'Нове Озброєння' }}</span>
-          <h2>{{ editingId ? 'Оновити картку' : 'Додати Озброєння' }}</h2>
+          <span>{{ editingId ? 'Редагування картки' : 'Нова СГ' }}</span>
+          <h2>{{ editingId ? 'Оновити СГ' : 'Додати СГ у РЗ' }}</h2>
         </div>
 
-        <button type="button" class="ghost-button" *ngIf="editingId" (click)="cancelEdit()">
-          Скасувати
-        </button>
+        <button type="button" class="ghost-button" (click)="cancelEdit()">Скасувати</button>
       </div>
 
       <form class="equipment-form" (ngSubmit)="save()">
@@ -91,50 +79,32 @@
           </option>
         </select>
 
-        <input name="serialNumber" [(ngModel)]="form.serialNumber" placeholder="№ зразку" />
-
+        <input name="serialNumber" [(ngModel)]="form.serialNumber" placeholder="№ зразка" />
         <input name="callsign" [(ngModel)]="form.callsign" placeholder="Позивний" />
 
-        <select
-          name="locationType"
-          [(ngModel)]="form.locationType"
-          (ngModelChange)="onLocationTypeChange($event)"
-        >
-          <option value="reserve">В РЗ</option>
-          <option value="fire_position">На точці</option>
-        </select>
-
-        <select *ngIf="form.locationType === 'reserve'" name="unitId" [(ngModel)]="form.unitId">
+        <select name="unitId" [(ngModel)]="form.unitId">
           <option value="">Оберіть підрозділ</option>
           <option *ngFor="let unit of availableUnits" [value]="unit.id">
             {{ unit.name }}
           </option>
         </select>
 
-        <select
-          *ngIf="form.locationType === 'fire_position'"
-          name="firePositionId"
-          [(ngModel)]="form.firePositionId"
-        >
-          <option value="">Оберіть вільну точку</option>
-          <option *ngFor="let position of getAvailableFirePositions()" [value]="position.id">
-            {{ position.name }}
-          </option>
-        </select>
-
         <select name="readinessStatus" [(ngModel)]="form.readinessStatus">
-          <option value="unknown">Невідомо</option>
-          <option value="ready">БГ</option>
-          <option value="not_ready">НЕ БГ</option>
-          <option value="repair">Ремонт</option>
+          <option value="combat_ready">БГ</option>
+          <option value="not_combat_ready">НЕ БГ</option>
         </select>
 
-        <input
-          *ngIf="form.readinessStatus !== 'ready'"
+        <select
+          *ngIf="form.readinessStatus !== 'combat_ready'"
           name="notReadyReason"
           [(ngModel)]="form.notReadyReason"
-          placeholder="Причина"
-        />
+        >
+          <option value="breakdown">Поломка</option>
+          <option value="threat">Загроза</option>
+          <option value="crew">Екіпаж</option>
+          <option value="maintenance">ТО</option>
+          <option value="other">Інше</option>
+        </select>
 
         <button type="submit" class="primary-button" [disabled]="saving">
           {{ saving ? 'Збереження...' : editingId ? 'Зберегти' : 'Додати' }}
@@ -158,10 +128,11 @@
   <section class="equipment-grid" *ngIf="!loading && !errorMessage && filteredItems.length > 0">
     <article class="equipment-card" *ngFor="let item of filteredItems">
       <div class="card-top">
-        <span class="status-dot" [class]="getReadinessClass(item.readinessStatus)"></span>
-
-        <span class="status-label" [class]="getReadinessClass(item.readinessStatus)">
+        <span class="status-label" [ngClass]="getReadinessClass(item.readinessStatus)">
           {{ getReadinessLabel(item.readinessStatus) }}
+        </span>
+        <span class="deployment-label" [ngClass]="getDeploymentClass(item)">
+          {{ getDeploymentLabel(item) }}
         </span>
       </div>
 
@@ -172,33 +143,119 @@
           <span>№</span>
           <strong>{{ item.serialNumber || '—' }}</strong>
         </p>
-
         <p>
           <span>Позивний</span>
           <strong>{{ item.callsign || '—' }}</strong>
         </p>
+        <p>
+          <span>Підрозділ</span>
+          <strong>{{ item.unit?.name || '—' }}</strong>
+        </p>
       </div>
 
-      <div class="location-box" [class.on-position]="item.locationType === 'fire_position'">
-        <span>
-          {{ item.locationType === 'fire_position' ? 'На точці' : 'В РЗ' }}
-        </span>
-
-        <strong>
-          {{
-            item.locationType === 'fire_position'
-              ? item.firePosition?.name || '—'
-              : item.unit?.name || '—'
-          }}
-        </strong>
+      <div class="location-box" [class.on-position]="isAtFirePosition(item)">
+        <span>{{ getDeploymentLabel(item) }}</span>
+        <strong>{{ getLocationName(item) }}</strong>
       </div>
 
       <div class="reason-box" *ngIf="item.notReadyReason">
-        {{ item.notReadyReason }}
+        Причина НЕ БГ: {{ getReasonLabel(item.notReadyReason) || item.notReadyReason }}
+      </div>
+
+      <section class="maintenance-box" *ngIf="hasOpenMaintenance(item) || item.maintenanceStatus">
+        <span>ТО / ремонт</span>
+        <strong>{{ getMaintenanceLabel(item) }}</strong>
+      </section>
+
+      <div class="deploy-row" *ngIf="canAssign(item)">
+        <select [(ngModel)]="deploymentTargets[item.id]" [name]="'target-' + item.id">
+          <option value="">Оберіть ВП</option>
+          <option *ngFor="let position of getAvailableFirePositions(item)" [value]="position.id">
+            {{ position.name }}
+          </option>
+        </select>
+        <button
+          type="button"
+          class="ghost-button"
+          (click)="assignToFirePosition(item)"
+          [disabled]="movingId === item.id || !deploymentTargets[item.id]"
+        >
+          Призначити
+        </button>
       </div>
 
       <div class="card-actions" *ngIf="canEditWeapon(item)">
         <button type="button" class="ghost-button" (click)="startEdit(item)">Редагувати</button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="canConfirmArrival(item)"
+          (click)="startMove(item)"
+          [disabled]="movingId === item.id"
+        >
+          Підтвердити прибуття
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="canWithdraw(item)"
+          (click)="moveToReserve(item)"
+          [disabled]="movingId === item.id"
+        >
+          Зняти з ВП
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="getReadinessLabel(item.readinessStatus) !== 'БГ'"
+          (click)="setCombatReady(item)"
+          [disabled]="readinessId === item.id"
+        >
+          Підтвердити БГ
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="getReadinessLabel(item.readinessStatus) === 'БГ'"
+          (click)="setNotCombatReady(item)"
+          [disabled]="readinessId === item.id"
+        >
+          Позначити НЕ БГ
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="!hasOpenMaintenance(item)"
+          (click)="openRepair(item)"
+          [disabled]="maintenanceId === item.id"
+        >
+          Відкрити ремонт
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="item.maintenanceStatus === 'pending'"
+          (click)="startMaintenance(item)"
+          [disabled]="maintenanceId === item.id"
+        >
+          Розпочати ТО
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="item.maintenanceStatus === 'approved'"
+          (click)="completeMaintenance(item)"
+          [disabled]="maintenanceId === item.id"
+        >
+          Завершити ТО
+        </button>
 
         <button
           type="button"
@@ -208,25 +265,12 @@
         >
           {{ deletingId === item.id ? 'Видалення...' : 'Видалити' }}
         </button>
-
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="canEditWeapon(item) && item.locationType === 'fire_position'"
-          (click)="moveToReserve(item)"
-          [disabled]="movingId === item.id"
-        >
-          {{ movingId === item.id ? 'Зняття...' : 'Зняти з ВП' }}
-        </button>
       </div>
     </article>
   </section>
 
-  <div
-    class="ui-state ui-state-empty"
-    *ngIf="!loading && !errorMessage && filteredItems.length === 0"
-  >
+  <div class="ui-state ui-state-empty" *ngIf="!loading && !errorMessage && filteredItems.length === 0">
     <strong>СГ ще не додані</strong>
-    <p>Додайте перший засіб ураження або перевірте доступ до підрозділу.</p>
+    <p>Додайте першу СГ або перевірте доступ до підрозділу.</p>
   </div>
 </div>

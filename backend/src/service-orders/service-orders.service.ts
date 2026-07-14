@@ -770,15 +770,13 @@ async selectAirAsset(
       throw new BadRequestException('РќРµРјРѕР¶Р»РёРІРѕ РїРѕС‡Р°С‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕРіРѕ РІРёРєРѕРЅР°РІС†СЏ');
     }
 
+    if (order.executorType !== 'air_asset_position') {
+      await this.ensureWeaponReadyForFirePositionExecution(order.selectedFirePositionId!);
+    }
+
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       order.status = 'in_progress';
       order.startedAt = new Date();
-
-      if (order.executorType !== 'air_asset_position') {
-        await manager.update(FirePosition, order.selectedFirePositionId!, {
-          readinessStatus: 'in_progress',
-        });
-      }
 
       return manager.save(ServiceOrder, order);
     });
@@ -938,7 +936,6 @@ async selectAirAsset(
       const saved = await manager.save(ServiceOrder, lockedOrder);
 
       if (firstCompletion) {
-        firePosition.readinessStatus = 'ready';
         firePosition.completedVgzCount =
           Number(firePosition.completedVgzCount ?? 0) + 1;
         await manager.save(FirePosition, firePosition);
@@ -1168,7 +1165,6 @@ async selectAirAsset(
       const saved = await manager.save(ServiceOrder, order);
 
       if (isFirstCompletion) {
-        firePosition.readinessStatus = 'ready';
         firePosition.completedVgzCount =
           Number(firePosition.completedVgzCount ?? 0) + 1;
         await manager.save(FirePosition, firePosition);
@@ -1401,7 +1397,6 @@ async selectAirAsset(
       );
 
       if (isFirstCompletion) {
-        firePosition.readinessStatus = 'ready';
         firePosition.completedVgzCount =
           Number(firePosition.completedVgzCount ?? 0) + 1;
 
@@ -2100,6 +2095,35 @@ async selectAirAsset(
     return Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
   }
 
+  private async ensureWeaponReadyForFirePositionExecution(
+    firePositionId: string,
+  ): Promise<void> {
+    const weapon = await this.dataSource.getRepository(WeaponSystem).findOne({
+      where: [
+        {
+          currentFirePositionId: firePositionId,
+          deploymentStatus: 'at_fire_position',
+        },
+        {
+          firePositionId,
+          locationType: 'fire_position',
+        },
+      ],
+    });
+
+    if (!weapon) {
+      throw new BadRequestException('На ВП немає призначеної СГ');
+    }
+
+    if (weapon.deploymentStatus && weapon.deploymentStatus !== 'at_fire_position') {
+      throw new BadRequestException('СГ не може виконувати завдання під час руху або з РЗ');
+    }
+
+    if (weapon.readinessStatus !== 'combat_ready' && weapon.readinessStatus !== 'ready') {
+      throw new BadRequestException('СГ не перебуває у стані БГ');
+    }
+  }
+
   async cancel(
     id: string,
     reason: string | undefined,
@@ -2115,14 +2139,6 @@ async selectAirAsset(
 
     if (order.status === 'cancelled') {
       throw new BadRequestException('Р—Р°РІРґР°РЅРЅСЏ РІР¶Рµ СЃРєР°СЃРѕРІР°РЅРµ');
-    }
-
-    if (order.status === 'in_progress' && order.selectedFirePositionId) {
-      await this.dataSource
-        .getRepository(FirePosition)
-        .update(order.selectedFirePositionId, {
-          readinessStatus: 'ready',
-        });
     }
 
     order.status = 'cancelled';

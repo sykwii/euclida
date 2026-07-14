@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class AssignWeaponToFirePositionDto {
   /**
@@ -22,4 +22,12 @@ export class AssignWeaponToFirePositionDto {
   @IsOptional()
   @IsUUID()
   unitId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

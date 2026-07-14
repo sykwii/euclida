@@ -119,6 +119,10 @@
   border-color: rgba(250, 204, 21, 0.32) !important;
 }
 
+.stat-card.moving {
+  border-color: rgba(59, 130, 246, 0.32) !important;
+}
+
 .filter-strip {
   display: flex;
   justify-content: space-between;
@@ -228,6 +232,35 @@
   font-weight: 700;
 }
 
+.deployment-label {
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.deployment-label.at-fire-position {
+  color: #99f6e4;
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.24);
+}
+
+.deployment-label.reserve-area {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.deployment-label.moving-to-fire-position,
+.deployment-label.moving-to-reserve-area {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
 .equipment-card h2 {
   color: #fff;
   font-size: 20px;
@@ -260,6 +293,33 @@
   color: #fecaca;
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.26);
+}
+
+.maintenance-box {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  color: #fef3c7;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.24);
+}
+
+.maintenance-box span {
+  color: #fcd34d;
+}
+
+.deploy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.deploy-row select {
+  min-width: 0;
 }
 
 .card-actions {

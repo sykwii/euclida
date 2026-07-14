@@ -6,16 +6,64 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { EventLogsService } from '../event-logs/event-logs.service';
 import { FirePosition } from '../fire-positions/fire-position.entity';
-import { CreateWeaponSystemDto } from './dto/create-weapon-system.dto';
-import { UpdateWeaponSystemDto } from './dto/update-weapon-system.dto';
-import { AssignWeaponToFirePositionDto } from './dto/assign-weapon-to-fire-position.dto';
-import { WeaponSystem } from './weapon-system.entity';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { ServiceOrder } from '../service-orders/service-order.entity';
+import { AssignWeaponToFirePositionDto } from './dto/assign-weapon-to-fire-position.dto';
+import { CompleteWeaponMaintenanceDto } from './dto/complete-weapon-maintenance.dto';
+import { ConfirmWeaponReadinessDto } from './dto/confirm-weapon-readiness.dto';
+import { CreateWeaponDeploymentDto } from './dto/create-weapon-deployment.dto';
+import { CreateWeaponSystemDto } from './dto/create-weapon-system.dto';
+import { ExtendMaintenanceDto } from './dto/extend-maintenance.dto';
+import { OpenWeaponMaintenanceDto } from './dto/open-weapon-maintenance.dto';
+import { RequestMaintenanceDto } from './dto/request-maintenance.dto';
+import { UpdateWeaponDeploymentDto } from './dto/update-weapon-deployment.dto';
+import { UpdateWeaponSystemDto } from './dto/update-weapon-system.dto';
+import { WeaponDeployment } from './weapon-deployment.entity';
+import { WeaponMaintenance } from './weapon-maintenance.entity';
+import { WeaponSystem } from './weapon-system.entity';
+
+type WeaponReadinessStatus = 'combat_ready' | 'not_combat_ready';
+type WeaponNotReadyReason =
+  | 'breakdown'
+  | 'threat'
+  | 'crew'
+  | 'maintenance'
+  | 'other';
+type DeploymentStatus =
+  | 'reserve_area'
+  | 'moving_to_fire_position'
+  | 'at_fire_position'
+  | 'moving_to_reserve_area';
+type DeploymentLocationType = 'reserve_area' | 'fire_position';
+type DeploymentLifecycleStatus = 'planned' | 'moving' | 'arrived' | 'cancelled';
+type MaintenanceReason = 'breakdown' | 'scheduled' | 'inspection' | 'other';
+type MaintenanceStatus = 'opened' | 'in_progress' | 'completed' | 'cancelled';
+type WeaponEventAction = 'created' | 'updated' | 'assigned' | 'moved' | 'deleted';
+type MaintenanceEventAction =
+  | 'opened'
+  | 'started'
+  | 'cancelled'
+  | 'extended'
+  | 'completed';
+type DeploymentEventAction = 'planned' | 'started' | 'arrived' | 'cancelled';
+
+interface WeaponDeploymentContext {
+  weapon: WeaponSystem;
+  firePosition: FirePosition | null;
+  deployment: WeaponDeployment;
+}
+
+const ACTIVE_ORDER_STATUSES = [
+  'accepted',
+  'in_progress',
+  'sent_to_battery',
+  'sent_to_division',
+];
 
 @Injectable()
 export class WeaponSystemsService implements OnModuleInit {
@@ -38,7 +86,9 @@ export class WeaponSystemsService implements OnModuleInit {
       ADD COLUMN IF NOT EXISTS maintenance_actual_end_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS maintenance_note TEXT,
       ADD COLUMN IF NOT EXISTS maintenance_requested_by_user_id UUID,
-      ADD COLUMN IF NOT EXISTS maintenance_approved_by_user_id UUID
+      ADD COLUMN IF NOT EXISTS maintenance_approved_by_user_id UUID,
+      ADD COLUMN IF NOT EXISTS deployment_status VARCHAR(40) NOT NULL DEFAULT 'reserve_area',
+      ADD COLUMN IF NOT EXISTS current_fire_position_id UUID
     `);
   }
 
@@ -51,25 +101,15 @@ export class WeaponSystemsService implements OnModuleInit {
 
     return this.repository.find({
       where: allowedUnitIds === null ? {} : { unitId: In(allowedUnitIds) },
-      relations: {
-        unit: true,
-        weaponModel: true,
-        firePosition: true,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
+      relations: this.weaponRelations(),
+      order: { createdAt: 'DESC' },
     });
   }
 
   async findOne(id: string, user: AuthUser): Promise<WeaponSystem> {
     const item = await this.repository.findOne({
       where: { id },
-      relations: {
-        unit: true,
-        weaponModel: true,
-        firePosition: true,
-      },
+      relations: this.weaponRelations(),
     });
 
     if (!item) {
@@ -77,65 +117,38 @@ export class WeaponSystemsService implements OnModuleInit {
     }
 
     await this.ensureCanUseUnit(user, item.unitId);
-
     return item;
   }
 
   async create(data: CreateWeaponSystemDto, user: AuthUser): Promise<WeaponSystem> {
-    const locationType = data.locationType ?? 'reserve';
+    const unitId = data.unitId ?? user.unitId;
 
-    if (locationType === 'reserve') {
-      const unitId = data.unitId ?? user.unitId;
-
-      if (!unitId) {
-        throw new BadRequestException('Для РЗ потрібно вибрати підрозділ');
-      }
-
-      await this.ensureCanUseUnit(user, unitId);
-
-      data.locationType = 'reserve';
-      data.unitId = unitId;
-      data.firePositionId = null;
+    if (!unitId) {
+      throw new BadRequestException('Для РЗ потрібно вибрати підрозділ');
     }
 
-    if (locationType === 'fire_position') {
-      if (!data.firePositionId) {
-        throw new BadRequestException('Потрібно вибрати ВП');
-      }
+    await this.ensureCanUseUnit(user, unitId);
 
-      const firePosition = await this.dataSource.getRepository(FirePosition).findOne({
-        where: { id: data.firePositionId },
-      });
+    this.rejectDirectLocationMutation(data, null);
 
-      if (!firePosition) {
-        throw new BadRequestException('ВП не знайдено');
-      }
+    const item = this.repository.create({
+      ...data,
+      unitId,
+      locationType: 'reserve',
+      firePositionId: null,
+      currentFirePositionId: null,
+      deploymentStatus: 'reserve_area',
+      readinessStatus: this.normalizeWeaponReadiness(data.readinessStatus),
+      notReadyReason: this.normalizeWeaponReason(
+        data.notReadyReason,
+        this.normalizeWeaponReadiness(data.readinessStatus),
+      ),
+    });
 
-      const weaponOwnerUnitId = data.unitId ?? user.unitId ?? firePosition.unitId;
-
-      if (!weaponOwnerUnitId) {
-        throw new BadRequestException('Неможливо визначити підрозділ СГ');
-      }
-
-      await this.ensureCanUseUnit(user, weaponOwnerUnitId);
-
-      await this.detachOtherWeaponsFromFirePosition(data.firePositionId, null);
-
-      firePosition.unitId = weaponOwnerUnitId;
-      await this.dataSource.getRepository(FirePosition).save(firePosition);
-
-      data.locationType = 'fire_position';
-      data.unitId = weaponOwnerUnitId;
-    }
-
-    const item = this.repository.create(data);
     const saved = await this.repository.save(item);
-
-    await this.syncFirePositionWeaponState(saved.firePositionId);
     await this.writeWeaponEvent(saved, user, 'created');
     this.emitWeaponChanged('created', saved.id);
-
-    return saved;
+    return this.findOne(saved.id, user);
   }
 
   async update(
@@ -145,76 +158,37 @@ export class WeaponSystemsService implements OnModuleInit {
   ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const item = await this.findOne(id, user);
-    const previousFirePositionId = item.firePositionId;
-    const nextLocationType = data.locationType ?? item.locationType;
+    await this.ensureCanUseUnit(user, data.unitId ?? item.unitId);
+    this.rejectDirectLocationMutation(data, item);
 
-    if (nextLocationType === 'reserve') {
-      const nextUnitId = data.unitId ?? item.unitId;
-
-      if (!nextUnitId) {
-        throw new BadRequestException('Для РЗ потрібно вибрати підрозділ');
-      }
-
-      await this.ensureCanUseUnit(user, nextUnitId);
-
-      data.locationType = 'reserve';
-      data.unitId = nextUnitId;
-      data.firePositionId = null;
+    if (data.readinessStatus !== undefined) {
+      item.readinessStatus = this.normalizeWeaponReadiness(data.readinessStatus);
+      item.notReadyReason = this.normalizeWeaponReason(
+        data.notReadyReason ?? item.notReadyReason,
+        item.readinessStatus as WeaponReadinessStatus,
+      );
+    } else if (data.notReadyReason !== undefined) {
+      item.notReadyReason = this.normalizeWeaponReason(
+        data.notReadyReason,
+        item.readinessStatus as WeaponReadinessStatus,
+      );
     }
 
-    if (nextLocationType === 'fire_position') {
-      const shouldChangeFirePosition =
-        item.locationType !== 'fire_position' || data.firePositionId !== undefined;
-      const nextFirePositionId = shouldChangeFirePosition
-        ? data.firePositionId
-        : item.firePositionId;
+    const assignable: Partial<WeaponSystem> = {
+      weaponModelId: data.weaponModelId ?? item.weaponModelId,
+      serialNumber: data.serialNumber ?? item.serialNumber,
+      callsign: data.callsign ?? item.callsign,
+      unitId: data.unitId ?? item.unitId,
+      readinessStatus: item.readinessStatus,
+      notReadyReason: item.notReadyReason,
+    };
 
-      if (!nextFirePositionId) {
-        throw new BadRequestException('Потрібно вибрати ВП');
-      }
-
-      const firePosition = await this.dataSource.getRepository(FirePosition).findOne({
-        where: { id: nextFirePositionId },
-      });
-
-      if (!firePosition) {
-        throw new BadRequestException('ВП не знайдено');
-      }
-
-      const weaponOwnerUnitId = data.unitId ?? item.unitId ?? user.unitId;
-
-      if (!weaponOwnerUnitId) {
-        throw new BadRequestException('Неможливо визначити підрозділ СГ');
-      }
-
-      await this.ensureCanUseUnit(user, weaponOwnerUnitId);
-
-      await this.detachOtherWeaponsFromFirePosition(nextFirePositionId, item.id);
-
-      firePosition.unitId = weaponOwnerUnitId;
-      await this.dataSource.getRepository(FirePosition).save(firePosition);
-
-      data.locationType = 'fire_position';
-      data.firePositionId = nextFirePositionId;
-      data.unitId = weaponOwnerUnitId;
-    }
-
-    Object.assign(item, data);
-
+    Object.assign(item, assignable);
     const saved = await this.repository.save(item);
-
-    await this.syncFirePositionWeaponState(previousFirePositionId);
-    await this.syncFirePositionWeaponState(saved.firePositionId);
-    await this.writeWeaponEvent(
-      saved,
-      user,
-      saved.locationType === 'fire_position' ? 'assigned' : 'updated',
-    );
+    await this.writeWeaponEvent(saved, user, 'updated');
     this.emitWeaponChanged('updated', saved.id);
-
-    return saved;
+    return this.findOne(saved.id, user);
   }
-
 
   async assignToFirePosition(
     id: string,
@@ -222,205 +196,335 @@ export class WeaponSystemsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<WeaponSystem> {
     const targetFirePositionId = data.targetFirePositionId ?? data.firePositionId;
+    const result = await this.arriveAtFirePosition(id, targetFirePositionId, true, user, data);
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
+    await this.writeWeaponEvent(result.weapon, user, 'assigned');
+    this.emitWeaponChanged('moved', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
+  }
 
-    if (!targetFirePositionId) {
-      throw new BadRequestException('Потрібно вибрати нову ВП');
-    }
+  async planMoveToFirePosition(
+    id: string,
+    body: CreateWeaponDeploymentDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    const targetFirePositionId = body.targetFirePositionId ?? body.firePositionId;
+    const result = await this.planDeployment(
+      id,
+      'fire_position',
+      targetFirePositionId,
+      body.force === true,
+      body.note,
+      user,
+    );
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'planned');
+    this.emitWeaponChanged('updated', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
+  }
 
-    const weapon = await this.findOne(id, user);
-    const previousFirePositionId = weapon.firePositionId;
+  async startMoveToFirePosition(
+    id: string,
+    body: CreateWeaponDeploymentDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    const result = await this.startDeployment(id, 'fire_position', body, user);
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'started');
+    this.emitWeaponChanged('moved', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
+  }
 
-    if (previousFirePositionId === targetFirePositionId && weapon.locationType === 'fire_position') {
-      return weapon;
-    }
-
-    const firePositionRepository = this.dataSource.getRepository(FirePosition);
-    const targetFirePosition = await firePositionRepository.findOne({
-      where: { id: targetFirePositionId },
-    });
-
-    if (!targetFirePosition) {
-      throw new BadRequestException('ВП не знайдено');
-    }
-
-    const weaponOwnerUnitId = data.unitId || weapon.unitId || user.unitId || targetFirePosition.unitId;
-
-    if (!weaponOwnerUnitId) {
-      throw new BadRequestException('Неможливо визначити підрозділ СГ');
-    }
-
-    await this.ensureCanUseUnit(user, weaponOwnerUnitId);
-
-    await this.detachOtherWeaponsFromFirePosition(targetFirePositionId, weapon.id);
-
-    targetFirePosition.unitId = weaponOwnerUnitId;
-    await firePositionRepository.save(targetFirePosition);
-
-    weapon.locationType = 'fire_position';
-    weapon.firePositionId = targetFirePositionId;
-    weapon.unitId = weaponOwnerUnitId;
-
-    const saved = await this.repository.save(weapon);
-
-    await this.syncFirePositionWeaponState(previousFirePositionId);
-    await this.syncFirePositionWeaponState(targetFirePositionId);
-    await this.writeWeaponEvent(saved, user, 'assigned');
-    this.emitWeaponChanged('moved', saved.id);
-
-    return this.findOne(saved.id, user);
+  async confirmFirePositionArrival(
+    id: string,
+    body: CreateWeaponDeploymentDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    const targetFirePositionId = body.targetFirePositionId ?? body.firePositionId;
+    const result = await this.arriveAtFirePosition(id, targetFirePositionId, false, user, body);
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
+    this.emitWeaponChanged('moved', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
   }
 
   async moveToReserve(id: string, user: AuthUser): Promise<WeaponSystem> {
-    const item = await this.findOne(id, user);
-    const previousFirePositionId = item.firePositionId;
+    const result = await this.arriveAtReserve(id, true, user, {});
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
+    await this.writeWeaponEvent(result.weapon, user, 'moved');
+    this.emitWeaponChanged('moved', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
+  }
 
-    if (!item.unitId) {
-      throw new BadRequestException('У СГ не вказано підрозділ');
-    }
+  async planMoveToReserve(
+    id: string,
+    body: UpdateWeaponDeploymentDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    const result = await this.planDeployment(id, 'reserve_area', null, true, body.note, user);
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'planned');
+    this.emitWeaponChanged('updated', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
+  }
 
-    await this.ensureCanUseUnit(user, item.unitId);
+  async startMoveToReserve(
+    id: string,
+    body: UpdateWeaponDeploymentDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    const result = await this.startDeployment(id, 'reserve_area', body, user);
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'started');
+    this.emitWeaponChanged('moved', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
+  }
 
-    await this.repository.update(item.id, {
-      locationType: 'reserve',
-      firePositionId: null,
+  async confirmReserveArrival(
+    id: string,
+    body: UpdateWeaponDeploymentDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    const result = await this.arriveAtReserve(id, false, user, body);
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
+    this.emitWeaponChanged('moved', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
+  }
+
+  async cancelDeployment(id: string, user: AuthUser): Promise<WeaponSystem> {
+    const result = await this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const deployment = await this.findMutableDeployment(
+        manager.getRepository(WeaponDeployment),
+        weapon.id,
+        null,
+      );
+
+      if (!deployment) {
+        throw new BadRequestException('Немає активного переміщення для скасування');
+      }
+
+      deployment.status = 'cancelled';
+      if (deployment.status !== 'planned') {
+        deployment.arrivedAt = new Date();
+      }
+
+      this.restoreWeaponLocationAfterCancel(weapon, deployment);
+      await manager.save(WeaponDeployment, deployment);
+      await manager.save(WeaponSystem, weapon);
+      await this.syncFirePositionWeaponStateWithManager(manager, deployment.fromLocationId);
+      await this.syncFirePositionWeaponStateWithManager(manager, deployment.toLocationId);
+      return { weapon, firePosition: null, deployment };
     });
 
-    const saved = await this.findOne(item.id, user);
-
-    await this.syncFirePositionWeaponState(previousFirePositionId);
-    await this.writeWeaponEvent(saved, user, 'moved');
-    this.emitWeaponChanged('moved', saved.id);
-
-    return saved;
+    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'cancelled');
+    this.emitWeaponChanged('moved', result.weapon.id);
+    return this.findOne(result.weapon.id, user);
   }
 
   async requestMaintenance(
     id: string,
-    body: {
-      requestedStartAt?: string;
-      durationMinutes?: number;
-      note?: string;
-    },
+    body: RequestMaintenanceDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    return this.openMaintenance(
+      id,
+      {
+        reason: 'scheduled',
+        startedAt: body.requestedStartAt,
+        durationMinutes: body.durationMinutes,
+        description: body.note,
+      },
+      user,
+    );
+  }
+
+  async openMaintenance(
+    id: string,
+    body: OpenWeaponMaintenanceDto,
     user: AuthUser,
   ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
-    const item = await this.findOne(id, user);
+    const result = await this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      await this.ensureNoOpenMaintenance(manager.getRepository(WeaponMaintenance), weapon.id);
 
-    if (item.locationType !== 'fire_position' || !item.firePositionId) {
-      throw new BadRequestException('ТО можна запитати тільки для СГ на ВП');
-    }
+      const reason = this.normalizeMaintenanceReason(body.reason);
+      const startedAt = this.parseDate(body.startedAt);
+      const durationMinutes = Number(body.durationMinutes ?? 0);
+      const expectedCompletedAt =
+        Number.isFinite(durationMinutes) && durationMinutes > 0
+          ? new Date(startedAt.getTime() + durationMinutes * 60_000)
+          : null;
 
-    if (this.hasOpenMaintenance(item)) {
-      throw new BadRequestException('Для цієї СГ вже є активний запит або ТО');
-    }
+      const maintenance = manager.create(WeaponMaintenance, {
+        weaponSystemId: weapon.id,
+        reason,
+        status: 'opened',
+        startedAt,
+        expectedCompletedAt,
+        completedAt: null,
+        description: body.description?.trim() || null,
+        result: null,
+        openedByUserId: user.sub,
+      });
 
-    const startAt = this.parseMaintenanceDate(body.requestedStartAt);
-    const durationMinutes = Number(body.durationMinutes ?? 0);
+      weapon.readinessStatus = 'not_combat_ready';
+      weapon.notReadyReason = reason === 'breakdown' ? 'breakdown' : 'maintenance';
+      weapon.maintenanceStatus = 'pending';
+      weapon.maintenanceRequestedStartAt = startedAt;
+      weapon.maintenancePlannedEndAt = expectedCompletedAt;
+      weapon.maintenanceActualEndAt = null;
+      weapon.maintenanceNote = maintenance.description;
+      weapon.maintenanceRequestedByUserId = user.sub;
+      weapon.maintenanceApprovedByUserId = null;
 
-    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-      throw new BadRequestException('Вкажіть планову тривалість ТО');
-    }
+      await manager.save(WeaponMaintenance, maintenance);
+      await manager.save(WeaponSystem, weapon);
+      return weapon;
+    });
 
-    item.maintenanceStatus = 'pending';
-    item.maintenanceRequestedStartAt = startAt;
-    item.maintenancePlannedEndAt = new Date(startAt.getTime() + durationMinutes * 60_000);
-    item.maintenanceActualEndAt = null;
-    item.maintenanceNote = body.note?.trim() || null;
-    item.maintenanceRequestedByUserId = user.sub;
-    item.maintenanceApprovedByUserId = null;
-
-    const saved = await this.repository.save(item);
-    await this.writeMaintenanceEvent(saved, user, 'requested');
-    this.emitWeaponChanged('updated', saved.id);
-
-    return this.findOne(saved.id, user);
+    await this.writeMaintenanceEvent(result, user, 'opened');
+    this.emitWeaponChanged('updated', result.id);
+    return this.findOne(result.id, user);
   }
 
   async approveMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
+    return this.startMaintenance(id, user);
+  }
+
+  async startMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
     this.ensureMainOperator(user);
-    const item = await this.findOne(id, user);
+    const result = await this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const maintenance = await this.findOpenMaintenance(
+        manager.getRepository(WeaponMaintenance),
+        weapon.id,
+      );
 
-    if (item.maintenanceStatus !== 'pending') {
-      throw new BadRequestException('Немає запиту ТО для підтвердження');
-    }
+      maintenance.status = 'in_progress';
+      weapon.maintenanceStatus = 'approved';
+      weapon.maintenanceApprovedByUserId = user.sub;
+      await manager.save(WeaponMaintenance, maintenance);
+      await manager.save(WeaponSystem, weapon);
+      return weapon;
+    });
 
-    item.maintenanceStatus = 'approved';
-    item.maintenanceApprovedByUserId = user.sub;
-
-    const saved = await this.repository.save(item);
-    await this.syncFirePositionWeaponState(saved.firePositionId);
-    await this.writeMaintenanceEvent(saved, user, 'approved');
-    this.emitWeaponChanged('updated', saved.id);
-
-    return this.findOne(saved.id, user);
+    await this.writeMaintenanceEvent(result, user, 'started');
+    this.emitWeaponChanged('updated', result.id);
+    return this.findOne(result.id, user);
   }
 
   async rejectMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
     this.ensureMainOperator(user);
-    const item = await this.findOne(id, user);
+    const result = await this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const maintenance = await this.findOpenMaintenance(
+        manager.getRepository(WeaponMaintenance),
+        weapon.id,
+      );
 
-    if (item.maintenanceStatus !== 'pending') {
-      throw new BadRequestException('Немає запиту ТО для відхилення');
-    }
+      maintenance.status = 'cancelled';
+      maintenance.completedAt = new Date();
+      weapon.maintenanceStatus = 'cancelled';
+      weapon.maintenanceActualEndAt = maintenance.completedAt;
+      await manager.save(WeaponMaintenance, maintenance);
+      await manager.save(WeaponSystem, weapon);
+      return weapon;
+    });
 
-    item.maintenanceStatus = 'cancelled';
-    item.maintenanceActualEndAt = new Date();
-
-    const saved = await this.repository.save(item);
-    await this.syncFirePositionWeaponState(saved.firePositionId);
-    await this.writeMaintenanceEvent(saved, user, 'rejected');
-    this.emitWeaponChanged('updated', saved.id);
-
-    return this.findOne(saved.id, user);
+    await this.writeMaintenanceEvent(result, user, 'cancelled');
+    this.emitWeaponChanged('updated', result.id);
+    return this.findOne(result.id, user);
   }
 
   async extendMaintenance(
     id: string,
-    body: { extraMinutes?: number; note?: string },
+    body: ExtendMaintenanceDto,
     user: AuthUser,
   ): Promise<WeaponSystem> {
-    const item = await this.findOne(id, user);
+    const result = await this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const maintenance = await this.findOpenMaintenance(
+        manager.getRepository(WeaponMaintenance),
+        weapon.id,
+      );
 
-    if (!this.hasOpenMaintenance(item) || item.maintenanceStatus === 'pending') {
-      throw new BadRequestException('Немає активного ТО для продовження');
-    }
+      if (maintenance.status === 'opened') {
+        throw new BadRequestException('ТО ще не розпочато');
+      }
 
-    const extraMinutes = Number(body.extraMinutes ?? 0);
+      const extraMinutes = Number(body.extraMinutes ?? 0);
+      if (!Number.isFinite(extraMinutes) || extraMinutes <= 0) {
+        throw new BadRequestException('Вкажіть час продовження ТО');
+      }
 
-    if (!Number.isFinite(extraMinutes) || extraMinutes <= 0) {
-      throw new BadRequestException('Вкажіть час продовження ТО');
-    }
+      const baseEnd = maintenance.expectedCompletedAt ?? new Date();
+      maintenance.expectedCompletedAt = new Date(baseEnd.getTime() + extraMinutes * 60_000);
+      maintenance.description =
+        [maintenance.description, body.note?.trim()].filter(Boolean).join('\n') || null;
+      weapon.maintenancePlannedEndAt = maintenance.expectedCompletedAt;
+      weapon.maintenanceNote = maintenance.description;
+      await manager.save(WeaponMaintenance, maintenance);
+      await manager.save(WeaponSystem, weapon);
+      return weapon;
+    });
 
-    const baseEnd = item.maintenancePlannedEndAt ?? new Date();
-    item.maintenancePlannedEndAt = new Date(baseEnd.getTime() + extraMinutes * 60_000);
-    item.maintenanceNote = [item.maintenanceNote, body.note?.trim()].filter(Boolean).join('\n') || null;
-
-    const saved = await this.repository.save(item);
-    await this.syncFirePositionWeaponState(saved.firePositionId);
-    await this.writeMaintenanceEvent(saved, user, 'extended');
-    this.emitWeaponChanged('updated', saved.id);
-
-    return this.findOne(saved.id, user);
+    await this.writeMaintenanceEvent(result, user, 'extended');
+    this.emitWeaponChanged('updated', result.id);
+    return this.findOne(result.id, user);
   }
 
   async finishMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
+    return this.completeMaintenance(id, {}, user);
+  }
+
+  async completeMaintenance(
+    id: string,
+    body: CompleteWeaponMaintenanceDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    this.ensureMaintenanceFieldOperator(user);
+    const result = await this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const maintenance = await this.findOpenMaintenance(
+        manager.getRepository(WeaponMaintenance),
+        weapon.id,
+      );
+
+      if (maintenance.status === 'opened') {
+        throw new BadRequestException('ТО ще не розпочато');
+      }
+
+      maintenance.status = 'completed';
+      maintenance.completedAt = new Date();
+      maintenance.completedByUserId = user.sub;
+      maintenance.result = body.result?.trim() || null;
+      weapon.maintenanceStatus = 'completed';
+      weapon.maintenanceActualEndAt = maintenance.completedAt;
+      weapon.maintenanceNote = maintenance.result ?? weapon.maintenanceNote;
+      weapon.readinessStatus = 'not_combat_ready';
+      weapon.notReadyReason = weapon.notReadyReason ?? 'maintenance';
+      await manager.save(WeaponMaintenance, maintenance);
+      await manager.save(WeaponSystem, weapon);
+      return weapon;
+    });
+
+    await this.writeMaintenanceEvent(result, user, 'completed');
+    this.emitWeaponChanged('updated', result.id);
+    return this.findOne(result.id, user);
+  }
+
+  async confirmReadiness(
+    id: string,
+    body: ConfirmWeaponReadinessDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const item = await this.findOne(id, user);
-
-    if (!this.hasOpenMaintenance(item) || item.maintenanceStatus === 'pending') {
-      throw new BadRequestException('Немає активного ТО для завершення');
-    }
-
-    item.maintenanceStatus = 'completed';
-    item.maintenanceActualEndAt = new Date();
-    item.readinessStatus = 'ready';
-    item.notReadyReason = null;
-
+    item.readinessStatus = this.normalizeWeaponReadiness(body.readinessStatus);
+    item.notReadyReason = this.normalizeWeaponReason(
+      body.notReadyReason ?? null,
+      item.readinessStatus as WeaponReadinessStatus,
+    );
     const saved = await this.repository.save(item);
-    await this.syncFirePositionWeaponState(saved.firePositionId);
-    await this.writeMaintenanceEvent(saved, user, 'finished');
+    await this.writeWeaponEvent(saved, user, 'updated');
     this.emitWeaponChanged('updated', saved.id);
-
     return this.findOne(saved.id, user);
   }
 
@@ -436,19 +540,635 @@ export class WeaponSystemsService implements OnModuleInit {
     for (const firePosition of firePositions) {
       await this.syncFirePositionWeaponState(firePosition.id);
     }
-    this.emitWeaponChanged('synced');
 
+    this.emitWeaponChanged('synced');
     return { updated: firePositions.length };
   }
 
   async remove(id: string, user: AuthUser): Promise<void> {
     const item = await this.findOne(id, user);
-    const previousFirePositionId = item.firePositionId;
-
+    const previousFirePositionId = item.currentFirePositionId ?? item.firePositionId;
     await this.repository.remove(item);
     await this.syncFirePositionWeaponState(previousFirePositionId);
     await this.writeWeaponEvent(item, user, 'deleted');
     this.emitWeaponChanged('deleted', item.id);
+  }
+
+  private async planDeployment(
+    id: string,
+    toLocationType: DeploymentLocationType,
+    toLocationId: string | null | undefined,
+    force: boolean,
+    note: string | null | undefined,
+    user: AuthUser,
+  ): Promise<WeaponDeploymentContext> {
+    return this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      this.ensureWeaponCanStartDeployment(weapon);
+
+      const firePosition =
+        toLocationType === 'fire_position'
+          ? await this.loadTargetFirePosition(manager, toLocationId, user)
+          : null;
+
+      if (toLocationType === 'fire_position') {
+        this.ensureNonReadyAssignmentConfirmed(weapon, force);
+        await this.ensureFirePositionAvailable(manager, firePosition!.id, weapon.id);
+      } else {
+        await this.ensureNoActiveExecution(manager, weapon.currentFirePositionId);
+      }
+
+      await this.ensureNoMutableDeployment(manager.getRepository(WeaponDeployment), weapon.id);
+
+      const deployment = manager.create(WeaponDeployment, {
+        weaponSystemId: weapon.id,
+        fromLocationType: this.getCurrentLocationType(weapon),
+        fromLocationId: weapon.currentFirePositionId ?? null,
+        toLocationType,
+        toLocationId: firePosition?.id ?? null,
+        status: 'planned',
+        orderedAt: new Date(),
+        orderedByUserId: user.sub,
+        note: note?.trim() || null,
+      });
+
+      const savedDeployment = await manager.save(WeaponDeployment, deployment);
+      return { weapon, firePosition, deployment: savedDeployment };
+    });
+  }
+
+  private async startDeployment(
+    id: string,
+    toLocationType: DeploymentLocationType,
+    body: CreateWeaponDeploymentDto | UpdateWeaponDeploymentDto,
+    user: AuthUser,
+  ): Promise<WeaponDeploymentContext> {
+    return this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const deployment =
+        (await this.findMutableDeployment(
+          manager.getRepository(WeaponDeployment),
+          weapon.id,
+          toLocationType,
+        )) ??
+        (
+          await this.planDeployment(
+            id,
+            toLocationType,
+            'targetFirePositionId' in body ? body.targetFirePositionId ?? body.firePositionId : null,
+            'force' in body && body.force === true,
+            body.note,
+            user,
+          )
+        ).deployment;
+
+      if (deployment.status !== 'planned') {
+        throw new BadRequestException('Переміщення вже розпочато або завершено');
+      }
+
+      const firePosition =
+        deployment.toLocationType === 'fire_position'
+          ? await this.loadTargetFirePosition(manager, deployment.toLocationId, user)
+          : null;
+
+      if (deployment.toLocationType === 'fire_position') {
+        await this.ensureFirePositionAvailable(manager, firePosition!.id, weapon.id);
+      } else {
+        await this.ensureNoActiveExecution(manager, weapon.currentFirePositionId);
+      }
+
+      deployment.status = 'moving';
+      deployment.departedAt = new Date();
+      weapon.deploymentStatus =
+        deployment.toLocationType === 'fire_position'
+          ? 'moving_to_fire_position'
+          : 'moving_to_reserve_area';
+      weapon.currentFirePositionId = null;
+      weapon.locationType = 'reserve';
+      weapon.firePositionId = null;
+
+      const savedDeployment = await manager.save(WeaponDeployment, deployment);
+      await manager.save(WeaponSystem, weapon);
+      await this.syncFirePositionWeaponStateWithManager(manager, deployment.fromLocationId);
+      return { weapon, firePosition, deployment: savedDeployment };
+    });
+  }
+
+  private async arriveAtFirePosition(
+    id: string,
+    targetFirePositionId: string | null | undefined,
+    allowImmediate: boolean,
+    user: AuthUser,
+    body: CreateWeaponDeploymentDto | AssignWeaponToFirePositionDto,
+  ): Promise<WeaponDeploymentContext> {
+    return this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const deploymentRepository = manager.getRepository(WeaponDeployment);
+      const mutableDeployment = await this.findMutableDeployment(
+        deploymentRepository,
+        weapon.id,
+        'fire_position',
+      );
+      const targetId = targetFirePositionId ?? mutableDeployment?.toLocationId;
+      const firePosition = await this.loadTargetFirePosition(manager, targetId, user);
+      const force = 'force' in body && body.force === true;
+
+      if (
+        weapon.deploymentStatus === 'at_fire_position' &&
+        weapon.currentFirePositionId === firePosition.id
+      ) {
+        const deployment = await this.ensureArrivedDeployment(
+          manager,
+          weapon,
+          firePosition.id,
+          user,
+          this.getDeploymentNote(body),
+        );
+        return { weapon, firePosition, deployment };
+      }
+
+      this.ensureNonReadyAssignmentConfirmed(weapon, force);
+      await this.ensureFirePositionAvailable(manager, firePosition.id, weapon.id);
+
+      const deployment =
+        mutableDeployment ??
+        manager.create(WeaponDeployment, {
+          weaponSystemId: weapon.id,
+          fromLocationType: this.getCurrentLocationType(weapon),
+          fromLocationId: weapon.currentFirePositionId ?? null,
+          toLocationType: 'fire_position',
+          toLocationId: firePosition.id,
+          status: allowImmediate ? 'moving' : 'planned',
+          orderedAt: new Date(),
+          departedAt: allowImmediate ? new Date() : null,
+          orderedByUserId: user.sub,
+          note: this.getDeploymentNote(body),
+        });
+
+      if (!allowImmediate && deployment.status !== 'moving') {
+        throw new BadRequestException('Спочатку потрібно розпочати переміщення до ВП');
+      }
+
+      deployment.status = 'arrived';
+      deployment.toLocationId = firePosition.id;
+      deployment.arrivedAt = new Date();
+      deployment.confirmedByUserId = user.sub;
+      weapon.deploymentStatus = 'at_fire_position';
+      weapon.currentFirePositionId = firePosition.id;
+      weapon.locationType = 'fire_position';
+      weapon.firePositionId = firePosition.id;
+      weapon.unitId = weapon.unitId ?? firePosition.unitId;
+      firePosition.unitId = weapon.unitId ?? firePosition.unitId;
+
+      const savedDeployment = await manager.save(WeaponDeployment, deployment);
+      await manager.save(FirePosition, firePosition);
+      await manager.save(WeaponSystem, weapon);
+      await this.syncFirePositionWeaponStateWithManager(manager, firePosition.id);
+      await this.syncFirePositionWeaponStateWithManager(manager, deployment.fromLocationId);
+      return { weapon, firePosition, deployment: savedDeployment };
+    });
+  }
+
+  private async arriveAtReserve(
+    id: string,
+    allowImmediate: boolean,
+    user: AuthUser,
+    body: UpdateWeaponDeploymentDto,
+  ): Promise<WeaponDeploymentContext> {
+    return this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const previousFirePositionId = weapon.currentFirePositionId ?? weapon.firePositionId;
+      await this.ensureNoActiveExecution(manager, previousFirePositionId);
+
+      const deploymentRepository = manager.getRepository(WeaponDeployment);
+      const mutableDeployment = await this.findMutableDeployment(
+        deploymentRepository,
+        weapon.id,
+        'reserve_area',
+      );
+
+      const deployment =
+        mutableDeployment ??
+        manager.create(WeaponDeployment, {
+          weaponSystemId: weapon.id,
+          fromLocationType: this.getCurrentLocationType(weapon),
+          fromLocationId: previousFirePositionId,
+          toLocationType: 'reserve_area',
+          toLocationId: null,
+          status: allowImmediate ? 'moving' : 'planned',
+          orderedAt: new Date(),
+          departedAt: allowImmediate ? new Date() : null,
+          orderedByUserId: user.sub,
+          note: body.note?.trim() || null,
+        });
+
+      if (!allowImmediate && deployment.status !== 'moving') {
+        throw new BadRequestException('Спочатку потрібно розпочати переміщення до РЗ');
+      }
+
+      deployment.status = 'arrived';
+      deployment.arrivedAt = new Date();
+      deployment.confirmedByUserId = user.sub;
+      weapon.deploymentStatus = 'reserve_area';
+      weapon.currentFirePositionId = null;
+      weapon.locationType = 'reserve';
+      weapon.firePositionId = null;
+
+      const savedDeployment = await manager.save(WeaponDeployment, deployment);
+      await manager.save(WeaponSystem, weapon);
+      await this.syncFirePositionWeaponStateWithManager(manager, previousFirePositionId);
+      return { weapon, firePosition: null, deployment: savedDeployment };
+    });
+  }
+
+  private async lockWeapon(
+    repository: Repository<WeaponSystem>,
+    id: string,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
+    const item = await repository.findOne({
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+      relations: this.weaponRelations(),
+    });
+
+    if (!item) {
+      throw new NotFoundException('СГ не знайдено');
+    }
+
+    await this.ensureCanUseUnit(user, item.unitId);
+    return item;
+  }
+
+  private async loadTargetFirePosition(
+    manager: DataSource['manager'],
+    firePositionId: string | null | undefined,
+    user: AuthUser,
+  ): Promise<FirePosition> {
+    if (!firePositionId) {
+      throw new BadRequestException('Потрібно вибрати ВП');
+    }
+
+    const firePosition = await manager.getRepository(FirePosition).findOne({
+      where: { id: firePositionId },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!firePosition) {
+      throw new BadRequestException('ВП не знайдено');
+    }
+
+    await this.ensureCanUseUnit(user, firePosition.unitId);
+    return firePosition;
+  }
+
+  private async ensureFirePositionAvailable(
+    manager: DataSource['manager'],
+    firePositionId: string,
+    weaponId: string,
+  ): Promise<void> {
+    const occupied = await manager.getRepository(WeaponSystem).findOne({
+      where: {
+        currentFirePositionId: firePositionId,
+        deploymentStatus: 'at_fire_position',
+        id: Not(weaponId),
+      },
+      lock: { mode: 'pessimistic_read' },
+    });
+
+    if (occupied) {
+      throw new BadRequestException('ВП вже зайнята іншою СГ');
+    }
+  }
+
+  private async ensureNoActiveExecution(
+    manager: DataSource['manager'],
+    firePositionId: string | null,
+  ): Promise<void> {
+    if (!firePositionId) {
+      return;
+    }
+
+    const activeOrder = await manager.getRepository(ServiceOrder).findOne({
+      where: {
+        selectedFirePositionId: firePositionId,
+        status: In(ACTIVE_ORDER_STATUSES),
+      },
+      select: { id: true },
+    });
+
+    if (activeOrder) {
+      throw new BadRequestException('Неможливо вивести СГ під час активного виконання');
+    }
+  }
+
+  private async ensureNoOpenMaintenance(
+    repository: Repository<WeaponMaintenance>,
+    weaponSystemId: string,
+  ): Promise<void> {
+    const existing = await repository.findOne({
+      where: {
+        weaponSystemId,
+        status: In(['opened', 'in_progress']),
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Для цієї СГ вже є активне ТО або ремонт');
+    }
+  }
+
+  private async findOpenMaintenance(
+    repository: Repository<WeaponMaintenance>,
+    weaponSystemId: string,
+  ): Promise<WeaponMaintenance> {
+    const maintenance = await repository.findOne({
+      where: {
+        weaponSystemId,
+        status: In(['opened', 'in_progress']),
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!maintenance) {
+      throw new BadRequestException('Немає активного ТО або ремонту');
+    }
+
+    return maintenance;
+  }
+
+  private async ensureNoMutableDeployment(
+    repository: Repository<WeaponDeployment>,
+    weaponSystemId: string,
+  ): Promise<void> {
+    const existing = await repository.findOne({
+      where: {
+        weaponSystemId,
+        status: In(['planned', 'moving']),
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Для цієї СГ вже є активне переміщення');
+    }
+  }
+
+  private async findMutableDeployment(
+    repository: Repository<WeaponDeployment>,
+    weaponSystemId: string,
+    toLocationType: DeploymentLocationType | null,
+  ): Promise<WeaponDeployment | null> {
+    return repository.findOne({
+      where: {
+        weaponSystemId,
+        status: In(['planned', 'moving']),
+        ...(toLocationType ? { toLocationType } : {}),
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  private async ensureArrivedDeployment(
+    manager: DataSource['manager'],
+    weapon: WeaponSystem,
+    firePositionId: string,
+    user: AuthUser,
+    note: string | null | undefined,
+  ): Promise<WeaponDeployment> {
+    const existing = await manager.getRepository(WeaponDeployment).findOne({
+      where: {
+        weaponSystemId: weapon.id,
+        toLocationType: 'fire_position',
+        toLocationId: firePositionId,
+        status: 'arrived',
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return manager.save(
+      WeaponDeployment,
+      manager.create(WeaponDeployment, {
+        weaponSystemId: weapon.id,
+        fromLocationType: 'fire_position',
+        fromLocationId: firePositionId,
+        toLocationType: 'fire_position',
+        toLocationId: firePositionId,
+        status: 'arrived',
+        orderedAt: new Date(),
+        departedAt: new Date(),
+        arrivedAt: new Date(),
+        orderedByUserId: user.sub,
+        confirmedByUserId: user.sub,
+        note: note?.trim() || null,
+      }),
+    );
+  }
+
+  private async syncFirePositionWeaponState(firePositionId: string | null): Promise<void> {
+    await this.syncFirePositionWeaponStateWithManager(this.dataSource.manager, firePositionId);
+  }
+
+  private async syncFirePositionWeaponStateWithManager(
+    manager: DataSource['manager'],
+    firePositionId: string | null,
+  ): Promise<void> {
+    if (!firePositionId) {
+      return;
+    }
+
+    const weapon = await manager.getRepository(WeaponSystem).findOne({
+      where: {
+        currentFirePositionId: firePositionId,
+        deploymentStatus: 'at_fire_position',
+      },
+      order: { updatedAt: 'DESC' },
+    });
+
+    await manager.getRepository(FirePosition).update(firePositionId, {
+      hasSg: !!weapon,
+      unitId: weapon?.unitId ?? null,
+    });
+  }
+
+  private restoreWeaponLocationAfterCancel(
+    weapon: WeaponSystem,
+    deployment: WeaponDeployment,
+  ): void {
+    if (deployment.fromLocationType === 'fire_position' && deployment.fromLocationId) {
+      weapon.deploymentStatus = 'at_fire_position';
+      weapon.currentFirePositionId = deployment.fromLocationId;
+      weapon.locationType = 'fire_position';
+      weapon.firePositionId = deployment.fromLocationId;
+      return;
+    }
+
+    weapon.deploymentStatus = 'reserve_area';
+    weapon.currentFirePositionId = null;
+    weapon.locationType = 'reserve';
+    weapon.firePositionId = null;
+  }
+
+  private rejectDirectLocationMutation(
+    data: Partial<CreateWeaponSystemDto & UpdateWeaponSystemDto>,
+    current: WeaponSystem | null,
+  ): void {
+    const requestedFirePositionId = data.currentFirePositionId ?? data.firePositionId ?? null;
+    const requestedDeployment = this.normalizeDeploymentInput(
+      data.deploymentStatus,
+      data.locationType,
+      requestedFirePositionId,
+    );
+
+    if (!current) {
+      if (requestedFirePositionId || requestedDeployment !== 'reserve_area') {
+        throw new BadRequestException('Переміщення СГ виконується окремою дією');
+      }
+      return;
+    }
+
+    const currentFirePositionId = current.currentFirePositionId ?? current.firePositionId ?? null;
+    const currentDeployment = this.normalizeDeploymentInput(
+      current.deploymentStatus,
+      current.locationType,
+      currentFirePositionId,
+    );
+
+    if (
+      requestedFirePositionId !== null &&
+      requestedFirePositionId !== currentFirePositionId
+    ) {
+      throw new BadRequestException('Переміщення СГ виконується окремою дією');
+    }
+
+    if (
+      data.deploymentStatus !== undefined &&
+      requestedDeployment !== currentDeployment
+    ) {
+      throw new BadRequestException('Переміщення СГ виконується окремою дією');
+    }
+
+    if (
+      data.locationType !== undefined &&
+      this.normalizeDeploymentInput(undefined, data.locationType, requestedFirePositionId) !==
+        currentDeployment
+    ) {
+      throw new BadRequestException('Переміщення СГ виконується окремою дією');
+    }
+  }
+
+  private normalizeDeploymentInput(
+    deploymentStatus: string | null | undefined,
+    locationType: string | null | undefined,
+    firePositionId: string | null,
+  ): DeploymentStatus {
+    if (
+      deploymentStatus === 'reserve_area' ||
+      deploymentStatus === 'moving_to_fire_position' ||
+      deploymentStatus === 'at_fire_position' ||
+      deploymentStatus === 'moving_to_reserve_area'
+    ) {
+      return deploymentStatus;
+    }
+
+    if (locationType === 'fire_position' || firePositionId) {
+      return 'at_fire_position';
+    }
+
+    return 'reserve_area';
+  }
+
+  private normalizeWeaponReadiness(value: string | null | undefined): WeaponReadinessStatus {
+    return value === 'ready' || value === 'combat_ready' || value === 'ready_for_combat'
+      ? 'combat_ready'
+      : 'not_combat_ready';
+  }
+
+  private normalizeWeaponReason(
+    value: string | null | undefined,
+    readinessStatus: WeaponReadinessStatus,
+  ): WeaponNotReadyReason | null {
+    if (readinessStatus === 'combat_ready') {
+      return null;
+    }
+
+    if (
+      value === 'breakdown' ||
+      value === 'threat' ||
+      value === 'crew' ||
+      value === 'maintenance' ||
+      value === 'other'
+    ) {
+      return value;
+    }
+
+    return 'other';
+  }
+
+  private normalizeMaintenanceReason(value: string | null | undefined): MaintenanceReason {
+    if (
+      value === 'breakdown' ||
+      value === 'scheduled' ||
+      value === 'inspection' ||
+      value === 'other'
+    ) {
+      return value;
+    }
+
+    return 'breakdown';
+  }
+
+  private ensureNonReadyAssignmentConfirmed(weapon: WeaponSystem, force: boolean): void {
+    if (this.normalizeWeaponReadiness(weapon.readinessStatus) === 'combat_ready') {
+      return;
+    }
+
+    if (!force) {
+      throw new BadRequestException('СГ не БГ. Потрібне явне підтвердження призначення');
+    }
+  }
+
+  private ensureWeaponCanStartDeployment(weapon: WeaponSystem): void {
+    if (
+      weapon.deploymentStatus === 'moving_to_fire_position' ||
+      weapon.deploymentStatus === 'moving_to_reserve_area'
+    ) {
+      throw new BadRequestException('СГ вже в русі');
+    }
+  }
+
+  private getCurrentLocationType(weapon: WeaponSystem): DeploymentLocationType {
+    return weapon.currentFirePositionId || weapon.locationType === 'fire_position'
+      ? 'fire_position'
+      : 'reserve_area';
+  }
+
+  private parseDate(value: string | undefined): Date {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Некоректний час початку ТО');
+    }
+    return date;
+  }
+
+  private getDeploymentNote(
+    body: CreateWeaponDeploymentDto | AssignWeaponToFirePositionDto | UpdateWeaponDeploymentDto,
+  ): string | null {
+    return 'note' in body ? body.note?.trim() || null : null;
+  }
+
+  private weaponRelations() {
+    return {
+      unit: true,
+      weaponModel: true,
+      firePosition: true,
+      currentFirePosition: true,
+      maintenances: true,
+      deployments: true,
+    };
   }
 
   private async ensureCanUseUnit(user: AuthUser, unitId: string | null): Promise<void> {
@@ -457,191 +1177,9 @@ export class WeaponSystemsService implements OnModuleInit {
     }
 
     const canAccess = await this.accessScope.canAccessUnit(user, unitId);
-
     if (!canAccess) {
       throw new ForbiddenException('Немає доступу до СГ цього підрозділу');
     }
-  }
-
-  private async syncFirePositionWeaponState(
-  firePositionId: string | null,
-): Promise<void> {
-  if (!firePositionId) {
-    return;
-  }
-
-  const firePositionRepository = this.dataSource.getRepository(FirePosition);
-  const weaponRepository = this.dataSource.getRepository(WeaponSystem);
-
-  const firePosition = await firePositionRepository.findOne({
-    where: { id: firePositionId },
-  });
-
-  if (!firePosition) {
-    return;
-  }
-
-  const weapon = await weaponRepository.findOne({
-    where: { firePositionId, locationType: 'fire_position' },
-    order: { updatedAt: 'DESC' },
-  });
-
-  if (!weapon) {
-    await firePositionRepository.update(firePositionId, {
-      hasSg: false,
-      readinessStatus: 'not_ready',
-      notReadyReason: 'Відсутня СГ',
-    });
-    return;
-  }
-
-  const maintenanceActive = this.isMaintenanceActive(weapon);
-
-  await firePositionRepository.update(firePositionId, {
-    hasSg: true,
-    unitId: weapon.unitId,
-    readinessStatus:
-      weapon.readinessStatus === 'ready' && !maintenanceActive ? 'ready' : 'not_ready',
-    notReadyReason:
-      maintenanceActive
-        ? this.getMaintenanceReason(weapon)
-        : weapon.readinessStatus === 'ready'
-        ? null
-        : weapon.readinessStatus === 'repair'
-          ? 'СГ в ремонті'
-          : weapon.notReadyReason || 'СГ не БГ',
-  });
-}
-
-  private async detachOtherWeaponsFromFirePosition(
-    firePositionId: string,
-    exceptWeaponId: string | null,
-  ): Promise<void> {
-    const weaponRepository = this.dataSource.getRepository(WeaponSystem);
-
-    const assignedWeapons = await weaponRepository.find({
-      where: { firePositionId, locationType: 'fire_position' },
-    });
-
-    for (const weapon of assignedWeapons) {
-      if (exceptWeaponId && weapon.id === exceptWeaponId) {
-        continue;
-      }
-
-      const previousFirePositionId = weapon.firePositionId;
-
-      await weaponRepository.update(weapon.id, {
-        locationType: 'reserve',
-        firePositionId: null,
-      });
-      await this.syncFirePositionWeaponState(previousFirePositionId);
-    }
-  }
-
-
-  private emitWeaponChanged(
-    action: 'created' | 'updated' | 'deleted' | 'moved' | 'synced' = 'moved',
-    id?: string,
-  ): void {
-    this.realtimeEvents.emitMany(
-      ['weapons', 'map', 'analytics', 'events'],
-      action,
-      {
-        entity: 'weapon_system',
-        id,
-      },
-    );
-  }
-
-  private async writeWeaponEvent(
-    weapon: WeaponSystem,
-    user: AuthUser,
-    action: 'created' | 'updated' | 'assigned' | 'moved' | 'deleted',
-  ): Promise<void> {
-    const titles: Record<typeof action, string> = {
-      created: 'Створено СГ',
-      updated: 'Оновлено СГ',
-      assigned: 'СГ призначено на ВП',
-      moved: 'СГ повернуто в РЗ',
-      deleted: 'СГ видалено',
-    };
-
-    await this.eventLogs.create({
-      eventType: 'weapon',
-      action,
-      actor: user,
-      unitId: weapon.unitId,
-      unitName: weapon.unit?.name ?? null,
-      entityType: 'weapon_system',
-      entityId: weapon.id,
-      entityName: weapon.callsign || weapon.serialNumber || 'СГ',
-      title: titles[action],
-      details: `${user.fullName || user.login}: ${titles[action]} ${weapon.callsign || weapon.serialNumber || ''}`,
-    });
-  }
-
-  private async writeMaintenanceEvent(
-    weapon: WeaponSystem,
-    user: AuthUser,
-    action: 'requested' | 'approved' | 'rejected' | 'extended' | 'finished',
-  ): Promise<void> {
-    const titles: Record<typeof action, string> = {
-      requested: 'Запит ТО СГ',
-      approved: 'ТО СГ підтверджено',
-      rejected: 'ТО СГ відхилено',
-      extended: 'ТО СГ продовжено',
-      finished: 'ТО СГ завершено',
-    };
-
-    await this.eventLogs.create({
-      eventType: 'weapon_maintenance',
-      action,
-      actor: user,
-      unitId: weapon.unitId,
-      unitName: weapon.unit?.name ?? null,
-      entityType: 'weapon_system',
-      entityId: weapon.id,
-      entityName: weapon.callsign || weapon.serialNumber || 'СГ',
-      title: titles[action],
-      details: `${user.fullName || user.login}: ${titles[action]} ${weapon.callsign || weapon.serialNumber || ''}`,
-    });
-  }
-
-  private hasOpenMaintenance(weapon: WeaponSystem): boolean {
-    return ['pending', 'approved'].includes(weapon.maintenanceStatus || '');
-  }
-
-  private isMaintenanceActive(weapon: WeaponSystem): boolean {
-    if (weapon.maintenanceStatus !== 'approved') {
-      return false;
-    }
-
-    const now = Date.now();
-    const start = weapon.maintenanceRequestedStartAt?.getTime() ?? 0;
-    const end = weapon.maintenancePlannedEndAt?.getTime() ?? 0;
-
-    return start <= now && now < end;
-  }
-
-  private getMaintenanceReason(weapon: WeaponSystem): string {
-    const end = weapon.maintenancePlannedEndAt
-      ? weapon.maintenancePlannedEndAt.toLocaleTimeString('uk-UA', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : '';
-
-    return end ? `СГ на плановому ТО до ${end}` : 'СГ на плановому ТО';
-  }
-
-  private parseMaintenanceDate(value: string | undefined): Date {
-    const date = value ? new Date(value) : new Date();
-
-    if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException('Некоректний час початку ТО');
-    }
-
-    return date;
   }
 
   private ensureMainOperator(user: AuthUser): void {
@@ -663,11 +1201,108 @@ export class WeaponSystemsService implements OnModuleInit {
 
     if (
       user.role === 'operator' &&
-      (user.scope === 'battery' || user.scope === 'division')
+      (user.scope === 'battery' || user.scope === 'division' || user.scope === 'main')
     ) {
       return;
     }
 
-    throw new ForbiddenException('Запитувати, продовжувати або завершувати ТО може тільки оператор батареї/дивізіону');
+    throw new ForbiddenException('Операції з ТО може виконувати тільки оператор');
+  }
+
+  private emitWeaponChanged(
+    action: 'created' | 'updated' | 'deleted' | 'moved' | 'synced' = 'moved',
+    id?: string,
+  ): void {
+    this.realtimeEvents.emitMany(['weapons', 'map', 'analytics', 'events'], action, {
+      entity: 'weapon_system',
+      id,
+    });
+  }
+
+  private async writeWeaponEvent(
+    weapon: WeaponSystem,
+    user: AuthUser,
+    action: WeaponEventAction,
+  ): Promise<void> {
+    const titles: Record<WeaponEventAction, string> = {
+      created: 'Створено СГ',
+      updated: 'Оновлено СГ',
+      assigned: 'СГ призначено на ВП',
+      moved: 'СГ повернуто в РЗ',
+      deleted: 'СГ видалено',
+    };
+
+    await this.eventLogs.create({
+      eventType: 'weapon',
+      action,
+      actor: user,
+      unitId: weapon.unitId,
+      unitName: weapon.unit?.name ?? null,
+      entityType: 'weapon_system',
+      entityId: weapon.id,
+      entityName: weapon.callsign || weapon.serialNumber || 'СГ',
+      title: titles[action],
+      details: `${user.fullName || user.login}: ${titles[action]} ${
+        weapon.callsign || weapon.serialNumber || ''
+      }`,
+    });
+  }
+
+  private async writeMaintenanceEvent(
+    weapon: WeaponSystem,
+    user: AuthUser,
+    action: MaintenanceEventAction,
+  ): Promise<void> {
+    const titles: Record<MaintenanceEventAction, string> = {
+      opened: 'Відкрито ТО СГ',
+      started: 'ТО СГ розпочато',
+      cancelled: 'ТО СГ скасовано',
+      extended: 'ТО СГ продовжено',
+      completed: 'ТО СГ завершено',
+    };
+
+    await this.eventLogs.create({
+      eventType: 'weapon_maintenance',
+      action,
+      actor: user,
+      unitId: weapon.unitId,
+      unitName: weapon.unit?.name ?? null,
+      entityType: 'weapon_system',
+      entityId: weapon.id,
+      entityName: weapon.callsign || weapon.serialNumber || 'СГ',
+      title: titles[action],
+      details: `${user.fullName || user.login}: ${titles[action]} ${
+        weapon.callsign || weapon.serialNumber || ''
+      }`,
+    });
+  }
+
+  private async writeDeploymentEvent(
+    weapon: WeaponSystem,
+    deployment: WeaponDeployment,
+    user: AuthUser,
+    action: DeploymentEventAction,
+  ): Promise<void> {
+    const titles: Record<DeploymentEventAction, string> = {
+      planned: 'Заплановано переміщення СГ',
+      started: 'СГ вирушила',
+      arrived: 'СГ прибула',
+      cancelled: 'Переміщення СГ скасовано',
+    };
+
+    await this.eventLogs.create({
+      eventType: 'weapon_deployment',
+      action,
+      actor: user,
+      unitId: weapon.unitId,
+      unitName: weapon.unit?.name ?? null,
+      entityType: 'weapon_deployment',
+      entityId: deployment.id,
+      entityName: weapon.callsign || weapon.serialNumber || 'СГ',
+      title: titles[action],
+      details: `${user.fullName || user.login}: ${titles[action]} ${
+        weapon.callsign || weapon.serialNumber || ''
+      }`,
+    });
   }
 }

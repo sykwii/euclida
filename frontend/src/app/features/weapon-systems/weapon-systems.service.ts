@@ -12,6 +12,8 @@ export interface CreateWeaponSystemRequest {
   notReadyReason?: string;
   locationType?: string;
   firePositionId?: string | null;
+  deploymentStatus?: string;
+  currentFirePositionId?: string | null;
 }
 
 @Injectable({
@@ -40,8 +42,63 @@ export class WeaponSystemsService {
     return this.api.post<WeaponSystem>(`/weapon-systems/${id}/move-to-reserve`, {});
   }
 
-  assignToFirePosition(id: string, targetFirePositionId: string | null, unitId?: string): Observable<WeaponSystem> {
-    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/assign-to-fire-position`, { targetFirePositionId, unitId });
+  assignToFirePosition(
+    id: string,
+    targetFirePositionId: string | null,
+    unitId?: string,
+    force = false,
+  ): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/assign-to-fire-position`, {
+      targetFirePositionId,
+      unitId,
+      force,
+    });
+  }
+
+  planMoveToFirePosition(
+    id: string,
+    body: { targetFirePositionId: string; force?: boolean; note?: string },
+  ): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/deployment/assign`, body);
+  }
+
+  startMoveToFirePosition(
+    id: string,
+    body: { targetFirePositionId?: string; force?: boolean; note?: string } = {},
+  ): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(
+      `/weapon-systems/${id}/deployment/start-to-fire-position`,
+      body,
+    );
+  }
+
+  confirmFirePositionArrival(
+    id: string,
+    body: { targetFirePositionId?: string; force?: boolean; note?: string } = {},
+  ): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(
+      `/weapon-systems/${id}/deployment/confirm-fire-position-arrival`,
+      body,
+    );
+  }
+
+  planMoveToReserve(id: string, body: { note?: string } = {}): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/deployment/withdraw`, body);
+  }
+
+  startMoveToReserve(id: string, body: { note?: string } = {}): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/deployment/start-to-reserve`, body);
+  }
+
+  confirmReserveArrival(id: string, body: { note?: string } = {}): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(
+      `/weapon-systems/${id}/deployment/confirm-reserve-arrival`,
+      body,
+    );
+  }
+
+  cancelDeployment(id: string): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/deployment/cancel`, {});
   }
 
   syncFirePositionStates(): Observable<{ updated: number }> {
@@ -69,5 +126,32 @@ export class WeaponSystemsService {
 
   finishMaintenance(id: string): Observable<WeaponSystem> {
     return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/finish`, {});
+  }
+
+  openMaintenance(
+    id: string,
+    body: {
+      reason?: 'breakdown' | 'scheduled' | 'inspection' | 'other';
+      startedAt?: string;
+      durationMinutes?: number;
+      description?: string;
+    },
+  ): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/open`, body);
+  }
+
+  completeMaintenance(id: string, body: { result?: string } = {}): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/complete`, body);
+  }
+
+  confirmReadiness(
+    id: string,
+    body: {
+      readinessStatus: 'combat_ready' | 'not_combat_ready';
+      notReadyReason?: 'breakdown' | 'threat' | 'crew' | 'maintenance' | 'other' | null;
+      note?: string;
+    },
+  ): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/readiness/confirm`, body);
   }
 }

@@ -293,7 +293,7 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     expect(manager.save).toHaveBeenCalledTimes(2);
     const savedFirePosition = manager.save.mock.calls[1]?.[1] as FirePosition;
     expect(savedFirePosition.completedVgzCount).toBe(3);
-    expect(savedFirePosition.readinessStatus).toBe('ready');
+    expect(savedFirePosition.readinessStatus).toBe('in_progress');
   });
 
   it('supports idempotent repeated completion for already completed order', async () => {

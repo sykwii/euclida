@@ -15,8 +15,13 @@ import { WriteAccessGuard } from '../auth/write-access.guard';
 import { CreateWeaponSystemDto } from './dto/create-weapon-system.dto';
 import { UpdateWeaponSystemDto } from './dto/update-weapon-system.dto';
 import { AssignWeaponToFirePositionDto } from './dto/assign-weapon-to-fire-position.dto';
+import { CompleteWeaponMaintenanceDto } from './dto/complete-weapon-maintenance.dto';
+import { ConfirmWeaponReadinessDto } from './dto/confirm-weapon-readiness.dto';
+import { CreateWeaponDeploymentDto } from './dto/create-weapon-deployment.dto';
 import { ExtendMaintenanceDto } from './dto/extend-maintenance.dto';
+import { OpenWeaponMaintenanceDto } from './dto/open-weapon-maintenance.dto';
 import { RequestMaintenanceDto } from './dto/request-maintenance.dto';
+import { UpdateWeaponDeploymentDto } from './dto/update-weapon-deployment.dto';
 import { WeaponSystem } from './weapon-system.entity';
 import { WeaponSystemsService } from './weapon-systems.service';
 
@@ -74,7 +79,76 @@ export class WeaponSystemsController {
     @Param('id') id: string,
     @Body() body: AssignWeaponToFirePositionDto,
   ): Promise<WeaponSystem> {
-    return this.service.assignToFirePosition(id, body, user);
+  return this.service.assignToFirePosition(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/deployment/assign')
+  planMoveToFirePosition(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: CreateWeaponDeploymentDto,
+  ): Promise<WeaponSystem> {
+    return this.service.planMoveToFirePosition(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/deployment/start-to-fire-position')
+  startMoveToFirePosition(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: CreateWeaponDeploymentDto,
+  ): Promise<WeaponSystem> {
+    return this.service.startMoveToFirePosition(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/deployment/confirm-fire-position-arrival')
+  confirmFirePositionArrival(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: CreateWeaponDeploymentDto,
+  ): Promise<WeaponSystem> {
+    return this.service.confirmFirePositionArrival(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/deployment/withdraw')
+  planMoveToReserve(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: UpdateWeaponDeploymentDto,
+  ): Promise<WeaponSystem> {
+    return this.service.planMoveToReserve(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/deployment/start-to-reserve')
+  startMoveToReserve(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: UpdateWeaponDeploymentDto,
+  ): Promise<WeaponSystem> {
+    return this.service.startMoveToReserve(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/deployment/confirm-reserve-arrival')
+  confirmReserveArrival(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: UpdateWeaponDeploymentDto,
+  ): Promise<WeaponSystem> {
+    return this.service.confirmReserveArrival(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/deployment/cancel')
+  cancelDeployment(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<WeaponSystem> {
+    return this.service.cancelDeployment(id, user);
   }
 
   @UseGuards(WriteAccessGuard)
@@ -102,6 +176,16 @@ requestMaintenance(
   @Body() body: RequestMaintenanceDto,
 ): Promise<WeaponSystem> {
   return this.service.requestMaintenance(id, body, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/open')
+openMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+  @Body() body: OpenWeaponMaintenanceDto,
+): Promise<WeaponSystem> {
+  return this.service.openMaintenance(id, body, user);
 }
 
 @UseGuards(WriteAccessGuard)
@@ -139,6 +223,26 @@ finishMaintenance(
   @Param('id') id: string,
 ): Promise<WeaponSystem> {
   return this.service.finishMaintenance(id, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/complete')
+completeMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+  @Body() body: CompleteWeaponMaintenanceDto,
+): Promise<WeaponSystem> {
+  return this.service.completeMaintenance(id, body, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/readiness/confirm')
+confirmReadiness(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+  @Body() body: ConfirmWeaponReadinessDto,
+): Promise<WeaponSystem> {
+  return this.service.confirmReadiness(id, body, user);
 }
 
 }

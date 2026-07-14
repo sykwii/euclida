@@ -28,8 +28,8 @@
     <button
       type="button"
       class="stat-card ready ui-surface"
-      [class.active]="activeFilter === 'ready'"
-      (click)="setFilter('ready')"
+      [class.active]="activeFilter === 'combat_ready'"
+      (click)="setFilter('combat_ready')"
     >
       <strong>{{ readyCount }}</strong>
       <span>БГ</span>
@@ -38,8 +38,8 @@
     <button
       type="button"
       class="stat-card danger ui-surface"
-      [class.active]="activeFilter === 'not_ready'"
-      (click)="setFilter('not_ready')"
+      [class.active]="activeFilter === 'not_combat_ready'"
+      (click)="setFilter('not_combat_ready')"
     >
       <strong>{{ notReadyCount }}</strong>
       <span>НЕ БГ</span>
@@ -263,6 +263,12 @@
           [class]="getWeaponReadinessClass(item.assignedWeapon.readinessStatus)"
         >
           {{ getWeaponReadinessLabel(item.assignedWeapon.readinessStatus) }}
+        </div>
+        <div
+          class="weapon-status deployment"
+          [ngClass]="getWeaponDeploymentClass(item)"
+        >
+          {{ getWeaponDeploymentLabel(item) }}
         </div>
 
         <div class="weapon-grid">

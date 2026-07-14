@@ -82,9 +82,16 @@ export class FirePositionsService implements OnModuleInit {
       const assignedWeapon = await this.dataSource
         .getRepository(WeaponSystem)
         .findOne({
-          where: {
-            firePositionId: position.id,
-          },
+          where: [
+            {
+              currentFirePositionId: position.id,
+              deploymentStatus: 'at_fire_position',
+            },
+            {
+              firePositionId: position.id,
+              locationType: 'fire_position',
+            },
+          ],
           relations: {
             weaponModel: true,
             unit: true,
@@ -198,10 +205,10 @@ export class FirePositionsService implements OnModuleInit {
         ammoDepotId: savedDepot.id,
         hasSg: false,
         readinessStatus: isFirePosition
-          ? 'not_ready'
-          : (data.readinessStatus ?? 'ready'),
+          ? 'not_combat_ready'
+          : (data.readinessStatus ?? 'combat_ready'),
         notReadyReason: isFirePosition
-          ? 'Відсутня СГ'
+          ? 'not_prepared'
           : (data.notReadyReason ?? null),
         mainDirectionDegrees,
         traverseLeftDegrees,
@@ -376,9 +383,16 @@ private normalizePositionType(value: string | null | undefined): string {
     const assignedWeapon = await this.dataSource
       .getRepository(WeaponSystem)
       .findOne({
-        where: {
-          firePositionId: id,
-        },
+        where: [
+          {
+            currentFirePositionId: id,
+            deploymentStatus: 'at_fire_position',
+          },
+          {
+            firePositionId: id,
+            locationType: 'fire_position',
+          },
+        ],
         relations: {
           weaponModel: true,
           unit: true,
@@ -517,10 +531,16 @@ private normalizePositionType(value: string | null | undefined): string {
       const assignedWeapon = await this.dataSource
         .getRepository(WeaponSystem)
         .findOne({
-          where: {
-            firePositionId: position.id,
-            locationType: 'fire_position',
-          },
+          where: [
+            {
+              currentFirePositionId: position.id,
+              deploymentStatus: 'at_fire_position',
+            },
+            {
+              firePositionId: position.id,
+              locationType: 'fire_position',
+            },
+          ],
           relations: {
             weaponModel: true,
             unit: true,
@@ -612,7 +632,7 @@ private normalizePositionType(value: string | null | undefined): string {
     firePosition.hasSg = false;
 
     if (!firePosition.readinessStatus || firePosition.readinessStatus === 'unknown') {
-      firePosition.readinessStatus = 'ready';
+      firePosition.readinessStatus = 'combat_ready';
     }
 
     if (firePosition.notReadyReason === 'Відсутня СГ') {
@@ -624,8 +644,12 @@ private normalizePositionType(value: string | null | undefined): string {
 
   if (!assignedWeapon) {
     firePosition.hasSg = false;
-    firePosition.readinessStatus = 'not_ready';
-    firePosition.notReadyReason = 'Відсутня СГ';
+    if (!firePosition.readinessStatus || firePosition.readinessStatus === 'unknown') {
+      firePosition.readinessStatus = 'not_combat_ready';
+    }
+    if (!firePosition.notReadyReason || firePosition.notReadyReason === 'Відсутня СГ') {
+      firePosition.notReadyReason = 'not_prepared';
+    }
 
     return firePosition;
   }
@@ -633,45 +657,12 @@ private normalizePositionType(value: string | null | undefined): string {
   firePosition.hasSg = true;
   firePosition.unitId = assignedWeapon.unitId;
   firePosition.unit = assignedWeapon.unit ?? firePosition.unit;
-
-  const maintenanceActive = this.isWeaponMaintenanceActive(assignedWeapon);
-
-  firePosition.readinessStatus =
-    assignedWeapon.readinessStatus === 'ready' && !maintenanceActive ? 'ready' : 'not_ready';
-
-  firePosition.notReadyReason =
-    maintenanceActive
-      ? this.getWeaponMaintenanceReason(assignedWeapon)
-      : assignedWeapon.readinessStatus === 'ready'
-        ? null
-        : assignedWeapon.readinessStatus === 'repair'
-          ? 'СГ в ремонті'
-          : assignedWeapon.notReadyReason || 'СГ не БГ';
-
-  return firePosition;
-}
-
-private isWeaponMaintenanceActive(weapon: WeaponSystem): boolean {
-  if (weapon.maintenanceStatus !== 'approved') {
-    return false;
+  if (!firePosition.readinessStatus || firePosition.readinessStatus === 'unknown') {
+    firePosition.readinessStatus = 'not_combat_ready';
+    firePosition.notReadyReason = firePosition.notReadyReason ?? 'not_prepared';
   }
 
-  const now = Date.now();
-  const start = weapon.maintenanceRequestedStartAt?.getTime() ?? 0;
-  const end = weapon.maintenancePlannedEndAt?.getTime() ?? 0;
-
-  return start <= now && now < end;
-}
-
-private getWeaponMaintenanceReason(weapon: WeaponSystem): string {
-  const end = weapon.maintenancePlannedEndAt
-    ? weapon.maintenancePlannedEndAt.toLocaleTimeString('uk-UA', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '';
-
-  return end ? `СГ на плановому ТО до ${end}` : 'СГ на плановому ТО';
+  return firePosition;
 }
 
   private async applyActiveAirThreatToFirePosition(
@@ -714,8 +705,8 @@ private getWeaponMaintenanceReason(weapon: WeaponSystem): string {
       return;
     }
 
-    firePosition.readinessStatus = 'not_ready';
-    firePosition.notReadyReason = `Повітряна загроза: ${nearestThreat.threat_type}`;
+    firePosition.readinessStatus = 'not_combat_ready';
+    firePosition.notReadyReason = 'threat';
   }
 
   private calculateDistanceM(

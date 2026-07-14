@@ -548,6 +548,25 @@
   color: #cbd5e1;
 }
 
+.weapon-status.deployment {
+  margin-left: 8px;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.weapon-status.at-fire-position {
+  color: #99f6e4;
+}
+
+.weapon-status.moving-to-fire-position,
+.weapon-status.moving-to-reserve-area {
+  color: #fde68a;
+}
+
+.weapon-status.reserve-area {
+  color: #cbd5e1;
+}
+
 .weapon-empty {
   margin-top: auto;
 }

@@ -57,6 +57,8 @@ export interface FirePosition {
     id: string;
     readinessStatus: string;
     notReadyReason: string | null;
+    deploymentStatus?: string;
+    currentFirePositionId?: string | null;
     maintenanceStatus?: string | null;
     maintenanceRequestedStartAt?: string | null;
     maintenancePlannedEndAt?: string | null;

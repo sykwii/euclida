@@ -1,7 +1,18 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Unit } from '../units/unit.entity';
 import { WeaponModel } from '../weapon-models/weapon-model.entity';
 import { FirePosition } from '../fire-positions/fire-position.entity';
+import { WeaponDeployment } from './weapon-deployment.entity';
+import { WeaponMaintenance } from './weapon-maintenance.entity';
 
 @Entity('weapon_systems')
 export class WeaponSystem {
@@ -28,11 +39,31 @@ export class WeaponSystem {
   @JoinColumn({ name: 'unit_id' })
   unit!: Unit | null;
 
-  @Column({ name: 'readiness_status', type: 'varchar', length: 100, default: 'unknown' })
+  @Column({
+    name: 'readiness_status',
+    type: 'varchar',
+    length: 100,
+    default: 'not_combat_ready',
+  })
   readinessStatus!: string;
 
   @Column({ name: 'not_ready_reason', type: 'text', nullable: true })
   notReadyReason!: string | null;
+
+  @Column({
+    name: 'deployment_status',
+    type: 'varchar',
+    length: 40,
+    default: 'reserve_area',
+  })
+  deploymentStatus!: string;
+
+  @Column({ name: 'current_fire_position_id', type: 'uuid', nullable: true })
+  currentFirePositionId!: string | null;
+
+  @ManyToOne(() => FirePosition, { nullable: true })
+  @JoinColumn({ name: 'current_fire_position_id' })
+  currentFirePosition!: FirePosition | null;
 
   @Column({ name: 'maintenance_status', type: 'varchar', length: 30, nullable: true })
   maintenanceStatus!: string | null;
@@ -67,7 +98,13 @@ locationType!: string;
 @Column({ name: 'fire_position_id', type: 'uuid', nullable: true })
 firePositionId!: string | null;
 
-@ManyToOne(() => FirePosition, { nullable: true })
-@JoinColumn({ name: 'fire_position_id' })
-firePosition!: FirePosition | null;
+  @ManyToOne(() => FirePosition, { nullable: true })
+  @JoinColumn({ name: 'fire_position_id' })
+  firePosition!: FirePosition | null;
+
+  @OneToMany(() => WeaponMaintenance, (item) => item.weaponSystem)
+  maintenances!: WeaponMaintenance[];
+
+  @OneToMany(() => WeaponDeployment, (item) => item.weaponSystem)
+  deployments!: WeaponDeployment[];
 }

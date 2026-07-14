@@ -11,7 +11,7 @@ import { AuthService } from '../../auth/auth.service';
 import { filter, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 
-type PositionStatusFilter = 'all' | 'ready' | 'not_ready' | 'with_sg';
+type PositionStatusFilter = 'all' | 'combat_ready' | 'not_combat_ready' | 'with_sg';
 type PositionType = 'fire_position' | 'aerial_recon' | 'ew_post' | 'ew_station' | 'air_asset_crew';
 type PositionPageKind = 'fire_positions' | 'ew' | 'air_assets';
 
@@ -141,11 +141,11 @@ get isAirAssetsPage(): boolean {
   }
 
   get readyCount(): number {
-    return this.ownItems.filter((x) => x.readinessStatus === 'ready').length;
+    return this.ownItems.filter((x) => this.normalizeReadiness(x.readinessStatus) === 'combat_ready').length;
   }
 
   get notReadyCount(): number {
-    return this.ownItems.filter((x) => x.readinessStatus === 'not_ready').length;
+    return this.ownItems.filter((x) => this.normalizeReadiness(x.readinessStatus) === 'not_combat_ready').length;
   }
 
   get withSgCount(): number {
@@ -161,14 +161,14 @@ get isAirAssetsPage(): boolean {
       return this.ownItems.filter((item) => item.hasSg);
     }
 
-    return this.ownItems.filter((item) => item.readinessStatus === this.activeFilter);
+    return this.ownItems.filter((item) => this.normalizeReadiness(item.readinessStatus) === this.activeFilter);
   }
 
   get activeFilterLabel(): string {
     const labels: Record<PositionStatusFilter, string> = {
       all: 'Всі',
-      ready: 'БГ',
-      not_ready: 'НЕ БГ',
+      combat_ready: 'БГ',
+      not_combat_ready: 'НЕ БГ',
       with_sg: 'З Озброєнням',
     };
 
@@ -384,17 +384,11 @@ get isAirAssetsPage(): boolean {
   }
 
   getReadinessLabel(status: string): string {
-    if (status === 'ready') return 'БГ';
-    if (status === 'not_ready') return 'НЕ БГ';
-    if (status === 'in_progress') return 'В роботі';
-    return 'Невідомо';
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'БГ' : 'НЕ БГ';
   }
 
   getReadinessClass(status: string): string {
-    if (status === 'ready') return 'ready';
-    if (status === 'not_ready') return 'danger';
-    if (status === 'in_progress') return 'progress';
-    return 'unknown';
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'ready' : 'danger';
   }
 
 private getEmptyForm(): {
@@ -466,17 +460,33 @@ private syncPageKindFromUrl(url: string): void {
   }
 
   getWeaponReadinessLabel(status: string | undefined): string {
-    if (status === 'ready') return 'СГ БГ';
-    if (status === 'not_ready') return 'СГ НЕ БГ';
-    if (status === 'repair') return 'СГ ремонт';
-    return 'СГ невідомо';
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'СГ БГ' : 'СГ НЕ БГ';
   }
 
   getWeaponReadinessClass(status: string | undefined): string {
-    if (status === 'ready') return 'ready';
-    if (status === 'not_ready') return 'danger';
-    if (status === 'repair') return 'repair';
-    return 'unknown';
+    return this.normalizeReadiness(status) === 'combat_ready' ? 'ready' : 'danger';
+  }
+
+  getWeaponDeploymentLabel(item: FirePosition): string {
+    const status = item.assignedWeapon?.deploymentStatus;
+    const labels: Record<string, string> = {
+      reserve_area: 'РЗ',
+      moving_to_fire_position: 'рух до ВП',
+      at_fire_position: 'на ВП',
+      moving_to_reserve_area: 'рух до РЗ',
+    };
+
+    return labels[status || 'at_fire_position'] ?? 'на ВП';
+  }
+
+  getWeaponDeploymentClass(item: FirePosition): string {
+    return (item.assignedWeapon?.deploymentStatus || 'at_fire_position').replace(/_/g, '-');
+  }
+
+  private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {
+    return status === 'combat_ready' || status === 'ready' || status === 'ready_for_combat'
+      ? 'combat_ready'
+      : 'not_combat_ready';
   }
 
   getRotationDays(date: string | null): string {
