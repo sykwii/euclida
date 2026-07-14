@@ -52,4 +52,10 @@ movementGroupId!: string | null;
 @Column({ name: 'document_number', type: 'varchar', length: 50, nullable: true })
 documentNumber!: string | null;
 
+@Column({ name: 'accounting_unit', type: 'varchar', length: 20, nullable: true })
+accountingUnit!: string | null;
+
+@Column({ name: 'stock_operation_id', type: 'uuid', nullable: true })
+stockOperationId!: string | null;
+
 }

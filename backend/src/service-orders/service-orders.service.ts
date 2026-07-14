@@ -395,11 +395,6 @@ export class ServiceOrdersService {
       if (updated.recipientLevel === 'battery' && updated.status === 'accepted') {
         const order = await manager.findOne(ServiceOrder, {
           where: { id: updated.serviceOrderId },
-          relations: {
-            selectedFirePosition: {
-              unit: true,
-            },
-          },
           lock: { mode: 'pessimistic_write' },
         });
 
@@ -1721,13 +1716,21 @@ async selectAirAsset(
     },
   ): Promise<ResolvedShotConfiguration> {
     const weaponSystems = await manager.find(WeaponSystem, {
-      where: {
-        firePositionId: firePosition.id,
-        locationType: 'fire_position',
-      },
+      where: [
+        {
+          currentFirePositionId: firePosition.id,
+          deploymentStatus: 'at_fire_position',
+        },
+        {
+          firePositionId: firePosition.id,
+          locationType: 'fire_position',
+        },
+      ],
     });
 
-    const weaponModelIds = new Set(weaponSystems.map((item) => item.weaponModelId));
+    const weaponModelIds = new Set(
+      weaponSystems.map((item) => item.weaponModelId).filter(Boolean),
+    );
 
     if (weaponModelIds.size === 0) {
       throw new BadRequestException('Для ВП не налаштовано модель озброєння');
@@ -2616,8 +2619,17 @@ async selectAirAsset(
     manager: EntityManager,
     deliveryId: string,
   ): Promise<ServiceOrderDelivery> {
-    const delivery = await manager.findOne(ServiceOrderDelivery, {
+    const lockedDelivery = await manager.findOne(ServiceOrderDelivery, {
       where: { id: deliveryId },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!lockedDelivery) {
+      throw new NotFoundException('Доставку ВГЗ не знайдено');
+    }
+
+    const delivery = await manager.findOne(ServiceOrderDelivery, {
+      where: { id: lockedDelivery.id },
       relations: {
         serviceOrder: {
           selectedFirePosition: {
@@ -2628,7 +2640,6 @@ async selectAirAsset(
         selectedFirePosition: true,
         selectedWeaponSystem: true,
       },
-      lock: { mode: 'pessimistic_write' },
     });
 
     if (!delivery) {

@@ -181,13 +181,6 @@ export class ExecutionEngineService {
     const postResult = await this.dataSource.transaction(async (manager) => {
       const lockedRecord = await manager.findOne(ExecutionRecord, {
         where: { id: recordId },
-        relations: {
-          serviceOrder: {
-            selectedFirePosition: true,
-            selectedAirAssetPosition: true,
-          },
-          artillery: { charges: true },
-        },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -205,12 +198,23 @@ export class ExecutionEngineService {
         );
       }
 
+      const recordWithRelations = await manager.findOne(ExecutionRecord, {
+        where: { id: lockedRecord.id },
+        relations: {
+          serviceOrder: {
+            selectedFirePosition: true,
+            selectedAirAssetPosition: true,
+          },
+          artillery: { charges: true },
+        },
+      });
+
+      if (!recordWithRelations) {
+        throw new NotFoundException('Р—Р°РїРёСЃ Р¶СѓСЂРЅР°Р»Сѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      }
+
       const lockedOrder = await manager.findOne(ServiceOrder, {
         where: { id: lockedRecord.serviceOrderId },
-        relations: {
-          selectedFirePosition: true,
-          selectedAirAssetPosition: true,
-        },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -224,10 +228,22 @@ export class ExecutionEngineService {
         );
       }
 
+      const orderWithRelations = await manager.findOne(ServiceOrder, {
+        where: { id: lockedOrder.id },
+        relations: {
+          selectedFirePosition: true,
+          selectedAirAssetPosition: true,
+        },
+      });
+
+      if (!orderWithRelations) {
+        throw new NotFoundException('Р’Р“Р— РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      }
+
       const context = this.buildContextFromRecord(
         {
-          ...lockedRecord,
-          serviceOrder: lockedOrder,
+          ...recordWithRelations,
+          serviceOrder: orderWithRelations,
         },
         user,
       );
@@ -238,7 +254,7 @@ export class ExecutionEngineService {
         );
       }
 
-      const ammoDepotId = this.resolveExecutorAmmoDepotId(lockedOrder);
+      const ammoDepotId = this.resolveExecutorAmmoDepotId(orderWithRelations);
       if (!ammoDepotId) {
         throw new BadRequestException(
           'Для проведення запису потрібен склад боєприпасів виконавця',

@@ -31,8 +31,8 @@ export class ExecutionRecordArtillery {
   @Column({ name: 'primer_id', type: 'uuid' })
   primerId!: string;
 
-  @Column({ name: 'zone_id', type: 'uuid' })
-  zoneId!: string;
+  @Column({ name: 'zone_id', type: 'uuid', nullable: true })
+  zoneId!: string | null;
 
   @Column({ name: 'max_range_m', type: 'int' })
   maxRangeM!: number;
@@ -43,4 +43,3 @@ export class ExecutionRecordArtillery {
   @OneToMany(() => ExecutionRecordCharge, (charge) => charge.artillery)
   charges!: ExecutionRecordCharge[];
 }
-

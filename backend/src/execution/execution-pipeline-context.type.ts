@@ -21,7 +21,7 @@ export interface ExecutionPipelineArtillerySnapshot {
   shellId: string;
   fuzeId: string;
   primerId: string;
-  zoneId: string;
+  zoneId: string | null;
   maxRangeM: number;
   compositionSnapshot: Record<string, unknown>;
   charges: ExecutionPipelineChargeSnapshot[];

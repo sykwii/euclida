@@ -72,7 +72,7 @@ export class ArtilleryExecutionHandler implements ExecutionHandler {
       shellId: body.artillery.shellId,
       fuzeId: body.artillery.fuzeId,
       primerId: body.artillery.primerId,
-      zoneId: body.artillery.zoneId,
+      zoneId: body.artillery.zoneId ?? null,
       maxRangeM: body.artillery.maxRangeM,
       compositionSnapshot: this.cloneObject(body.artillery.compositionSnapshot),
       charges: body.artillery.charges.map((component) => ({

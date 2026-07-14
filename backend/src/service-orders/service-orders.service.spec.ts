@@ -423,7 +423,9 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     const delivery = createDelivery({ status: 'new', viewedAt: null });
     const viewedAt = new Date('2026-07-11T10:00:00.000Z');
 
-    manager.findOne.mockResolvedValueOnce(delivery);
+    manager.findOne
+      .mockResolvedValueOnce(delivery)
+      .mockResolvedValueOnce(delivery);
     manager.save.mockResolvedValueOnce({
       ...delivery,
       status: 'viewed',
@@ -444,7 +446,10 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
   });
 
   it('requires rejection reason for delivery rejection', async () => {
-    manager.findOne.mockResolvedValueOnce(createDelivery({ status: 'viewed' }));
+    const delivery = createDelivery({ status: 'viewed' });
+    manager.findOne
+      .mockResolvedValueOnce(delivery)
+      .mockResolvedValueOnce(delivery);
 
     await expect(
       service.respondDelivery('delivery-1', { status: 'rejected' }, user),
@@ -456,6 +461,7 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     const order = createOrder({ status: 'sent' });
 
     manager.findOne
+      .mockResolvedValueOnce(delivery)
       .mockResolvedValueOnce(delivery)
       .mockResolvedValueOnce(order);
     manager.save

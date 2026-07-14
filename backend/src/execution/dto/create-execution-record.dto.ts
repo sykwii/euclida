@@ -63,8 +63,9 @@ export class ArtilleryExecutionDto {
   @IsUUID()
   primerId!: string;
 
+  @IsOptional()
   @IsUUID()
-  zoneId!: string;
+  zoneId?: string | null;
 
   @IsInt()
   @IsPositive()

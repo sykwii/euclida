@@ -2165,7 +2165,7 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
     const zoneId = kit?.zoneId || order.selectedZoneId || null;
     const weaponModelId = kit?.weaponModelId || null;
 
-    if (!kit || !weaponModelId || !order.selectedShellId || !fuzeId || !primerId || !zoneId || kit.charges.length === 0) {
+    if (!kit || !weaponModelId || !order.selectedShellId || !fuzeId || !primerId || kit.zoneNumber == null || kit.charges.length === 0) {
       this.toast.show('Для швидкого запису потрібен повний комплект пострілу', 'danger');
       return;
     }
