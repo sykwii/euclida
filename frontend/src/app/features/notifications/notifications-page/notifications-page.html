@@ -11,7 +11,7 @@
           {{ isLoading ? 'Оновлення' : 'Оновити' }}
         </button>
         <button type="button" class="eu-n-refresh" (click)="readAll()">
-          Прочитати всі
+          Позначити всі прочитаними
         </button>
       </div>
     </header>
@@ -31,6 +31,13 @@
       </button>
     </nav>
 
+    <nav class="eu-n-filters" aria-label="Фільтри повідомлень">
+      <button type="button" [class.active]="activeFilter === 'all'" (click)="setFilter('all')">Усі</button>
+      <button type="button" [class.active]="activeFilter === 'targets'" (click)="setFilter('targets')">Цілі</button>
+      <button type="button" [class.active]="activeFilter === 'weapons'" (click)="setFilter('weapons')">СГ</button>
+      <button type="button" [class.active]="activeFilter === 'fire_positions'" (click)="setFilter('fire_positions')">ВП</button>
+    </nav>
+
     <div class="eu-n-state error" *ngIf="errorMessage && !isLoading">
       <strong>{{ errorMessage }}</strong>
       <button type="button" (click)="load()">Повторити</button>
@@ -43,101 +50,41 @@
     </div>
 
     <main class="eu-n-workspace" *ngIf="!isLoading">
-      <section class="eu-n-queue queue-action">
-        <header class="eu-n-queue-head">
-          <div>
-            <h2>{{ activeTab === 'new' ? 'Нові' : activeTab === 'critical' ? 'Критичні' : 'Історія' }}</h2>
-            <span>{{ visibleItems.length }} повідомлень</span>
-          </div>
-        </header>
-
+      <section class="eu-n-list">
         <div class="eu-n-empty" *ngIf="visibleItems.length === 0">
           <strong>Оперативних повідомлень немає</strong>
           <span>Технічні оновлення карти, складу й аналітики тут не показуються.</span>
         </div>
 
-        <button
-          type="button"
-          class="eu-n-group-button"
-          *ngFor="let item of visibleItems; trackBy: trackById"
-          [class.selected]="!item.readAt"
-          [ngClass]="'priority-' + (item.severity === 'critical' ? 'critical' : item.severity === 'attention' ? 'high' : 'normal')"
-          (click)="open(item)"
-        >
-          <i aria-hidden="true"></i>
-          <div>
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.message }}</small>
-            <em>{{ getTypeLabel(item) }} · {{ item.createdAt | date: 'dd.MM HH:mm' }}</em>
-          </div>
-          <span>
-            <b *ngIf="!item.readAt">Нове</b>
-            {{ getSeverityLabel(item) }}
-          </span>
-        </button>
-      </section>
+        <section class="eu-n-day" *ngFor="let group of groupedItems; trackBy: trackGroup">
+          <h2>{{ group.title }}</h2>
 
-      <aside class="eu-n-detail" *ngIf="visibleItems[0] as first; else emptyDetails">
-        <header class="eu-n-detail-head">
-          <div>
-            <span>{{ getSeverityLabel(first) }}</span>
-            <h2>{{ first.title }}</h2>
-            <p>{{ first.message }}</p>
-          </div>
-
-          <button type="button" class="eu-n-primary" (click)="open(first)">
-            Відкрити
-          </button>
-        </header>
-
-        <section class="eu-n-detail-meta">
-          <div>
-            <span>Тип</span>
-            <strong>{{ getTypeLabel(first) }}</strong>
-          </div>
-          <div>
-            <span>Статус</span>
-            <strong>{{ first.acknowledgedAt ? 'Підтверджено' : first.readAt ? 'Прочитано' : 'Нове' }}</strong>
-          </div>
-          <div>
-            <span>Час</span>
-            <strong>{{ first.createdAt | date: 'dd.MM HH:mm:ss' }}</strong>
-          </div>
-        </section>
-
-        <section class="eu-n-timeline">
-          <header>
-            <h3>Оперативна черга</h3>
-            <span>{{ visibleItems.length }}</span>
-          </header>
-
-          <button
-            type="button"
-            class="eu-n-event"
-            *ngFor="let item of visibleItems; trackBy: trackById"
+          <article
+            class="eu-n-row"
+            *ngFor="let item of group.items; trackBy: trackById"
+            [class.unread]="!item.readAt"
+            [ngClass]="'severity-' + item.severity"
+            tabindex="0"
+            role="button"
             (click)="open(item)"
+            (keydown.enter)="open(item)"
+            (keydown.space)="open(item); $event.preventDefault()"
           >
             <i aria-hidden="true"></i>
+            <span class="unread-dot" *ngIf="!item.readAt" aria-hidden="true"></span>
             <div>
-              <strong>{{ item.title }}</strong>
-              <small>{{ item.message }}</small>
+              <strong>{{ titleLine(item) }}</strong>
+              <small>{{ contextLine(item) }}</small>
             </div>
+            <em>{{ getTypeLabel(item) }}</em>
             <time>{{ item.createdAt | date: 'HH:mm' }}</time>
-            <em>{{ getSeverityLabel(item) }}</em>
-          </button>
+            <span class="row-actions">
+              <button type="button" title="Прочитати" aria-label="Прочитати" (click)="read(item, $event)"></button>
+              <button type="button" title="Підтвердити" aria-label="Підтвердити" (click)="acknowledge(item, $event)"></button>
+            </span>
+          </article>
         </section>
-
-        <footer class="eu-n-footer">
-          <button type="button" (click)="acknowledge(first)">Підтвердити</button>
-        </footer>
-      </aside>
-
-      <ng-template #emptyDetails>
-        <aside class="eu-n-detail eu-n-detail-empty">
-          <strong>Черга порожня</strong>
-          <span>Операційні сповіщення зʼявляться після нових цілей або зміни БГ.</span>
-        </aside>
-      </ng-template>
+      </section>
     </main>
   </div>
 </section>

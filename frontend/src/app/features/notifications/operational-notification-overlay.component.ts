@@ -1,5 +1,12 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  HostListener,
+  OnDestroy,
+  OnInit,
+} from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription, timer } from 'rxjs';
 import { RealtimeService } from '../../core/realtime.service';
@@ -8,30 +15,54 @@ import {
   OperationalNotificationsService,
 } from './operational-notifications.service';
 
+interface OverlayCard {
+  item: OperationalNotification;
+  stackCount: number;
+}
+
 @Component({
   selector: 'app-operational-notification-overlay',
   standalone: true,
   imports: [CommonModule, DatePipe],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <aside class="opn-overlay" *ngIf="visible.length > 0" aria-label="Оперативні повідомлення">
       <article
         class="opn-card"
-        *ngFor="let item of visible; trackBy: trackById"
-        [class.critical]="item.severity === 'critical'"
-        [class.attention]="item.severity === 'attention'"
-        [class.info]="item.severity === 'info'"
+        *ngFor="let card of visible; trackBy: trackByCard"
+        [class.critical]="card.item.severity === 'critical'"
+        [class.attention]="card.item.severity === 'attention'"
+        [class.info]="card.item.severity === 'info'"
+        tabindex="0"
+        role="button"
+        [attr.aria-label]="cardTitle(card)"
+        (click)="open(card.item)"
+        (keydown.enter)="open(card.item)"
+        (keydown.space)="open(card.item); $event.preventDefault()"
       >
-        <i aria-hidden="true"></i>
+        <i class="opn-severity" aria-hidden="true"></i>
         <div class="opn-body">
           <header>
-            <strong>{{ item.title }}</strong>
-            <time>{{ item.createdAt | date: 'HH:mm:ss' }}</time>
+            <strong>{{ typeLabel(card.item) }}</strong>
+            <span *ngIf="card.stackCount > 1">×{{ card.stackCount }}</span>
+            <time>{{ card.item.createdAt | date: 'HH:mm' }}</time>
           </header>
-          <p>{{ item.message }}</p>
+
+          <b>{{ entityLine(card.item) }}</b>
+          <p *ngIf="contextLine(card.item)">{{ contextLine(card.item) }}</p>
+
           <footer>
-            <button type="button" class="primary" (click)="open(item)">Відкрити</button>
-            <button type="button" (click)="acknowledge(item)">
-              {{ item.severity === 'critical' ? 'Підтвердити' : 'Закрити' }}
+            <button type="button" class="opn-primary" (click)="open(card.item); $event.stopPropagation()">
+              Відкрити
+            </button>
+            <button
+              type="button"
+              class="opn-ack"
+              [attr.aria-label]="card.item.severity === 'critical' ? 'Підтвердити' : 'Закрити'"
+              [title]="card.item.severity === 'critical' ? 'Підтвердити' : 'Закрити'"
+              (click)="acknowledge(card.item); $event.stopPropagation()"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
             </button>
           </footer>
         </div>
@@ -45,10 +76,10 @@ import {
   styles: [`
     .opn-overlay {
       position: fixed;
-      top: 14px;
-      right: 14px;
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      right: calc(env(safe-area-inset-right, 0px) + 12px);
       z-index: var(--z-notifications, 900);
-      width: min(360px, calc(100vw - 28px));
+      width: clamp(340px, 25vw, 380px);
       display: grid;
       gap: 8px;
       pointer-events: none;
@@ -57,102 +88,200 @@ import {
     .opn-card,
     .opn-overflow {
       pointer-events: auto;
-      border: 1px solid rgba(102, 204, 220, 0.32);
-      border-radius: 8px;
+      border: 1px solid rgba(102, 204, 220, 0.22);
+      border-radius: 7px;
       background: rgba(4, 17, 23, 0.96);
       color: var(--c2-text, #d8edf3);
-      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
     }
 
     .opn-card {
       display: grid;
-      grid-template-columns: 8px minmax(0, 1fr);
+      grid-template-columns: 3px minmax(0, 1fr);
+      min-height: 86px;
       overflow: hidden;
+      cursor: pointer;
+      outline: none;
     }
 
-    .opn-card > i {
+    .opn-card:focus-visible {
+      border-color: rgba(13, 214, 198, 0.58);
+      background: rgba(7, 26, 33, 0.98);
+    }
+
+    .opn-card:hover {
+      background: rgba(7, 26, 33, 0.98);
+    }
+
+    .opn-severity {
       display: block;
-      background: #66ccdc;
+      background: #4fd1c5;
     }
 
-    .opn-card.critical > i {
-      background: var(--c2-critical, #f05d5e);
+    .opn-card.critical {
+      border-color: rgba(240, 93, 94, 0.42);
     }
 
-    .opn-card.attention > i {
-      background: var(--c2-warn, #f2b724);
+    .opn-card.critical .opn-severity {
+      background: #f05d5e;
     }
 
-    .opn-card.info > i {
-      background: var(--c2-ok, #22c76a);
+    .opn-card.attention .opn-severity {
+      background: #f2b724;
+    }
+
+    .opn-card.info .opn-severity {
+      background: #22c76a;
     }
 
     .opn-body {
       min-width: 0;
       display: grid;
-      gap: 7px;
-      padding: 10px;
+      gap: 5px;
+      padding: 9px 10px;
     }
 
     .opn-body header,
     .opn-body footer {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      gap: 7px;
+      min-width: 0;
     }
 
-    .opn-body strong {
-      font-size: 13px;
-      font-weight: 950;
-    }
-
-    .opn-body time,
-    .opn-body p {
-      color: var(--c2-muted, #91a9b0);
+    .opn-body header strong {
+      min-width: 0;
+      color: var(--c2-text, #d8edf3);
       font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .opn-body header span {
+      display: inline-grid;
+      min-width: 24px;
+      height: 18px;
+      place-items: center;
+      border: 1px solid rgba(216, 237, 243, 0.16);
+      border-radius: 999px;
+      color: var(--c2-muted, #91a9b0);
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .opn-body time {
+      margin-left: auto;
+      color: var(--c2-muted, #91a9b0);
+      font-size: 10px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .opn-body b {
+      min-width: 0;
+      color: var(--c2-text, #d8edf3);
+      font-size: 13px;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .opn-body p {
+      display: -webkit-box;
       margin: 0;
-      line-height: 1.35;
+      color: var(--c2-muted, #91a9b0);
+      font-size: 12px;
+      line-height: 1.32;
+      overflow: hidden;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
-    .opn-body button,
-    .opn-overflow {
+    .opn-body footer {
+      justify-content: flex-end;
       min-height: 28px;
-      padding: 0 10px;
-      border: 1px solid rgba(102, 204, 220, 0.28);
+    }
+
+    .opn-primary,
+    .opn-ack,
+    .opn-overflow {
+      min-height: 26px;
+      border: 1px solid rgba(102, 204, 220, 0.24);
       border-radius: 6px;
-      background: rgba(216, 237, 243, 0.04);
+      background: rgba(216, 237, 243, 0.035);
       color: var(--c2-text, #d8edf3);
       font-size: 11px;
       font-weight: 850;
     }
 
-    .opn-body button.primary {
-      border-color: rgba(13, 214, 198, 0.46);
-      background: rgba(13, 214, 198, 0.12);
+    .opn-primary {
+      padding: 0 10px;
+      border-color: rgba(13, 214, 198, 0.4);
+      background: rgba(13, 214, 198, 0.1);
+    }
+
+    .opn-ack {
+      width: 28px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .opn-ack svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    .opn-primary:focus-visible,
+    .opn-ack:focus-visible,
+    .opn-overflow:focus-visible {
+      outline: 2px solid rgba(13, 214, 198, 0.5);
+      outline-offset: 2px;
     }
 
     .opn-overflow {
       width: fit-content;
       justify-self: end;
+      padding: 0 10px;
+      color: var(--c2-muted, #91a9b0);
+    }
+
+    @media (max-width: 720px) {
+      .opn-overlay {
+        top: calc(env(safe-area-inset-top, 0px) + 8px);
+        left: 8px;
+        right: 8px;
+        width: auto;
+      }
     }
   `],
 })
 export class OperationalNotificationOverlayComponent implements OnInit, OnDestroy {
-  visible: OperationalNotification[] = [];
+  visible: OverlayCard[] = [];
+  overflowCount = 0;
+
   private readonly subscriptions = new Subscription();
   private readonly hiddenIds = new Set<string>();
+  private readonly expiredIds = new Set<string>();
+  private readonly stackCounts = new Map<string, number>();
+  private allUnread: OperationalNotification[] = [];
   private lastKey = '';
   private lastKeyAt = 0;
-  overflowCount = 0;
 
   constructor(
     private readonly notifications: OperationalNotificationsService,
     private readonly realtime: RealtimeService,
     private readonly router: Router,
+    private readonly cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -188,6 +317,18 @@ export class OperationalNotificationOverlayComponent implements OnInit, OnDestro
     this.subscriptions.unsubscribe();
   }
 
+  @HostListener('document:keydown.escape')
+  closeTransient(): void {
+    const transient = this.visible.find((card) => card.item.severity !== 'critical');
+
+    if (!transient) {
+      return;
+    }
+
+    this.hiddenIds.add(transient.item.id);
+    this.refreshVisible();
+  }
+
   open(item: OperationalNotification): void {
     this.hiddenIds.add(item.id);
     this.refreshVisible();
@@ -205,18 +346,87 @@ export class OperationalNotificationOverlayComponent implements OnInit, OnDestro
     void this.router.navigate(['/notifications']);
   }
 
-  trackById(_: number, item: OperationalNotification): string {
-    return item.id;
+  trackByCard(_: number, card: OverlayCard): string {
+    return card.item.id;
+  }
+
+  cardTitle(card: OverlayCard): string {
+    return `${this.typeLabel(card.item)} ${this.entityLine(card.item)}`;
+  }
+
+  typeLabel(item: OperationalNotification): string {
+    const labels: Record<string, string> = {
+      new_target: 'Нова ціль',
+      weapon_not_ready: 'СГ → НЕ БГ',
+      weapon_ready: 'СГ → БГ',
+      fire_position_not_ready: 'ВП → НЕ БГ',
+      fire_position_ready: 'ВП → БГ',
+      target_accepted: 'Ціль прийнято',
+      target_rejected: 'Ціль відхилено',
+      firing_blocked: 'Вогонь заблоковано',
+    };
+
+    return labels[item.type] ?? 'Повідомлення';
+  }
+
+  entityLine(item: OperationalNotification): string {
+    const payload = item.payload || {};
+    const name = this.stringValue(payload['callsign'])
+      || this.stringValue(payload['firePositionName'])
+      || this.stringValue(payload['orderNumber']);
+
+    if (item.type === 'new_target') {
+      return name ? `ВГЗ ${name}` : item.title;
+    }
+
+    if (item.type.startsWith('weapon_')) {
+      return name ? `СГ "${name}"` : item.title;
+    }
+
+    if (item.type.startsWith('fire_position_')) {
+      return name ? `ВП "${name}"` : item.title;
+    }
+
+    return item.title;
+  }
+
+  contextLine(item: OperationalNotification): string {
+    const payload = item.payload || {};
+    const parts: string[] = [];
+    const reason = this.reasonLabel(this.stringValue(payload['reason']));
+    const fpName = this.stringValue(payload['firePositionName']);
+    const assignedWeapon = this.stringValue(payload['assignedWeaponName']);
+    const mgrs = this.stringValue(payload['targetMgrs']) || this.stringValue(payload['mgrs']);
+
+    if (reason) {
+      parts.push(reason);
+    }
+
+    if (fpName && !item.type.startsWith('fire_position_')) {
+      parts.push(`ВП "${fpName}"`);
+    }
+
+    if (assignedWeapon) {
+      parts.push(`СГ "${assignedWeapon}"`);
+    }
+
+    if (mgrs) {
+      parts.push(mgrs);
+    }
+
+    return parts.length > 0 ? parts.join(' · ') : this.truncate(item.message);
   }
 
   private reconcile(): void {
     this.notifications.getAll(true).subscribe({
       next: (items) => {
-        this.visible = items
-          .filter((item) => !this.hiddenIds.has(item.id))
-          .slice(0, 3);
-        this.overflowCount = Math.max(0, items.length - this.visible.length);
-        this.scheduleAutoHide();
+        this.allUnread = items.filter((item) => !this.expiredIds.has(item.id));
+        const first = this.allUnread[0];
+        if (first) {
+          this.lastKey = this.stackKey(first);
+          this.lastKeyAt = Date.now();
+        }
+        this.refreshVisible();
       },
     });
   }
@@ -224,43 +434,53 @@ export class OperationalNotificationOverlayComponent implements OnInit, OnDestro
   private loadNew(id: string): void {
     this.notifications.getById(id).subscribe({
       next: (item) => {
-        const key = `${item.type}|${item.entityType}|${item.entityId}`;
+        const key = this.stackKey(item);
         const now = Date.now();
 
         if (key === this.lastKey && now - this.lastKeyAt < 2000) {
+          this.stackCounts.set(key, (this.stackCounts.get(key) ?? 1) + 1);
+          this.refreshVisible();
           return;
         }
 
         this.lastKey = key;
         this.lastKeyAt = now;
         this.hiddenIds.delete(item.id);
-        this.visible = [item, ...this.visible.filter((current) => current.id !== item.id)]
-          .filter((current) => !this.hiddenIds.has(current.id))
-          .slice(0, 3);
-        this.overflowCount = Math.max(0, this.overflowCount);
-        this.scheduleAutoHide();
+        this.expiredIds.delete(item.id);
+        this.allUnread = [item, ...this.allUnread.filter((current) => current.id !== item.id)];
+        this.refreshVisible();
       },
     });
   }
 
-  private scheduleAutoHide(): void {
-    for (const item of this.visible) {
-      if (item.severity === 'critical') {
-        continue;
-      }
-
-      const delay = item.severity === 'attention' ? 12000 : 5000;
-      this.subscriptions.add(
-        timer(delay).subscribe(() => {
-          this.hiddenIds.add(item.id);
-          this.refreshVisible();
-        }),
-      );
+  private scheduleAutoHide(item: OperationalNotification): void {
+    if (item.severity === 'critical') {
+      return;
     }
+
+    const delay = item.severity === 'attention' ? 12000 : 5000;
+    this.subscriptions.add(
+      timer(delay).subscribe(() => {
+        this.expiredIds.add(item.id);
+        this.hiddenIds.add(item.id);
+        this.refreshVisible();
+      }),
+    );
   }
 
   private refreshVisible(): void {
-    this.visible = this.visible.filter((item) => !this.hiddenIds.has(item.id)).slice(0, 3);
+    const available = this.allUnread.filter((item) => !this.hiddenIds.has(item.id));
+    this.visible = available.slice(0, 3).map((item) => ({
+      item,
+      stackCount: this.stackCounts.get(this.stackKey(item)) ?? 1,
+    }));
+    this.overflowCount = Math.max(0, available.length - this.visible.length);
+    this.visible.forEach((card) => this.scheduleAutoHide(card.item));
+    this.cdr.markForCheck();
+  }
+
+  private stackKey(item: OperationalNotification): string {
+    return `${item.type}|${item.entityType}|${item.entityId}`;
   }
 
   private routeFor(item: OperationalNotification): string {
@@ -277,5 +497,28 @@ export class OperationalNotificationOverlayComponent implements OnInit, OnDestro
     }
 
     return '/notifications';
+  }
+
+  private reasonLabel(value: string): string {
+    const labels: Record<string, string> = {
+      breakdown: 'Поломка',
+      threat: 'Загроза',
+      crew: 'Екіпаж',
+      maintenance: 'ТО/ремонт',
+      damaged: 'Пошкоджена',
+      not_prepared: 'Не підготовлена',
+      occupied: 'Зайнята',
+      other: 'Інше',
+    };
+
+    return labels[value] ?? '';
+  }
+
+  private truncate(value: string): string {
+    return value.length > 140 ? `${value.slice(0, 137)}...` : value;
+  }
+
+  private stringValue(value: unknown): string {
+    return typeof value === 'string' && value.trim() ? value.trim() : '';
   }
 }
