@@ -33,6 +33,7 @@ import { AnalyticsPage } from './features/analytics/analytics-page/analytics-pag
 import { HomePage } from './features/home/home-page/home-page';
 import { NotificationsPage } from './features/notifications/notifications-page/notifications-page';
 import { PlannedTripsPage } from './features/planned-trips/planned-trips-page';
+import { C2WorkspacePage } from './features/c2-workspace/c2-workspace-page';
 
 export const routes: Routes = [
   {
@@ -53,6 +54,11 @@ export const routes: Routes = [
     path: 'map',
     canActivate: [authGuard],
     component: MapPage,
+  },
+  {
+    path: 'c2',
+    canActivate: [authGuard],
+    component: C2WorkspacePage,
   },
   {
     path: 'notifications',
