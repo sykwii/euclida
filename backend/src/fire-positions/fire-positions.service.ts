@@ -21,6 +21,7 @@ import { DepotFuzeStock } from '../depot-fuze-stock/depot-fuze-stock.entity';
 import { DepotPrimerStock } from '../depot-primer-stock/depot-primer-stock.entity';
 import { ShellCompatibleCharge } from '../shell-compatible-charges/shell-compatible-charge.entity';
 import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
+import { WeaponDeployment } from '../weapon-systems/weapon-deployment.entity';
 import { ForbiddenException } from '@nestjs/common';
 import { In } from 'typeorm';
 import type { AuthUser } from '../auth/auth-user.types';
@@ -72,6 +73,8 @@ export class FirePositionsService implements OnModuleInit {
     const result: Array<
       FirePosition & {
         assignedWeapon: WeaponSystem | null;
+        incomingWeapon: WeaponSystem | null;
+        incomingDeployment: WeaponDeployment | null;
         canEdit: boolean;
         isOwnScope: boolean;
         publicViewOnly: boolean;
@@ -101,6 +104,8 @@ export class FirePositionsService implements OnModuleInit {
       const isOwnScope =
         allowedUnitIds === null ||
         (!!position.unitId && allowedUnitIds.includes(position.unitId));
+      const incomingDeployment = await this.findIncomingDeployment(position.id);
+      const incomingWeapon = incomingDeployment?.weaponSystem ?? null;
 
       const syncedPosition = this.applyWeaponStateToFirePosition(
         position,
@@ -110,6 +115,8 @@ export class FirePositionsService implements OnModuleInit {
       result.push({
         ...syncedPosition,
         assignedWeapon: isOwnScope ? assignedWeapon : null,
+        incomingWeapon: isOwnScope ? incomingWeapon : null,
+        incomingDeployment: isOwnScope ? incomingDeployment : null,
         canEdit:
           isOwnScope && (user.role === 'admin' || user.role === 'operator'),
         isOwnScope,
@@ -398,6 +405,8 @@ private normalizePositionType(value: string | null | undefined): string {
           unit: true,
         },
       });
+    const incomingDeployment = await this.findIncomingDeployment(id);
+    const incomingWeapon = incomingDeployment?.weaponSystem ?? null;
 
     const syncedFirePosition = this.applyWeaponStateToFirePosition(
       firePosition,
@@ -416,6 +425,8 @@ private normalizePositionType(value: string | null | undefined): string {
           unit: assignedWeapon?.unit ?? syncedFirePosition.unit,
         },
         assignedWeapon,
+        incomingWeapon,
+        incomingDeployment,
         localStock: {
           shells: [],
           charges: [],
@@ -476,6 +487,8 @@ private normalizePositionType(value: string | null | undefined): string {
         unit: assignedWeapon?.unit ?? firePosition.unit,
       },
       assignedWeapon,
+      incomingWeapon,
+      incomingDeployment,
       localStock: {
         shells: await this.dataSource.getRepository(DepotShellStock).find({
           where: { depotId: ammoDepotId },
@@ -524,7 +537,12 @@ private normalizePositionType(value: string | null | undefined): string {
     });
 
     const result: Array<
-      FirePosition & { maxSectorDistanceM: number; assignedWeapon: WeaponSystem | null }
+      FirePosition & {
+        maxSectorDistanceM: number;
+        assignedWeapon: WeaponSystem | null;
+        incomingWeapon: WeaponSystem | null;
+        incomingDeployment: WeaponDeployment | null;
+      }
     > = [];
 
     for (const position of positions) {
@@ -550,6 +568,8 @@ private normalizePositionType(value: string | null | undefined): string {
         position,
         assignedWeapon,
       );
+      const incomingDeployment = await this.findIncomingDeployment(position.id);
+      const incomingWeapon = incomingDeployment?.weaponSystem ?? null;
       const maxSectorDistanceM =
         await this.getMaxSectorDistanceForPosition(syncedPosition);
 
@@ -557,6 +577,8 @@ private normalizePositionType(value: string | null | undefined): string {
         ...syncedPosition,
         maxSectorDistanceM,
         assignedWeapon,
+        incomingWeapon,
+        incomingDeployment,
       });
     }
 
@@ -605,6 +627,25 @@ private normalizePositionType(value: string | null | undefined): string {
     }
 
     return Math.max(...compatibleRanges.map((item) => Number(item.maxRangeM)));
+  }
+
+  private async findIncomingDeployment(
+    firePositionId: string,
+  ): Promise<WeaponDeployment | null> {
+    return this.dataSource.getRepository(WeaponDeployment).findOne({
+      where: {
+        toLocationType: 'fire_position',
+        toLocationId: firePositionId,
+        status: In(['planned', 'moving']),
+      },
+      relations: {
+        weaponSystem: {
+          weaponModel: true,
+          unit: true,
+        },
+      },
+      order: { updatedAt: 'DESC' },
+    });
   }
 
   private async ensureCanUseUnit(

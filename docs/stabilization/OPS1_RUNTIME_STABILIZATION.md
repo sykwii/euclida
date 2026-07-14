@@ -1,8 +1,8 @@
-# OPS-1.1 Runtime Stabilization
+# OPS-1 Runtime Stabilization
 
 ## Scope
 
-Stabilized the existing OPS-1 weapon maintenance and deployment workflows without changing public routes, DTO semantics, database schema, or UI layout.
+Stabilized the existing OPS-1 weapon maintenance and deployment workflows without changing public routes, DTO semantics, or database schema.
 
 ## Maintenance Endpoints
 
@@ -42,6 +42,8 @@ Legacy compatibility routes remain available:
 - `POST /weapon-systems/:id/assign-to-fire-position`
 - `POST /weapon-systems/:id/move-to-reserve`
 
+The active frontend does not call `assign-to-fire-position`. It uses the canonical planned deployment flow through `/deployment/assign`.
+
 ## Deployment State Machine
 
 - `assign`: creates a planned `WeaponDeployment` to a fire position. It does not mutate assignment through generic CRUD.
@@ -54,6 +56,18 @@ Legacy compatibility routes remain available:
 
 Duplicate active deployments are rejected. A weapon already at another fire position cannot be reassigned silently. Withdrawal remains blocked when the fire position has an active execution.
 
+If a target fire position has no `unitId`, assignment derives it from the selected weapon inside the same transaction, but only when:
+
+- the weapon has `unitId`;
+- the operator can use the weapon unit;
+- the fire position has no currently assigned weapon.
+
+Non-null mismatching fire-position units are rejected and never overwritten silently.
+
+Canonical current location is `weapon_systems.deployment_status + weapon_systems.current_fire_position_id`. `weapon_deployments` stores transition history and uses `from_location_id` / `to_location_id`; it does not have `fire_position_id`.
+
+Legacy `weapon_systems.fire_position_id + location_type` remain read-compatible only. New canonical deployment transitions no longer write those legacy location fields.
+
 ## Locking Rules
 
 `lockWeapon()` applies pessimistic locking only to the root `weapon_systems` row. Relations are loaded in a second query inside the same transaction, avoiding PostgreSQL errors from `FOR UPDATE` on nullable outer joins.
@@ -64,7 +78,9 @@ Fire-position locking remains a root-row lock on `fire_positions`. Occupancy che
 
 - Existing weapon buttons now call the canonical deployment and maintenance routes.
 - Assignment and withdrawal create planned deployments first.
-- The movement button starts planned movement or confirms arrival depending on current deployment state.
+- Movement actions are state-specific: assign, start movement, confirm fire-position arrival, withdraw, start reserve movement, confirm reserve arrival, cancel.
+- Weapon cards show planned deployments as `Призначено, очікує руху`.
+- Fire-position cards show `assignedWeapon` only for `at_fire_position`; planned/moving inbound deployment is shown separately as incoming weapon.
 - Maintenance buttons are state-dependent: start, complete, cancel, and explicit readiness confirmation.
 - Errors use backend response text when available.
 - Refresh remains through unified realtime and the existing local action refresh; no polling or page reload was added.
@@ -74,8 +90,12 @@ Fire-position locking remains a root-row lock on `fire_positions`. Occupancy che
 - `backend/src/weapon-systems/weapon-systems.controller.ts`
 - `backend/src/weapon-systems/weapon-systems.service.ts`
 - `backend/src/weapon-systems/weapon-systems.service.spec.ts`
+- `backend/src/fire-positions/fire-positions.service.ts`
 - `backend/src/service-orders/service-orders.service.ts`
 - `backend/src/execution/execution-engine.service.ts`
+- `frontend/src/app/features/fire-positions/fire-position.model.ts`
+- `frontend/src/app/features/fire-positions/fire-positions-page/fire-positions-page.ts`
+- `frontend/src/app/features/fire-positions/fire-positions-page/fire-positions-page.html`
 - `frontend/src/app/features/weapon-systems/weapon-systems.service.ts`
 - `frontend/src/app/features/weapon-systems/weapon-systems-page/weapon-systems-page.ts`
 - `frontend/src/app/features/weapon-systems/weapon-systems-page/weapon-systems-page.html`
@@ -83,12 +103,13 @@ Fire-position locking remains a root-row lock on `fire_positions`. Occupancy che
 
 ## Verification
 
-- Backend focused test: `npm test -- --runInBand weapon-systems.service.spec.ts` passed.
+- Backend focused test: `npm test -- --runInBand weapon-systems.service.spec.ts` passed, including null FP unit derivation, mismatching FP unit rejection, maintenance open, duplicate maintenance rejection, completion staying not combat ready, and explicit readiness confirmation.
 - Backend build: `npm run build` passed.
 - Backend full tests: `npm test -- --runInBand` passed.
 - Frontend build: `npm run build` passed.
 - Frontend tests: `npm test -- --watch=false` passed.
 - Lock grep: no nullable relation join is used by `lockWeapon()` under pessimistic write lock.
+- Frontend route grep: active weapon page calls `/deployment/assign`; legacy `assign-to-fire-position` remains only as deprecated service/controller compatibility.
 
 ## Runtime Smoke
 
@@ -102,3 +123,4 @@ Result: unauthenticated smoke returned `HTTP 401`, confirming that the route is 
 
 - Legacy maintenance statuses `pending` and `approved` are still supported as active states for backward compatibility.
 - Legacy deployment routes remain as compatibility aliases.
+- Fire-position pages now expose incoming deployment state in addition to arrived assignment state.

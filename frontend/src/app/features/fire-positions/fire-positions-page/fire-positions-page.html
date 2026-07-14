@@ -292,7 +292,31 @@
       </div>
 
       <ng-template #noWeapon>
-        <div class="weapon-empty">
+        <div class="weapon-box" *ngIf="item.incomingWeapon">
+          <div class="weapon-status deployment moving-to-fire-position">
+            {{ getIncomingDeploymentLabel(item) }}
+          </div>
+
+          <div class="weapon-grid">
+            <p>
+              <span>Тип</span>
+              <strong>{{ item.incomingWeapon.weaponModel?.name || '—' }}</strong>
+            </p>
+            <p>
+              <span>№</span>
+              <strong>{{ item.incomingWeapon.serialNumber || '—' }}</strong>
+            </p>
+            <p>
+              <span>Позивний</span>
+              <strong>{{ item.incomingWeapon.callsign || '—' }}</strong>
+            </p>
+            <p>
+              <span>Підрозділ</span>
+              <strong>{{ item.incomingWeapon.unit?.name || '—' }}</strong>
+            </p>
+          </div>
+        </div>
+        <div class="weapon-empty" *ngIf="!item.incomingWeapon">
           <span>{{ isEwPage || isAirAssetsPage ? 'Засіб' : 'Озброєння' }}</span>
           <strong>{{ isEwPage || isAirAssetsPage ? 'Не вказано' : 'Не призначене' }}</strong>
         </div>

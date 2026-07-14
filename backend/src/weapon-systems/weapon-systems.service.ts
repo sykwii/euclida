@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -572,10 +573,11 @@ export class WeaponSystemsService implements OnModuleInit {
 
       const firePosition =
         toLocationType === 'fire_position'
-          ? await this.loadTargetFirePosition(manager, toLocationId, user)
+          ? await this.loadTargetFirePosition(manager, toLocationId)
           : null;
 
       if (toLocationType === 'fire_position') {
+        await this.prepareFirePositionForWeapon(manager, firePosition!, weapon, user);
         this.ensureNonReadyAssignmentConfirmed(weapon, force);
         await this.ensureFirePositionAvailable(manager, firePosition!.id, weapon.id);
       } else {
@@ -633,10 +635,11 @@ export class WeaponSystemsService implements OnModuleInit {
 
       const firePosition =
         deployment.toLocationType === 'fire_position'
-          ? await this.loadTargetFirePosition(manager, deployment.toLocationId, user)
+          ? await this.loadTargetFirePosition(manager, deployment.toLocationId)
           : null;
 
       if (deployment.toLocationType === 'fire_position') {
+        await this.prepareFirePositionForWeapon(manager, firePosition!, weapon, user);
         await this.ensureFirePositionAvailable(manager, firePosition!.id, weapon.id);
       } else {
         await this.ensureNoActiveExecution(manager, weapon.currentFirePositionId);
@@ -649,8 +652,6 @@ export class WeaponSystemsService implements OnModuleInit {
           ? 'moving_to_fire_position'
           : 'moving_to_reserve_area';
       weapon.currentFirePositionId = null;
-      weapon.locationType = 'reserve';
-      weapon.firePositionId = null;
 
       const savedDeployment = await manager.save(WeaponDeployment, deployment);
       await manager.save(WeaponSystem, weapon);
@@ -675,12 +676,14 @@ export class WeaponSystemsService implements OnModuleInit {
         'fire_position',
       );
       const targetId = targetFirePositionId ?? mutableDeployment?.toLocationId;
-      const firePosition = await this.loadTargetFirePosition(manager, targetId, user);
+      const firePosition = await this.loadTargetFirePosition(manager, targetId);
       const force = 'force' in body && body.force === true;
 
       if (!mutableDeployment) {
         this.ensureWeaponCanStartDeployment(weapon);
       }
+
+      await this.prepareFirePositionForWeapon(manager, firePosition, weapon, user);
 
       if (
         weapon.deploymentStatus === 'at_fire_position' &&
@@ -732,8 +735,6 @@ export class WeaponSystemsService implements OnModuleInit {
       deployment.confirmedByUserId = user.sub;
       weapon.deploymentStatus = 'at_fire_position';
       weapon.currentFirePositionId = firePosition.id;
-      weapon.locationType = 'fire_position';
-      weapon.firePositionId = firePosition.id;
       weapon.unitId = weapon.unitId ?? firePosition.unitId;
       firePosition.unitId = weapon.unitId ?? firePosition.unitId;
 
@@ -788,8 +789,6 @@ export class WeaponSystemsService implements OnModuleInit {
       deployment.confirmedByUserId = user.sub;
       weapon.deploymentStatus = 'reserve_area';
       weapon.currentFirePositionId = null;
-      weapon.locationType = 'reserve';
-      weapon.firePositionId = null;
 
       const savedDeployment = await manager.save(WeaponDeployment, deployment);
       await manager.save(WeaponSystem, weapon);
@@ -828,7 +827,6 @@ export class WeaponSystemsService implements OnModuleInit {
   private async loadTargetFirePosition(
     manager: DataSource['manager'],
     firePositionId: string | null | undefined,
-    user: AuthUser,
   ): Promise<FirePosition> {
     if (!firePositionId) {
       throw new BadRequestException('Потрібно вибрати ВП');
@@ -843,8 +841,53 @@ export class WeaponSystemsService implements OnModuleInit {
       throw new BadRequestException('ВП не знайдено');
     }
 
-    await this.ensureCanUseUnit(user, firePosition.unitId);
     return firePosition;
+  }
+
+  private async prepareFirePositionForWeapon(
+    manager: DataSource['manager'],
+    firePosition: FirePosition,
+    weapon: WeaponSystem,
+    user: AuthUser,
+  ): Promise<void> {
+    if (firePosition.unitId) {
+      await this.ensureCanUseUnit(user, firePosition.unitId);
+
+      if (weapon.unitId && firePosition.unitId !== weapon.unitId) {
+        throw new ConflictException('ВП належить іншому підрозділу');
+      }
+
+      return;
+    }
+
+    if (!weapon.unitId) {
+      throw new BadRequestException('ВП не має підрозділу, а СГ не прив’язана до підрозділу');
+    }
+
+    await this.ensureCanUseUnit(user, weapon.unitId);
+
+    const assignedWeapon = await manager.getRepository(WeaponSystem).findOne({
+      where: [
+        {
+          currentFirePositionId: firePosition.id,
+          deploymentStatus: 'at_fire_position',
+          id: Not(weapon.id),
+        },
+        {
+          firePositionId: firePosition.id,
+          locationType: 'fire_position',
+          id: Not(weapon.id),
+        },
+      ],
+      select: { id: true },
+    });
+
+    if (assignedWeapon) {
+      throw new ConflictException('ВП вже має призначену СГ');
+    }
+
+    firePosition.unitId = weapon.unitId;
+    await manager.save(FirePosition, firePosition);
   }
 
   private async ensureFirePositionAvailable(
@@ -1026,15 +1069,11 @@ export class WeaponSystemsService implements OnModuleInit {
     if (deployment.fromLocationType === 'fire_position' && deployment.fromLocationId) {
       weapon.deploymentStatus = 'at_fire_position';
       weapon.currentFirePositionId = deployment.fromLocationId;
-      weapon.locationType = 'fire_position';
-      weapon.firePositionId = deployment.fromLocationId;
       return;
     }
 
     weapon.deploymentStatus = 'reserve_area';
     weapon.currentFirePositionId = null;
-    weapon.locationType = 'reserve';
-    weapon.firePositionId = null;
   }
 
   private rejectDirectLocationMutation(

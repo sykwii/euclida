@@ -73,6 +73,7 @@ export class WeaponSystemsController {
 
 
   @UseGuards(WriteAccessGuard)
+  /** @deprecated Active UI uses the canonical planned deployment flow. */
   @Post(':id/assign-to-fire-position')
   assignToFirePosition(
     @CurrentUser() user: AuthUser,

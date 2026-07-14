@@ -177,7 +177,7 @@
         <button
           type="button"
           class="ghost-button"
-          (click)="assignToFirePosition(item)"
+          (click)="planMoveToFirePosition(item)"
           [disabled]="movingId === item.id || !deploymentTargets[item.id]"
         >
           Призначити
@@ -190,17 +190,47 @@
         <button
           type="button"
           class="ghost-button"
-          *ngIf="canConfirmArrival(item)"
+          *ngIf="canStartMoveToFirePosition(item)"
           (click)="startMove(item)"
           [disabled]="movingId === item.id"
         >
-          {{ getDeploymentActionLabel(item) }}
+          Почати рух
         </button>
 
         <button
           type="button"
           class="ghost-button"
-          *ngIf="canConfirmArrival(item)"
+          *ngIf="canConfirmFirePositionArrival(item)"
+          (click)="startMove(item)"
+          [disabled]="movingId === item.id"
+        >
+          Підтвердити прибуття
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="canStartMoveToReserve(item)"
+          (click)="startMove(item)"
+          [disabled]="movingId === item.id"
+        >
+          Почати рух у РЗ
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="canConfirmReserveArrival(item)"
+          (click)="startMove(item)"
+          [disabled]="movingId === item.id"
+        >
+          Підтвердити прибуття у РЗ
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="canCancelDeployment(item)"
           (click)="cancelDeployment(item)"
           [disabled]="movingId === item.id"
         >

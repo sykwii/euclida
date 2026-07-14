@@ -42,6 +42,7 @@ export class WeaponSystemsService {
     return this.api.post<WeaponSystem>(`/weapon-systems/${id}/move-to-reserve`, {});
   }
 
+  /** @deprecated Active UI uses the canonical planned deployment flow. */
   assignToFirePosition(
     id: string,
     targetFirePositionId: string | null,

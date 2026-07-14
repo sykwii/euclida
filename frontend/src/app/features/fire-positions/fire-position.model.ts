@@ -77,4 +77,35 @@ export interface FirePosition {
       type: string;
     } | null;
   } | null;
+  incomingWeapon?: {
+    id: string;
+    readinessStatus: string;
+    notReadyReason: string | null;
+    deploymentStatus?: string;
+    currentFirePositionId?: string | null;
+    callsign: string | null;
+    serialNumber: string | null;
+    weaponModel?: {
+      id: string;
+      name: string;
+      systemType: string;
+    } | null;
+    unit?: {
+      id: string;
+      name: string;
+      type: string;
+    } | null;
+  } | null;
+  incomingDeployment?: {
+    id: string;
+    status: string;
+    fromLocationType: string | null;
+    fromLocationId: string | null;
+    toLocationType: string | null;
+    toLocationId: string | null;
+    orderedAt: string;
+    departedAt: string | null;
+    arrivedAt: string | null;
+    note: string | null;
+  } | null;
 }

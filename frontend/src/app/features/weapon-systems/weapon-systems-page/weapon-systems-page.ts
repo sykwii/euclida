@@ -305,7 +305,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     });
   }
 
-  assignToFirePosition(item: WeaponSystem): void {
+  planMoveToFirePosition(item: WeaponSystem): void {
     const targetFirePositionId = this.deploymentTargets[item.id];
     if (this.movingId || !targetFirePositionId) {
       return;
@@ -464,8 +464,15 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
 
   getAvailableFirePositions(item?: WeaponSystem): FirePosition[] {
     const occupiedIds = this.items
-      .filter((weapon) => this.isAtFirePosition(weapon) && weapon.id !== item?.id)
-      .map((weapon) => weapon.currentFirePositionId ?? weapon.firePositionId)
+      .filter((weapon) => weapon.id !== item?.id)
+      .map((weapon) => {
+        if (this.isAtFirePosition(weapon)) {
+          return weapon.currentFirePositionId ?? weapon.firePositionId;
+        }
+
+        const deployment = this.getActiveDeployment(weapon);
+        return deployment?.toLocationType === 'fire_position' ? deployment.toLocationId : null;
+      })
       .filter((id): id is string => !!id);
 
     return this.firePositions.filter((position) => !occupiedIds.includes(position.id));
@@ -527,6 +534,46 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     return this.canEditWeapon(item) && (!!this.getActiveDeployment(item) || this.isMoving(item));
   }
 
+  canStartMoveToFirePosition(item: WeaponSystem): boolean {
+    const deployment = this.getActiveDeployment(item);
+    return (
+      this.canEditWeapon(item) &&
+      deployment?.status === 'planned' &&
+      deployment.toLocationType === 'fire_position'
+    );
+  }
+
+  canConfirmFirePositionArrival(item: WeaponSystem): boolean {
+    const deployment = this.getActiveDeployment(item);
+    return (
+      this.canEditWeapon(item) &&
+      ((deployment?.status === 'moving' && deployment.toLocationType === 'fire_position') ||
+        this.getDeploymentStatus(item) === 'moving_to_fire_position')
+    );
+  }
+
+  canStartMoveToReserve(item: WeaponSystem): boolean {
+    const deployment = this.getActiveDeployment(item);
+    return (
+      this.canEditWeapon(item) &&
+      deployment?.status === 'planned' &&
+      deployment.toLocationType === 'reserve_area'
+    );
+  }
+
+  canConfirmReserveArrival(item: WeaponSystem): boolean {
+    const deployment = this.getActiveDeployment(item);
+    return (
+      this.canEditWeapon(item) &&
+      ((deployment?.status === 'moving' && deployment.toLocationType === 'reserve_area') ||
+        this.getDeploymentStatus(item) === 'moving_to_reserve_area')
+    );
+  }
+
+  canCancelDeployment(item: WeaponSystem): boolean {
+    return this.canEditWeapon(item) && !!this.getActiveDeployment(item);
+  }
+
   isAtFirePosition(item: WeaponSystem): boolean {
     return this.getDeploymentStatus(item) === 'at_fire_position';
   }
@@ -577,6 +624,18 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   getDeploymentLabel(item: WeaponSystem): string {
+    const deployment = this.getActiveDeployment(item);
+
+    if (deployment?.status === 'planned') {
+      return deployment.toLocationType === 'reserve_area'
+        ? 'Заплановано вихід у РЗ'
+        : 'Призначено, очікує руху';
+    }
+
+    if (deployment?.status === 'moving') {
+      return deployment.toLocationType === 'reserve_area' ? 'Рух до РЗ' : 'Рух до ВП';
+    }
+
     const labels: Record<string, string> = {
       reserve_area: 'РЗ',
       moving_to_fire_position: 'рух до ВП',
@@ -588,6 +647,18 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   getDeploymentClass(item: WeaponSystem): string {
+    const deployment = this.getActiveDeployment(item);
+
+    if (deployment?.status === 'planned') {
+      return 'planned';
+    }
+
+    if (deployment?.status === 'moving') {
+      return deployment.toLocationType === 'reserve_area'
+        ? 'moving-to-reserve-area'
+        : 'moving-to-fire-position';
+    }
+
     return this.getDeploymentStatus(item).replace(/_/g, '-');
   }
 
@@ -616,11 +687,25 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   getLocationName(item: WeaponSystem): string {
+    const deployment = this.getActiveDeployment(item);
+
+    if (deployment?.toLocationType === 'fire_position' && deployment.toLocationId) {
+      return this.getFirePositionName(deployment.toLocationId);
+    }
+
+    if (deployment?.toLocationType === 'reserve_area') {
+      return item.unit?.name || 'Р Р—';
+    }
+
     if (this.isAtFirePosition(item)) {
       return item.currentFirePosition?.name || item.firePosition?.name || 'ВП';
     }
 
     return item.unit?.name || 'РЗ';
+  }
+
+  private getFirePositionName(id: string): string {
+    return this.firePositions.find((position) => position.id === id)?.name || 'ВП';
   }
 
   private getDeploymentStatus(item: WeaponSystem): string {

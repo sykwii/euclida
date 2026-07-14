@@ -483,6 +483,16 @@ private syncPageKindFromUrl(url: string): void {
     return (item.assignedWeapon?.deploymentStatus || 'at_fire_position').replace(/_/g, '-');
   }
 
+  getIncomingDeploymentLabel(item: FirePosition): string {
+    const status = item.incomingDeployment?.status;
+
+    if (status === 'moving') {
+      return 'У русі до ВП';
+    }
+
+    return 'Призначено, очікує руху';
+  }
+
   private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {
     return status === 'combat_ready' || status === 'ready' || status === 'ready_for_combat'
       ? 'combat_ready'

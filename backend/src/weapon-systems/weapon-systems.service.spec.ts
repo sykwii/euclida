@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
@@ -123,6 +123,54 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
         currentFirePositionId: 'fp-1',
       }),
     );
+  });
+
+  it('derives a missing fire position unit from the assigned weapon', async () => {
+    const weapon = createWeapon({ readinessStatus: 'combat_ready', unitId: 'unit-1' });
+    const firePosition = createFirePosition({ unitId: null });
+
+    weaponRepository.findOne.mockResolvedValue(weapon);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    firePositionRepository.findOne.mockResolvedValueOnce(firePosition);
+    deploymentRepository.findOne.mockResolvedValueOnce(null);
+
+    await service.planMoveToFirePosition(
+      'weapon-1',
+      { targetFirePositionId: 'fp-1', force: true },
+      user,
+    );
+
+    expect(firePosition.unitId).toBe('unit-1');
+    expect(manager.save).toHaveBeenCalledWith(
+      FirePosition,
+      expect.objectContaining({ id: 'fp-1', unitId: 'unit-1' }),
+    );
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponDeployment,
+      expect.objectContaining({ status: 'planned', toLocationId: 'fp-1' }),
+    );
+  });
+
+  it('rejects assignment to a fire position with a different unit', async () => {
+    const weapon = createWeapon({ readinessStatus: 'combat_ready', unitId: 'unit-1' });
+    const firePosition = createFirePosition({ unitId: 'unit-2' });
+
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+    firePositionRepository.findOne.mockResolvedValueOnce(firePosition);
+
+    await expect(
+      service.planMoveToFirePosition(
+        'weapon-1',
+        { targetFirePositionId: 'fp-1', force: true },
+        user,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('locks nullable current fire position weapons without relation joins', async () => {
@@ -414,6 +462,33 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     expect(weapon.readinessStatus).toBe('not_combat_ready');
     expect(weapon.notReadyReason).toBe('breakdown');
     expect(maintenance.status).toBe('completed');
+  });
+
+  it('explicitly confirms readiness after completed maintenance', async () => {
+    const weapon = createWeapon({
+      readinessStatus: 'not_combat_ready',
+      notReadyReason: 'maintenance',
+      maintenanceStatus: 'completed',
+    });
+    const savedWeapon = createWeapon({
+      readinessStatus: 'combat_ready',
+      notReadyReason: null,
+      maintenanceStatus: 'completed',
+    });
+
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(savedWeapon);
+    weaponRepository.save.mockResolvedValueOnce(savedWeapon);
+
+    const result = await service.confirmReadiness(
+      'weapon-1',
+      { readinessStatus: 'combat_ready' },
+      user,
+    );
+
+    expect(result.readinessStatus).toBe('combat_ready');
+    expect(result.notReadyReason).toBeNull();
   });
 
   function createRepoMock<T>(): jest.Mocked<RepoMock<T>> {
