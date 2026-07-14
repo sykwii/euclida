@@ -115,7 +115,6 @@ export class WeaponSystemsService implements OnModuleInit {
     if (!item) {
       throw new NotFoundException('СГ не знайдено');
     }
-
     await this.ensureCanUseUnit(user, item.unitId);
     return item;
   }
@@ -786,9 +785,17 @@ export class WeaponSystemsService implements OnModuleInit {
     id: string,
     user: AuthUser,
   ): Promise<WeaponSystem> {
-    const item = await repository.findOne({
+    const locked = await repository.findOne({
       where: { id },
       lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!locked) {
+      throw new NotFoundException('СГ не знайдено');
+    }
+
+    const item = await repository.findOne({
+      where: { id: locked.id },
       relations: this.weaponRelations(),
     });
 

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
@@ -76,9 +76,10 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
   });
 
   it('requires explicit confirmation before assigning a not combat ready weapon', async () => {
+    const weapon = createWeapon({ readinessStatus: 'not_combat_ready' });
     weaponRepository.findOne.mockResolvedValueOnce(
-      createWeapon({ readinessStatus: 'not_combat_ready' }),
-    );
+      weapon,
+    ).mockResolvedValueOnce(weapon);
     firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
 
     await expect(
@@ -90,9 +91,83 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('rejects duplicate fire position occupancy', async () => {
+  it('assigns weapon from reserve to fire position', async () => {
+    const weapon = createWeapon({ readinessStatus: 'combat_ready' });
+    const assignedWeapon = createWeapon({
+      deploymentStatus: 'at_fire_position',
+      currentFirePositionId: 'fp-1',
+      firePositionId: 'fp-1',
+      locationType: 'fire_position',
+    });
+
+    weaponRepository.findOne.mockResolvedValue(assignedWeapon);
     weaponRepository.findOne
-      .mockResolvedValueOnce(createWeapon({ readinessStatus: 'combat_ready' }))
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(null);
+    firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
+    deploymentRepository.findOne.mockResolvedValueOnce(null);
+
+    const result = await service.assignToFirePosition(
+      'weapon-1',
+      { targetFirePositionId: 'fp-1', force: true },
+      user,
+    );
+
+    expect(result.deploymentStatus).toBe('at_fire_position');
+    expect(result.currentFirePositionId).toBe('fp-1');
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponSystem,
+      expect.objectContaining({
+        deploymentStatus: 'at_fire_position',
+        currentFirePositionId: 'fp-1',
+      }),
+    );
+  });
+
+  it('locks nullable current fire position weapons without relation joins', async () => {
+    const weapon = createWeapon({
+      currentFirePositionId: null,
+      currentFirePosition: null,
+      firePositionId: null,
+      firePosition: null,
+    });
+    const assignedWeapon = createWeapon({
+      deploymentStatus: 'at_fire_position',
+      currentFirePositionId: 'fp-1',
+      firePositionId: 'fp-1',
+      locationType: 'fire_position',
+    });
+
+    weaponRepository.findOne.mockResolvedValue(assignedWeapon);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(null);
+    firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
+    deploymentRepository.findOne.mockResolvedValueOnce(null);
+
+    await service.assignToFirePosition(
+      'weapon-1',
+      { targetFirePositionId: 'fp-1', force: true },
+      user,
+    );
+
+    expect(weaponRepository.findOne.mock.calls[0]?.[0]).toEqual({
+      where: { id: 'weapon-1' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(weaponRepository.findOne.mock.calls[1]?.[0]).toMatchObject({
+      where: { id: 'weapon-1' },
+      relations: expect.any(Object),
+    });
+  });
+
+  it('rejects duplicate fire position occupancy', async () => {
+    const weapon = createWeapon({ readinessStatus: 'combat_ready' });
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon)
       .mockResolvedValueOnce(createWeapon({ id: 'weapon-2' }));
     firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
 
@@ -105,19 +180,60 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('returns 404 when assigning a missing weapon', async () => {
+    weaponRepository.findOne.mockResolvedValueOnce(null);
+
+    await expect(
+      service.assignToFirePosition(
+        'missing-weapon',
+        { targetFirePositionId: 'fp-1', force: true },
+        user,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('blocks withdrawal while a fire position has active execution', async () => {
+    const weapon = createWeapon({
+      deploymentStatus: 'at_fire_position',
+      currentFirePositionId: 'fp-1',
+      firePositionId: 'fp-1',
+      locationType: 'fire_position',
+    });
     weaponRepository.findOne.mockResolvedValueOnce(
-      createWeapon({
-        deploymentStatus: 'at_fire_position',
-        currentFirePositionId: 'fp-1',
-        firePositionId: 'fp-1',
-        locationType: 'fire_position',
-      }),
-    );
+      weapon,
+    ).mockResolvedValueOnce(weapon);
     serviceOrderRepository.findOne.mockResolvedValueOnce({ id: 'order-1' } as ServiceOrder);
 
     await expect(service.moveToReserve('weapon-1', user)).rejects.toBeInstanceOf(
       BadRequestException,
+    );
+  });
+
+  it('keeps reserve arrival transition behavior', async () => {
+    const weapon = createWeapon({
+      deploymentStatus: 'at_fire_position',
+      currentFirePositionId: 'fp-1',
+      firePositionId: 'fp-1',
+      locationType: 'fire_position',
+    });
+    const reservedWeapon = createWeapon();
+
+    weaponRepository.findOne.mockResolvedValue(reservedWeapon);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+    serviceOrderRepository.findOne.mockResolvedValueOnce(null);
+    deploymentRepository.findOne.mockResolvedValueOnce(null);
+
+    const result = await service.moveToReserve('weapon-1', user);
+
+    expect(result.deploymentStatus).toBe('reserve_area');
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponSystem,
+      expect.objectContaining({
+        deploymentStatus: 'reserve_area',
+        currentFirePositionId: null,
+      }),
     );
   });
 
