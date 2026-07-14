@@ -1,41 +1,60 @@
 <section class="c2-workspace" aria-label="Оперативне робоче місце">
   <aside class="c2-queue" aria-label="Оперативна черга">
-    <header class="c2-panel-head">
+    <header class="c2-panel-head compact">
       <div>
-        <span>Оператор</span>
-        <h1>C2 робоче місце</h1>
+        <span>Оперативна черга</span>
+        <h1>C2</h1>
       </div>
       <b [class.loading]="isLoading">{{ flatQueue.length }}</b>
     </header>
 
     <div class="c2-alert" *ngIf="errorMessage">{{ errorMessage }}</div>
 
+    <button
+      type="button"
+      class="c2-completed-toggle"
+      *ngIf="completedOrdersCount > 0"
+      (click)="toggleCompletedOrders()"
+    >
+      {{ showCompletedOrders ? 'Сховати завершені' : 'Показати завершені' }}
+      <span>{{ completedOrdersCount }}</span>
+    </button>
+
     <section
       class="c2-section"
       *ngFor="let section of queueSections; trackBy: trackQueueSection"
-      [class.empty]="section.items.length === 0"
+      [class.empty]="section.totalItems === 0"
     >
       <header>
         <h2>{{ section.title }}</h2>
-        <span>{{ section.items.length }}</span>
+        <span>{{ section.totalItems }}</span>
       </header>
 
       <button
         type="button"
         class="c2-card"
-        *ngFor="let item of section.items; trackBy: trackQueueItem"
+        *ngFor="let item of section.visibleItems; trackBy: trackQueueItem"
         [class.selected]="isSelected(item)"
         [ngClass]="'tone-' + item.priority"
         (click)="selectOrder(item.order)"
       >
         <i aria-hidden="true"></i>
         <strong>{{ item.targetNumber }}</strong>
-        <span>{{ item.weaponOrFp }}</span>
+        <span>{{ item.route }}</span>
         <time>{{ item.time | date: 'HH:mm' }}</time>
         <em>{{ item.status }}</em>
       </button>
 
-      <p *ngIf="section.items.length === 0">Немає</p>
+      <button
+        type="button"
+        class="c2-more"
+        *ngIf="section.hiddenCount > 0 || expandedSections[section.key]"
+        (click)="toggleSection(section)"
+      >
+        {{ expandedSections[section.key] ? 'Згорнути' : 'Ще ' + section.hiddenCount }}
+      </button>
+
+      <p *ngIf="section.totalItems === 0">Немає</p>
     </section>
 
     <section class="c2-section c2-notifications" *ngIf="notifications.length > 0">
@@ -47,7 +66,7 @@
       <button
         type="button"
         class="c2-notification"
-        *ngFor="let item of notifications | slice: 0:4; trackBy: trackNotification"
+        *ngFor="let item of notifications | slice: 0:3; trackBy: trackNotification"
         [ngClass]="'tone-' + (item.severity === 'critical' ? 'critical' : item.severity === 'attention' ? 'action' : 'ready')"
         (click)="openNotification(item)"
       >
@@ -67,6 +86,17 @@
   </aside>
 
   <main class="c2-map-shell" aria-label="Карта">
+    <div class="c2-map-strip" aria-label="Лічильники C2">
+      <div
+        class="c2-counter"
+        *ngFor="let counter of mapCounters; trackBy: trackCounter"
+        [ngClass]="'tone-' + counter.tone"
+      >
+        <i aria-hidden="true"></i>
+        <span>{{ counter.label }}</span>
+        <strong>{{ counter.value }}</strong>
+      </div>
+    </div>
     <app-map-page></app-map-page>
   </main>
 
@@ -78,7 +108,7 @@
           <ng-container *ngIf="selectedOrder">ВГЗ {{ selectedOrder.orderNumber }}</ng-container>
           <ng-container *ngIf="!selectedOrder && selectedWeapon">{{ weaponName(selectedWeapon) }}</ng-container>
           <ng-container *ngIf="!selectedOrder && !selectedWeapon && selectedFirePosition">{{ selectedFirePosition.name }}</ng-container>
-          <ng-container *ngIf="!selected">Нічого не обрано</ng-container>
+          <ng-container *ngIf="!selected">Не обрано</ng-container>
         </h2>
       </div>
       <button type="button" class="c2-icon" (click)="closePanel()" title="Закрити панель" aria-label="Закрити панель">
@@ -87,41 +117,58 @@
     </header>
 
     <section class="c2-detail" *ngIf="selectedOrder as order">
-      <div class="c2-kv">
-        <span>Статус</span>
-        <strong>{{ statusLabel(order.status) }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>Ціль</span>
-        <strong>{{ order.targetMgrs || order.targetSettlement || '-' }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>ВП</span>
-        <button type="button" (click)="selectedFirePosition && selectFirePosition(selectedFirePosition)">
-          {{ firePositionName(selectedFirePosition) }}
-        </button>
-      </div>
-      <div class="c2-kv">
-        <span>СГ</span>
-        <button type="button" (click)="selectedWeapon && selectWeapon(selectedWeapon)">
-          {{ weaponName(selectedWeapon) }}
-        </button>
-      </div>
-      <div class="c2-kv">
-        <span>Комплект пострілу</span>
-        <strong>{{ selectedOrderShotKit(order) }}</strong>
-      </div>
+      <article class="c2-block">
+        <header>
+          <span>Статус</span>
+          <strong>{{ statusLabel(order.status) }}</strong>
+        </header>
+        <p>{{ currentExecutionState }}</p>
+      </article>
+
+      <article class="c2-block" *ngIf="order.targetMgrs || order.targetSettlement">
+        <header>
+          <span>Ціль</span>
+          <strong>{{ order.targetMgrs || order.targetSettlement }}</strong>
+        </header>
+      </article>
+
+      <article class="c2-block" *ngIf="selectedFirePosition">
+        <header>
+          <span>ВП</span>
+          <button type="button" (click)="selectedFirePosition && selectFirePosition(selectedFirePosition)">
+            {{ firePositionName(selectedFirePosition) }}
+          </button>
+        </header>
+        <p>{{ statusLabel(selectedFirePosition.readinessStatus) }}</p>
+      </article>
+
+      <article class="c2-block" *ngIf="selectedWeapon">
+        <header>
+          <span>СГ</span>
+          <button type="button" (click)="selectedWeapon && selectWeapon(selectedWeapon)">
+            {{ weaponName(selectedWeapon) }}
+          </button>
+        </header>
+        <p>{{ statusLabel(selectedWeapon.readinessStatus) }} · {{ statusLabel(selectedWeapon.deploymentStatus) }}</p>
+      </article>
+
+      <article class="c2-block" *ngIf="order.selectedShotConfiguration || order.selectedShell">
+        <header>
+          <span>Комплект пострілу</span>
+          <strong>{{ selectedOrderShotKit(order) }}</strong>
+        </header>
+      </article>
 
       <section class="c2-subpanel">
         <header>
           <h3>Журнал виконання</h3>
           <span>{{ executionRecords.length }}</span>
         </header>
-        <div class="c2-exec-row" *ngFor="let record of executionRecords">
+        <div class="c2-exec-row" *ngFor="let record of executionRecords | slice: 0:4">
           <strong>{{ purposeLabel(record.purpose) }}</strong>
           <span>{{ record.quantity }} · {{ statusLabel(record.status === 'draft' ? 'draft_execution' : record.status) }}</span>
         </div>
-        <p *ngIf="executionRecords.length === 0">Записів ще немає</p>
+        <p *ngIf="executionRecords.length === 0">Записів немає</p>
       </section>
 
       <footer class="c2-actions">
@@ -132,26 +179,31 @@
     </section>
 
     <section class="c2-detail" *ngIf="!selectedOrder && selectedWeapon as weapon">
-      <div class="c2-kv">
-        <span>Статус</span>
-        <strong>{{ statusLabel(weapon.readinessStatus) }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>Причина</span>
-        <strong>{{ weapon.notReadyReason ? reasonLabel(weapon.notReadyReason) : '-' }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>Розгортання</span>
-        <strong>{{ statusLabel(weapon.deploymentStatus) }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>ВП</span>
-        <strong>{{ weapon.currentFirePosition?.name || weapon.firePosition?.name || '-' }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>ТО/ремонт</span>
-        <strong>{{ weapon.maintenances?.[0]?.status ? statusLabel(weapon.maintenances?.[0]?.status) : '-' }}</strong>
-      </div>
+      <article class="c2-block">
+        <header>
+          <span>Готовність</span>
+          <strong>{{ statusLabel(weapon.readinessStatus) }}</strong>
+        </header>
+        <p *ngIf="weapon.notReadyReason">{{ reasonLabel(weapon.notReadyReason) }}</p>
+      </article>
+      <article class="c2-block">
+        <header>
+          <span>Розгортання</span>
+          <strong>{{ statusLabel(weapon.deploymentStatus) }}</strong>
+        </header>
+      </article>
+      <article class="c2-block" *ngIf="weapon.currentFirePosition?.name || weapon.firePosition?.name">
+        <header>
+          <span>ВП</span>
+          <strong>{{ weapon.currentFirePosition?.name || weapon.firePosition?.name }}</strong>
+        </header>
+      </article>
+      <article class="c2-block" *ngIf="weapon.maintenances?.[0]?.status">
+        <header>
+          <span>ТО/ремонт</span>
+          <strong>{{ statusLabel(weapon.maintenances?.[0]?.status) }}</strong>
+        </header>
+      </article>
       <footer class="c2-actions">
         <button type="button" class="primary" (click)="openEntity()">Відкрити</button>
         <button type="button" *ngIf="weapon.readinessStatus !== 'combat_ready'" (click)="confirmWeaponReady(weapon)">Підтвердити</button>
@@ -159,22 +211,25 @@
     </section>
 
     <section class="c2-detail" *ngIf="!selectedOrder && !selectedWeapon && selectedFirePosition as position">
-      <div class="c2-kv">
-        <span>Готовність ВП</span>
-        <strong>{{ statusLabel(position.readinessStatus) }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>Причина</span>
-        <strong>{{ position.notReadyReason ? reasonLabel(position.notReadyReason) : '-' }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>СГ</span>
-        <strong>{{ weaponName(position.assignedWeapon) }}</strong>
-      </div>
-      <div class="c2-kv">
-        <span>Боєготовність до вогню</span>
-        <strong [class.ready]="position.aggregateReady">{{ position.aggregateReady ? 'Готова' : 'Не готова' }}</strong>
-      </div>
+      <article class="c2-block">
+        <header>
+          <span>Готовність ВП</span>
+          <strong>{{ statusLabel(position.readinessStatus) }}</strong>
+        </header>
+        <p *ngIf="position.notReadyReason">{{ reasonLabel(position.notReadyReason) }}</p>
+      </article>
+      <article class="c2-block" *ngIf="position.assignedWeapon">
+        <header>
+          <span>СГ</span>
+          <strong>{{ weaponName(position.assignedWeapon) }}</strong>
+        </header>
+      </article>
+      <article class="c2-block">
+        <header>
+          <span>Готовність до вогню</span>
+          <strong [class.ready]="position.aggregateReady">{{ position.aggregateReady ? 'Готова' : 'Не готова' }}</strong>
+        </header>
+      </article>
       <footer class="c2-actions">
         <button type="button" class="primary" (click)="openEntity()">Відкрити</button>
         <button type="button" *ngIf="position.readinessStatus !== 'combat_ready'" (click)="confirmFpReady(position)">Підтвердити</button>
@@ -182,8 +237,8 @@
     </section>
 
     <section class="c2-empty" *ngIf="!selected">
-      <strong>Оберіть ціль, СГ або ВП</strong>
-      <span>Enter відкриває обрану картку, Esc закриває панель.</span>
+      <strong>Оберіть об'єкт</strong>
+      <span>Enter відкриває картку, Esc закриває панель.</span>
     </section>
   </aside>
 
@@ -193,10 +248,12 @@
         <span>Оперативна стрічка</span>
         <h2>{{ timeline.length }} подій</h2>
       </div>
-      <button type="button" (click)="toggleTimeline()">{{ timelineCollapsed ? 'Розгорнути' : 'Згорнути' }}</button>
+      <button type="button" (click)="toggleTimeline()">
+        {{ timelineCollapsed ? 'Розгорнути історію' : 'Згорнути' }}
+      </button>
     </header>
 
-    <div class="c2-timeline-list" *ngIf="!timelineCollapsed">
+    <div class="c2-timeline-list">
       <article
         class="c2-time-event"
         *ngFor="let item of timeline; trackBy: trackTimeline"

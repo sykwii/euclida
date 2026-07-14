@@ -37,7 +37,7 @@ function order(id: string, overrides: Partial<ServiceOrder> = {}): ServiceOrder 
     resultType: null,
     resultComment: null,
     createdAt: '2026-07-14T10:00:00.000Z',
-    updatedAt: '2026-07-14T10:01:00.000Z',
+    updatedAt: `2026-07-14T10:${String(Number(id) % 60).padStart(2, '0')}:00.000Z`,
     selectedFirePosition: null,
     selectedShell: null,
     selectedCharge: null,
@@ -115,50 +115,68 @@ function createPage(options: { orders?: ServiceOrder[] } = {}) {
 }
 
 describe('C2WorkspacePage', () => {
-  it('builds operational queue sections', () => {
+  it('hides completed and cancelled orders by default', () => {
     const { page } = createPage({
       orders: [
         order('1', { status: 'sent' }),
-        order('2', { status: 'accepted', selectedFirePositionId: 'fp-1' }),
-        order('3', { status: 'rejected' }),
+        order('2', { status: 'completed' }),
+        order('3', { status: 'cancelled' }),
       ],
     });
 
     page.ngOnInit();
 
-    expect(page.queueSections.find((section) => section.key === 'decision')?.items).toHaveLength(1);
-    expect(page.queueSections.find((section) => section.key === 'working')?.items).toHaveLength(1);
-    expect(page.queueSections.find((section) => section.key === 'problems')?.items).toHaveLength(1);
+    expect(page.completedOrdersCount).toBe(2);
+    expect(page.flatQueue.map((item) => item.order.id)).toEqual(['1']);
+    page.toggleCompletedOrders();
+    expect(page.flatQueue.some((item) => item.order.id === '2')).toBe(true);
     page.ngOnDestroy();
   });
 
-  it('updates timeline from meaningful mission events', () => {
+  it('limits sections to five rows and exposes hidden count', () => {
+    const { page } = createPage({
+      orders: Array.from({ length: 7 }, (_, index) => order(String(index + 1), { selectedFirePositionId: null })),
+    });
+
+    page.ngOnInit();
+
+    const decision = page.queueSections.find((section) => section.key === 'decision');
+    expect(decision?.visibleItems).toHaveLength(5);
+    expect(decision?.hiddenCount).toBe(2);
+    page.toggleSection(decision!);
+    expect(page.queueSections.find((section) => section.key === 'decision')?.visibleItems).toHaveLength(7);
+    page.ngOnDestroy();
+  });
+
+  it('sorts queue by severity and newest time', () => {
     const { page } = createPage({
       orders: [
-        order('1', {
-          status: 'completed',
-          startedAt: '2026-07-14T10:05:00.000Z',
-          completedAt: '2026-07-14T10:10:00.000Z',
-          actualQuantity: 3,
-        }),
+        order('1', { status: 'sent', updatedAt: '2026-07-14T10:01:00.000Z' }),
+        order('2', { status: 'rejected', updatedAt: '2026-07-14T10:02:00.000Z' }),
+        order('3', { status: 'cancelled', updatedAt: '2026-07-14T10:03:00.000Z' }),
       ],
     });
 
     page.ngOnInit();
+    page.toggleCompletedOrders();
 
-    expect(page.timeline.some((item) => item.type === 'fire_started')).toBe(true);
-    expect(page.timeline.some((item) => item.type === 'fire_completed')).toBe(true);
+    const problems = page.queueSections.find((section) => section.key === 'problems')?.visibleItems ?? [];
+    expect(problems.map((item) => item.order.id)).toEqual(['3', '2']);
     page.ngOnDestroy();
   });
 
-  it('synchronizes queue selection and execution journal load', () => {
-    const { page, executionRecords } = createPage({ orders: [order('1')] });
+  it('synchronizes queue selection without reloading map data', () => {
+    const { page, firePositions, weapons, executionRecords } = createPage({ orders: [order('1')] });
 
     page.ngOnInit();
+    firePositions.getAll.mockClear();
+    weapons.getAll.mockClear();
     page.selectOrder(page.orders[0]);
 
     expect(page.selectedOrder?.id).toBe('1');
     expect(executionRecords.list).toHaveBeenCalledWith('1');
+    expect(firePositions.getAll).not.toHaveBeenCalled();
+    expect(weapons.getAll).not.toHaveBeenCalled();
     page.ngOnDestroy();
   });
 
@@ -189,6 +207,27 @@ describe('C2WorkspacePage', () => {
 
     expect(notifications.markRead).toHaveBeenCalledWith('n1');
     expect(page.selectedOrder?.id).toBe('1');
+    page.ngOnDestroy();
+  });
+
+  it('keeps timeline collapsed by default and limits compact events to fifteen', () => {
+    const { page } = createPage({
+      orders: Array.from({ length: 20 }, (_, index) =>
+        order(String(index + 1), {
+          status: 'completed',
+          startedAt: `2026-07-14T10:${String(index).padStart(2, '0')}:00.000Z`,
+          completedAt: `2026-07-14T10:${String(index + 1).padStart(2, '0')}:00.000Z`,
+        }),
+      ),
+    });
+
+    page.ngOnInit();
+
+    expect(page.timelineCollapsed).toBe(true);
+    expect(page.timeline.length).toBeLessThanOrEqual(15);
+    page.toggleTimeline();
+    expect(page.timelineCollapsed).toBe(false);
+    expect(page.timeline.length).toBeGreaterThan(15);
     page.ngOnDestroy();
   });
 

@@ -25,7 +25,7 @@ import { ServiceOrdersService } from '../service-orders/service-orders.service';
 import { WeaponSystem } from '../weapon-systems/weapon-system.model';
 import { WeaponSystemsService } from '../weapon-systems/weapon-systems.service';
 
-type QueueSectionKey = 'new_target' | 'decision' | 'working' | 'problems';
+type QueueSectionKey = 'new_targets' | 'decision' | 'active' | 'problems';
 type SelectedEntityType = 'target' | 'weapon' | 'fire_position';
 type TimelineType =
   | 'target_received'
@@ -42,15 +42,18 @@ type Tone = 'critical' | 'action' | 'ready' | 'progress' | 'neutral';
 interface QueueSection {
   key: QueueSectionKey;
   title: string;
-  items: QueueItem[];
+  totalItems: number;
+  visibleItems: QueueItem[];
+  hiddenCount: number;
 }
 
 interface QueueItem {
   id: string;
   order: ServiceOrder;
   priority: Tone;
+  priorityRank: number;
   targetNumber: string;
-  weaponOrFp: string;
+  route: string;
   time: string;
   status: string;
   section: QueueSectionKey;
@@ -79,6 +82,7 @@ interface TimelineItem {
   styleUrl: './c2-workspace-page.css',
 })
 export class C2WorkspacePage implements OnInit, OnDestroy {
+  readonly sectionLimit = 5;
   orders: ServiceOrder[] = [];
   firePositions: FirePosition[] = [];
   weapons: WeaponSystem[] = [];
@@ -86,7 +90,14 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
   executionRecords: ExecutionRecord[] = [];
   selected: SelectedEntity | null = null;
   focusedQueueIndex = 0;
-  timelineCollapsed = false;
+  timelineCollapsed = true;
+  showCompletedOrders = false;
+  expandedSections: Record<QueueSectionKey, boolean> = {
+    new_targets: false,
+    decision: false,
+    active: false,
+    problems: false,
+  };
   isLoading = false;
   errorMessage = '';
 
@@ -187,24 +198,62 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
     }
   }
 
-  get queueSections(): QueueSection[] {
-    const sections: QueueSection[] = [
-      { key: 'new_target', title: 'Нова ціль', items: [] },
-      { key: 'decision', title: 'Потребує рішення', items: [] },
-      { key: 'working', title: 'В роботі', items: [] },
-      { key: 'problems', title: 'Проблеми', items: [] },
-    ];
+  get activeOrders(): ServiceOrder[] {
+    return this.showCompletedOrders
+      ? this.orders
+      : this.orders.filter((order) => !this.isFinished(order));
+  }
 
-    for (const order of this.orders) {
+  get completedOrdersCount(): number {
+    return this.orders.filter((order) => this.isFinished(order)).length;
+  }
+
+  get queueSections(): QueueSection[] {
+    const sectionItems: Record<QueueSectionKey, QueueItem[]> = {
+      new_targets: [],
+      decision: [],
+      active: [],
+      problems: [],
+    };
+
+    for (const order of this.activeOrders) {
       const item = this.toQueueItem(order);
-      sections.find((section) => section.key === item.section)?.items.push(item);
+      sectionItems[item.section].push(item);
     }
 
-    return sections;
+    const descriptors: Array<{ key: QueueSectionKey; title: string }> = [
+      { key: 'new_targets', title: 'Нові цілі' },
+      { key: 'decision', title: 'Потребують рішення' },
+      { key: 'active', title: 'Активні ВГЗ' },
+      { key: 'problems', title: 'Проблеми' },
+    ];
+
+    return descriptors.map(({ key, title }) => {
+      const sorted = this.sortQueue(sectionItems[key]);
+      const expanded = this.expandedSections[key];
+      const visibleItems = expanded ? sorted : sorted.slice(0, this.sectionLimit);
+
+      return {
+        key,
+        title,
+        totalItems: sorted.length,
+        visibleItems,
+        hiddenCount: Math.max(0, sorted.length - visibleItems.length),
+      };
+    });
   }
 
   get flatQueue(): QueueItem[] {
-    return this.queueSections.flatMap((section) => section.items);
+    return this.queueSections.flatMap((section) => section.visibleItems);
+  }
+
+  get mapCounters(): Array<{ label: string; value: number; tone: Tone }> {
+    return [
+      { label: 'Нові цілі', value: this.countSection('new_targets'), tone: 'neutral' },
+      { label: 'Потребують рішення', value: this.countSection('decision'), tone: 'action' },
+      { label: 'Активні ВГЗ', value: this.countSection('active'), tone: 'progress' },
+      { label: 'Критичні', value: this.countCritical(), tone: 'critical' },
+    ];
   }
 
   get selectedOrder(): ServiceOrder | null {
@@ -248,10 +297,26 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
       ...this.firePositions.flatMap((position) => this.firePositionTimeline(position)),
     ];
 
-    return items
-      .filter((item) => Boolean(item.at))
-      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-      .slice(0, 80);
+    return this.groupAdjacentTimelineEvents(
+      items
+        .filter((item) => Boolean(item.at))
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
+    ).slice(0, this.timelineCollapsed ? 15 : 80);
+  }
+
+  get currentExecutionState(): string {
+    if (this.executionRecords.length === 0) {
+      return 'Журнал порожній';
+    }
+
+    const posted = this.executionRecords.filter((record) => record.status === 'posted');
+    const drafts = this.executionRecords.filter((record) => record.status === 'draft');
+
+    if (drafts.length > 0) {
+      return `Чернетки: ${drafts.length}`;
+    }
+
+    return posted.length > 0 ? `Проведено: ${posted.length}` : 'Без проведених';
   }
 
   loadWorkspace(): void {
@@ -408,6 +473,19 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
     this.timelineCollapsed = !this.timelineCollapsed;
   }
 
+  toggleCompletedOrders(): void {
+    this.showCompletedOrders = !this.showCompletedOrders;
+    this.cdr.markForCheck();
+  }
+
+  toggleSection(section: QueueSection): void {
+    this.expandedSections = {
+      ...this.expandedSections,
+      [section.key]: !this.expandedSections[section.key],
+    };
+    this.cdr.markForCheck();
+  }
+
   trackQueueSection(_: number, section: QueueSection): string {
     return section.key;
   }
@@ -422,6 +500,10 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
 
   trackTimeline(_: number, item: TimelineItem): string {
     return item.id;
+  }
+
+  trackCounter(_: number, item: { label: string }): string {
+    return item.label;
   }
 
   isSelected(item: QueueItem): boolean {
@@ -450,6 +532,8 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
       posted: 'Проведено',
       reversed: 'Сторновано',
       cancelled_execution: 'Скасовано',
+      opened: 'Відкрито',
+      in_progress_maintenance: 'В роботі',
     };
 
     return labels[status ?? ''] ?? 'Невідомо';
@@ -500,18 +584,18 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
   toneForOrder(order: ServiceOrder): Tone {
     if (order.status === 'rejected' || order.status === 'cancelled') return 'critical';
     if (!order.selectedFirePositionId && order.status !== 'completed') return 'action';
-    if (order.status === 'in_progress') return 'progress';
+    if (order.status === 'in_progress' || order.status === 'accepted') return 'progress';
     if (order.status === 'completed') return 'ready';
     return 'neutral';
   }
 
   queueStatus(order: ServiceOrder): string {
     if (!order.selectedFirePositionId && order.status !== 'completed') {
-      return 'Потрібне рішення';
+      return 'Рішення';
     }
 
     if (order.status === 'in_progress') {
-      return 'Виконується';
+      return 'Викон.';
     }
 
     return this.statusLabel(order.status);
@@ -521,7 +605,7 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
     return weapon?.callsign || weapon?.serialNumber || 'СГ';
   }
 
-  firePositionName(position: FirePosition | null | undefined): string {
+  firePositionName(position: FirePosition | { name?: string | null } | null | undefined): string {
     return position?.name || 'ВП не призначена';
   }
 
@@ -579,15 +663,17 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
     const section = this.queueSection(order);
     const position = order.selectedFirePosition || this.firePositions.find((item) => item.id === order.selectedFirePositionId);
     const weapon = order.selectedFirePositionId ? this.weaponForFirePosition(order.selectedFirePositionId) : null;
+    const route = [this.weaponName(weapon), this.firePositionName(position as FirePosition | null)]
+      .filter((part) => part && part !== 'СГ')
+      .join(' · ') || 'Не призначено';
 
     return {
       id: order.id,
       order,
       priority: this.toneForOrder(order),
+      priorityRank: this.priorityRank(order),
       targetNumber: order.orderNumber,
-      weaponOrFp: [this.weaponName(weapon), this.firePositionName(position as FirePosition | null)]
-        .filter((part) => part && part !== 'СГ')
-        .join(' · ') || 'Не призначено',
+      route,
       time: order.updatedAt || order.createdAt,
       status: this.queueStatus(order),
       section,
@@ -597,9 +683,41 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
   private queueSection(order: ServiceOrder): QueueSectionKey {
     if (order.status === 'rejected' || order.status === 'cancelled') return 'problems';
     if (!order.selectedFirePositionId && order.status !== 'completed') return 'decision';
-    if (order.status === 'in_progress' || order.status === 'accepted') return 'working';
-    if (order.status === 'draft' || order.status === 'proposed' || order.status === 'sent') return 'new_target';
-    return 'working';
+    if (order.status === 'in_progress' || order.status === 'accepted') return 'active';
+    if (order.status === 'draft' || order.status === 'proposed' || order.status === 'sent' || order.status === 'sent_to_division' || order.status === 'sent_to_battery') {
+      return 'new_targets';
+    }
+    return 'active';
+  }
+
+  private sortQueue(items: QueueItem[]): QueueItem[] {
+    return [...items].sort((a, b) => {
+      const priorityDelta = a.priorityRank - b.priorityRank;
+      if (priorityDelta !== 0) return priorityDelta;
+      return new Date(b.time).getTime() - new Date(a.time).getTime();
+    });
+  }
+
+  private priorityRank(order: ServiceOrder): number {
+    if (order.status === 'rejected' || order.status === 'cancelled') return 0;
+    if (!order.selectedFirePositionId && order.status !== 'completed') return 1;
+    if (order.status === 'in_progress') return 2;
+    if (order.status === 'accepted') return 3;
+    if (order.status === 'completed') return 4;
+    return 5;
+  }
+
+  private countSection(section: QueueSectionKey): number {
+    return this.activeOrders.filter((order) => this.queueSection(order) === section).length;
+  }
+
+  private countCritical(): number {
+    return this.activeOrders.filter((order) => this.toneForOrder(order) === 'critical').length
+      + this.notifications.filter((item) => item.severity === 'critical').length;
+  }
+
+  private isFinished(order: ServiceOrder): boolean {
+    return order.status === 'completed' || order.status === 'cancelled';
   }
 
   private weaponForFirePosition(firePositionId: string): WeaponSystem | null {
@@ -723,6 +841,20 @@ export class C2WorkspacePage implements OnInit, OnDestroy {
       context: position.name,
       at: new Date().toISOString(),
     }];
+  }
+
+  private groupAdjacentTimelineEvents(items: TimelineItem[]): TimelineItem[] {
+    const grouped: TimelineItem[] = [];
+
+    for (const item of items) {
+      const last = grouped[grouped.length - 1];
+      if (last && last.type === item.type && last.context === item.context) {
+        continue;
+      }
+      grouped.push(item);
+    }
+
+    return grouped;
   }
 
   private moveQueueFocus(direction: number): void {
