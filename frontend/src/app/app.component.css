@@ -722,3 +722,135 @@
   border-color: transparent !important;
   background: transparent !important;
 }
+
+/* CORE UI Navigation SVG — minimal NATO/C2 visual language */
+.core2-svg-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.core2-nav-icon,
+.core2-toggle-icon,
+.core2-group-chevron,
+.core2-mobile-icon {
+  width: 17px;
+  height: 17px;
+  display: block;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.core2-logo-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.8;
+}
+
+.core2-nav-group-button > .core2-nav-icon,
+.core2-nav a > .core2-nav-icon {
+  justify-self: center;
+  color: #7f98a3;
+  opacity: 0.9;
+}
+
+.core2-nav-group-button:hover > .core2-nav-icon,
+.core2-nav a:hover > .core2-nav-icon,
+.core2-nav a.active > .core2-nav-icon {
+  color: var(--c2-accent);
+  opacity: 1;
+}
+
+.core2-nav-group-button {
+  letter-spacing: 0.01em;
+}
+
+.core2-nav-group-button b {
+  color: #a9bac2;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+}
+
+.core2-group-chevron {
+  width: 13px;
+  height: 13px;
+  color: #657b85;
+  transition: transform 120ms ease, color 120ms ease;
+}
+
+.core2-group-chevron.open {
+  transform: rotate(90deg);
+  color: var(--c2-accent);
+}
+
+.core2-toggle-icon {
+  width: 15px;
+  height: 15px;
+  margin: auto;
+  transition: transform 140ms ease;
+}
+
+.core2-toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.core2-nav-items {
+  margin-left: 11px;
+  padding-left: 8px;
+  border-left-color: rgba(128, 158, 169, 0.2);
+}
+
+.core2-nav a {
+  min-height: 34px !important;
+}
+
+.core2-nav a b {
+  font-weight: 760;
+  letter-spacing: 0.005em;
+}
+
+.core2-nav a.active {
+  border-color: rgba(13, 214, 198, 0.28) !important;
+  background: linear-gradient(90deg, rgba(13, 214, 198, 0.12), rgba(13, 214, 198, 0.035)) !important;
+  box-shadow: inset 2px 0 0 var(--c2-accent);
+}
+
+.core2-search-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--c2-accent);
+  justify-self: center;
+}
+
+.sidebar-collapsed .core2-nav-group-button > .core2-nav-icon {
+  width: 19px;
+  height: 19px;
+}
+
+.sidebar-collapsed .core2-group-chevron {
+  display: none;
+}
+
+.core2-mobile-nav a {
+  font-size: 0;
+}
+
+.core2-mobile-icon {
+  width: 19px;
+  height: 19px;
+  margin: 0 auto 3px;
+}
+
+.core2-mobile-nav a span {
+  font-size: 9px;
+}
+

@@ -1,9 +1,46 @@
-﻿<div class="core2-shell" [class.sidebar-collapsed]="sidebarCollapsed" *ngIf="!isLoginPage">
-  <aside class="core2-sidebar" aria-label="Р“РѕР»РѕРІРЅР° РЅР°РІС–РіР°С†С–СЏ">
+<div class="core2-shell" [class.sidebar-collapsed]="sidebarCollapsed" *ngIf="!isLoginPage">
+  <svg class="core2-svg-sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="c2i-logo" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h16"/><path d="M17 9l3 3-3 3"/></symbol>
+      <symbol id="c2i-chevron" viewBox="0 0 24 24"><path d="m9 7 5 5-5 5"/></symbol>
+      <symbol id="c2i-situation" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+      <symbol id="c2i-home" viewBox="0 0 24 24"><path d="m4 11 8-7 8 7"/><path d="M6 10v10h12V10M10 20v-6h4v6"/></symbol>
+      <symbol id="c2i-map" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></symbol>
+      <symbol id="c2i-recon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 5 5M11 7v8M7 11h8"/></symbol>
+      <symbol id="c2i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 20h4"/></symbol>
+      <symbol id="c2i-missions" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+      <symbol id="c2i-position" viewBox="0 0 24 24"><path d="M12 22s7-7 7-13A7 7 0 0 0 5 9c0 6 7 13 7 13z"/><circle cx="12" cy="9" r="2"/></symbol>
+      <symbol id="c2i-weapon" viewBox="0 0 24 24"><path d="M3 14h11l4-4 3 3-4 4H8"/><path d="M7 14v5M5 19h5M14 14l2 5"/></symbol>
+      <symbol id="c2i-threat" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19z"/><path d="M12 9v5M12 17h.01"/></symbol>
+      <symbol id="c2i-ew" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.5 5.5a9 9 0 0 0 0 13M18.5 5.5a9 9 0 0 1 0 13"/></symbol>
+      <symbol id="c2i-air" viewBox="0 0 24 24"><path d="m3 13 8-2V4l2-1 2 8 6 2v2l-6 1-2 5h-2v-5l-8-1z"/></symbol>
+      <symbol id="c2i-analytics" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+      <symbol id="c2i-logistics" viewBox="0 0 24 24"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></symbol>
+      <symbol id="c2i-depot" viewBox="0 0 24 24"><path d="M3 9 12 4l9 5v11H3z"/><path d="M7 20v-7h10v7M7 9h.01M12 9h.01M17 9h.01"/></symbol>
+      <symbol id="c2i-stock" viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4z"/><path d="m4 7v10l8 4 8-4V7M12 11v10"/></symbol>
+      <symbol id="c2i-transfer" viewBox="0 0 24 24"><path d="M4 7h14M15 4l3 3-3 3M20 17H6M9 14l-3 3 3 3"/></symbol>
+      <symbol id="c2i-drone" viewBox="0 0 24 24"><path d="M8 12h8M12 8v8M6 8l3 3M18 8l-3 3M6 16l3-3M18 16l-3-3"/><circle cx="5" cy="7" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/></symbol>
+      <symbol id="c2i-trip" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h3a3 3 0 0 0 3-3V9a3 3 0 0 1 3-3h-1"/></symbol>
+      <symbol id="c2i-reference" viewBox="0 0 24 24"><path d="M4 5h7v14H4zM13 5h7v14h-7z"/><path d="M7 9h1M7 13h1M16 9h1M16 13h1"/></symbol>
+      <symbol id="c2i-units" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+      <symbol id="c2i-shell" viewBox="0 0 24 24"><path d="M9 21h6V8l-3-5-3 5z"/><path d="M9 16h6"/></symbol>
+      <symbol id="c2i-charge" viewBox="0 0 24 24"><path d="M7 4h10v16H7z"/><path d="M7 9h10M7 15h10"/></symbol>
+      <symbol id="c2i-fuze" viewBox="0 0 24 24"><path d="M9 5h6l2 5v9H7v-9z"/><path d="M10 5V2h4v3M10 13h4"/></symbol>
+      <symbol id="c2i-primer" viewBox="0 0 24 24"><path d="M8 7h8v13H8z"/><path d="M10 7V3h4v4M8 15h8"/></symbol>
+      <symbol id="c2i-kit" viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M8 7V4h8v3M8 12h8M8 16h5"/></symbol>
+      <symbol id="c2i-model" viewBox="0 0 24 24"><path d="m12 3 8 4v10l-8 4-8-4V7z"/><path d="m4 7 8 4 8-4M12 11v10"/></symbol>
+      <symbol id="c2i-system" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+      <symbol id="c2i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20c0-4 2-7 6-7s6 3 6 7M15 14c3 0 5 2 5 5"/></symbol>
+      <symbol id="c2i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></symbol>
+      <symbol id="c2i-collapse" viewBox="0 0 24 24"><path d="m14 7-5 5 5 5"/></symbol>
+    </defs>
+  </svg>
+
+  <aside class="core2-sidebar" aria-label="Головна навігація">
     <header class="core2-brand">
-      <div class="core2-logo" aria-hidden="true">Р„</div>
+      <div class="core2-logo" aria-hidden="true"><svg class="core2-nav-icon core2-logo-icon" aria-hidden="true"><use href="#c2i-logo"></use></svg></div>
       <div class="core2-brand-text">
-        <strong>Р„РІРєР»С–РґР°</strong>
+        <strong>Євкліда</strong>
         <span>Core-2 - C2</span>
       </div>
       <button
@@ -12,9 +49,7 @@
         (click)="toggleSidebar()"
         [attr.aria-label]="sidebarStateLabel"
         [title]="sidebarStateLabel"
-      >
-        {{ sidebarCollapsed ? '>' : '<' }}
-      </button>
+      ><svg class="core2-toggle-icon" [class.expanded]="!sidebarCollapsed" aria-hidden="true"><use href="#c2i-collapse"></use></svg></button>
     </header>
 
     <nav class="core2-nav">
@@ -22,14 +57,14 @@
         <button
           type="button"
           class="core2-nav-group-button"
-          aria-label="РћРїРµСЂР°С‚РёРІРЅР° РѕР±СЃС‚Р°РЅРѕРІРєР°"
+          aria-label="Оперативна обстановка"
           (click)="toggleGroup('situation')"
           [attr.aria-expanded]="isGroupOpen('situation')"
-          title="РћРїРµСЂР°С‚РёРІРЅР° РѕР±СЃС‚Р°РЅРѕРІРєР°"
+          title="Оперативна обстановка"
         >
-          <span aria-hidden="true">вЊ‚</span>
-          <b>РћРїРµСЂР°С‚РёРІРЅР° РѕР±СЃС‚Р°РЅРѕРІРєР°</b>
-          <i aria-hidden="true">{{ isGroupOpen('situation') ? 'в€’' : '+' }}</i>
+          <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-situation"></use></svg>
+          <b>Оперативна обстановка</b>
+          <svg class="core2-group-chevron" [class.open]="isGroupOpen('situation')" aria-hidden="true"><use href="#c2i-chevron"></use></svg>
         </button>
 
         <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('situation')">
@@ -37,22 +72,22 @@
             routerLink="/home"
             routerLinkActive="active"
             [routerLinkActiveOptions]="{ exact: true }"
-            title="Р“РѕР»РѕРІРЅР°"
+            title="Головна"
           >
-            <span aria-hidden="true">вЊ‚</span>
-            <b>Р“РѕР»РѕРІРЅР°</b>
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-home"></use></svg>
+            <b>Головна</b>
           </a>
-          <a routerLink="/map" routerLinkActive="active" title="РљР°СЂС‚Р°">
-            <span aria-hidden="true">вЊ–</span>
-            <b>РљР°СЂС‚Р°</b>
+          <a routerLink="/map" routerLinkActive="active" title="Карта">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-map"></use></svg>
+            <b>Карта</b>
           </a>
-          <a routerLink="/recon" routerLinkActive="active" title="Р РѕР·РІС–РґРєР°">
-            <span aria-hidden="true">R</span>
-            <b>Р РѕР·РІС–РґРєР°</b>
+          <a routerLink="/recon" routerLinkActive="active" title="Розвідка">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-recon"></use></svg>
+            <b>Розвідка</b>
           </a>
-          <a routerLink="/notifications" routerLinkActive="active" title="Р¦РµРЅС‚СЂ РїРѕРІС–РґРѕРјР»РµРЅСЊ">
-            <span aria-hidden="true">в—‡</span>
-            <b>Р¦РµРЅС‚СЂ РїРѕРІС–РґРѕРјР»РµРЅСЊ</b>
+          <a routerLink="/notifications" routerLinkActive="active" title="Центр повідомлень">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-bell"></use></svg>
+            <b>Центр повідомлень</b>
           </a>
         </div>
       </section>
@@ -61,66 +96,66 @@
         <button
           type="button"
           class="core2-nav-group-button"
-          aria-label="Р’РѕРіРЅРµРІС– Р·Р°РІРґР°РЅРЅСЏ"
+          aria-label="Вогневі завдання"
           (click)="toggleGroup('missions')"
           [attr.aria-expanded]="isGroupOpen('missions')"
-          title="Р’РѕРіРЅРµРІС– Р·Р°РІРґР°РЅРЅСЏ"
+          title="Вогневі завдання"
         >
-          <span aria-hidden="true">в—†</span>
-          <b>Р’РѕРіРЅРµРІС– Р·Р°РІРґР°РЅРЅСЏ</b>
-          <i aria-hidden="true">{{ isGroupOpen('missions') ? 'в€’' : '+' }}</i>
+          <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-missions"></use></svg>
+          <b>Вогневі завдання</b>
+          <svg class="core2-group-chevron" [class.open]="isGroupOpen('missions')" aria-hidden="true"><use href="#c2i-chevron"></use></svg>
         </button>
 
         <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('missions')">
           <a
             routerLink="/service-orders"
             routerLinkActive="active"
-            title="Р’Р“Р—"
+            title="ВГЗ"
             *ngIf="!isEwOperator"
           >
-            <span aria-hidden="true">в—†</span>
-            <b>Р’Р“Р—</b>
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-missions"></use></svg>
+            <b>ВГЗ</b>
             <em *ngIf="actionOrdersCount > 0">{{ actionOrdersCount }}</em>
           </a>
           <a
             routerLink="/fire-positions"
             routerLinkActive="active"
-            title="Р’РѕРіРЅРµРІС– РїРѕР·РёС†С–С—"
+            title="Вогневі позиції"
             *ngIf="!isEwOperator"
           >
-            <span aria-hidden="true">в—†</span>
-            <b>Р’РѕРіРЅРµРІС– РїРѕР·РёС†С–С—</b>
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-position"></use></svg>
+            <b>Вогневі позиції</b>
           </a>
           <a
             routerLink="/weapon-systems"
             routerLinkActive="active"
-            title="РћР·Р±СЂРѕС”РЅРЅСЏ"
+            title="Озброєння"
             *ngIf="!isEwOperator"
           >
-            <span aria-hidden="true">в—†</span>
-            <b>РћР·Р±СЂРѕС”РЅРЅСЏ</b>
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-weapon"></use></svg>
+            <b>Озброєння</b>
           </a>
-          <a routerLink="/air-threats" routerLinkActive="active" title="РџРѕРІС–С‚СЂСЏРЅС– Р·Р°РіСЂРѕР·Рё">
-            <span aria-hidden="true">в—†</span>
-            <b>Р—Р°РіСЂРѕР·Рё</b>
+          <a routerLink="/air-threats" routerLinkActive="active" title="Повітряні загрози">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-threat"></use></svg>
+            <b>Загрози</b>
             <em class="critical" *ngIf="activeThreatsCount > 0">{{ activeThreatsCount }}</em>
           </a>
-          <a routerLink="/ew" routerLinkActive="active" title="Р Р•Р‘">
-            <span aria-hidden="true">в—†</span>
-            <b>Р Р•Р‘</b>
+          <a routerLink="/ew" routerLinkActive="active" title="РЕБ">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-ew"></use></svg>
+            <b>РЕБ</b>
           </a>
-          <a routerLink="/air-assets" routerLinkActive="active" title="РџРѕРІС–С‚СЂСЏРЅС– Р·Р°СЃРѕР±Рё">
-            <span aria-hidden="true">в—†</span>
-            <b>РџРѕРІС–С‚СЂСЏРЅС– Р·Р°СЃРѕР±Рё</b>
+          <a routerLink="/air-assets" routerLinkActive="active" title="Повітряні засоби">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-air"></use></svg>
+            <b>Повітряні засоби</b>
           </a>
           <a
             routerLink="/analytics"
             routerLinkActive="active"
-            title="РђРЅР°Р»С–С‚РёРєР°"
+            title="Аналітика"
             *ngIf="!isEwOperator"
           >
-            <span aria-hidden="true">в—†</span>
-            <b>РђРЅР°Р»С–С‚РёРєР°</b>
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-analytics"></use></svg>
+            <b>Аналітика</b>
           </a>
         </div>
       </section>
@@ -129,36 +164,36 @@
         <button
           type="button"
           class="core2-nav-group-button"
-          aria-label="Р›РѕРіС–СЃС‚РёРєР°"
+          aria-label="Логістика"
           (click)="toggleGroup('logistics')"
           [attr.aria-expanded]="isGroupOpen('logistics')"
-          title="Р›РѕРіС–СЃС‚РёРєР°"
+          title="Логістика"
         >
-          <span aria-hidden="true">в–Ј</span>
-          <b>Р›РѕРіС–СЃС‚РёРєР°</b>
-          <i aria-hidden="true">{{ isGroupOpen('logistics') ? 'в€’' : '+' }}</i>
+          <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-logistics"></use></svg>
+          <b>Логістика</b>
+          <svg class="core2-group-chevron" [class.open]="isGroupOpen('logistics')" aria-hidden="true"><use href="#c2i-chevron"></use></svg>
         </button>
 
         <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('logistics')">
-          <a routerLink="/depots" routerLinkActive="active" title="РЎРєР»Р°РґРё">
-            <span aria-hidden="true">в–Ј</span>
-            <b>РЎРєР»Р°РґРё</b>
+          <a routerLink="/depots" routerLinkActive="active" title="Склади">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-depot"></use></svg>
+            <b>Склади</b>
           </a>
-          <a routerLink="/stock" routerLinkActive="active" title="Р—Р°Р»РёС€РєРё Р‘Рљ">
-            <span aria-hidden="true">в–Ј</span>
-            <b>Р—Р°Р»РёС€РєРё Р‘Рљ</b>
+          <a routerLink="/stock" routerLinkActive="active" title="Залишки БК">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-stock"></use></svg>
+            <b>Залишки БК</b>
           </a>
-          <a routerLink="/stock-movements" routerLinkActive="active" title="РџРµСЂРµРґР°С‡Р° Р‘Рљ">
-            <span aria-hidden="true">в–Ј</span>
-            <b>РџРµСЂРµРґР°С‡Р° Р‘Рљ</b>
+          <a routerLink="/stock-movements" routerLinkActive="active" title="Передача БК">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-transfer"></use></svg>
+            <b>Передача БК</b>
           </a>
-          <a routerLink="/drone-logistics" routerLinkActive="active" title="РЎРєР»Р°РґРё Р‘РїР›Рђ">
-            <span aria-hidden="true">AIR</span>
-            <b>РЎРєР»Р°РґРё Р‘РїР›Рђ</b>
+          <a routerLink="/drone-logistics" routerLinkActive="active" title="Склади БпЛА">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-drone"></use></svg>
+            <b>Склади БпЛА</b>
           </a>
-          <a routerLink="/planned-trips" routerLinkActive="active" title="РџР»Р°РЅРѕРІС– РїРѕС—Р·РґРєРё">
-            <span aria-hidden="true">вЊЃ</span>
-            <b>РџР»Р°РЅРѕРІС– РїРѕС—Р·РґРєРё</b>
+          <a routerLink="/planned-trips" routerLinkActive="active" title="Планові поїздки">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-trip"></use></svg>
+            <b>Планові поїздки</b>
           </a>
         </div>
       </section>
@@ -167,44 +202,44 @@
         <button
           type="button"
           class="core2-nav-group-button"
-          aria-label="Р”РѕРІС–РґРЅРёРєРё"
+          aria-label="Довідники"
           (click)="toggleGroup('reference')"
           [attr.aria-expanded]="isGroupOpen('reference')"
-          title="Р”РѕРІС–РґРЅРёРєРё"
+          title="Довідники"
         >
-          <span aria-hidden="true">в–Ў</span>
-          <b>Р”РѕРІС–РґРЅРёРєРё</b>
-          <i aria-hidden="true">{{ isGroupOpen('reference') ? 'в€’' : '+' }}</i>
+          <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-reference"></use></svg>
+          <b>Довідники</b>
+          <svg class="core2-group-chevron" [class.open]="isGroupOpen('reference')" aria-hidden="true"><use href="#c2i-chevron"></use></svg>
         </button>
 
         <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('reference')">
-          <a routerLink="/units" routerLinkActive="active" title="РџС–РґСЂРѕР·РґС–Р»Рё">
-            <span aria-hidden="true">в–Ў</span>
-            <b>РџС–РґСЂРѕР·РґС–Р»Рё</b>
+          <a routerLink="/units" routerLinkActive="active" title="Підрозділи">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-units"></use></svg>
+            <b>Підрозділи</b>
           </a>
-          <a routerLink="/shells" routerLinkActive="active" title="РЎРЅР°СЂСЏРґРё">
-            <span aria-hidden="true">в–Ў</span>
-            <b>РЎРЅР°СЂСЏРґРё</b>
+          <a routerLink="/shells" routerLinkActive="active" title="Снаряди">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-shell"></use></svg>
+            <b>Снаряди</b>
           </a>
-          <a routerLink="/charges" routerLinkActive="active" title="Р—Р°СЂСЏРґРё">
-            <span aria-hidden="true">в–Ў</span>
-            <b>Р—Р°СЂСЏРґРё</b>
+          <a routerLink="/charges" routerLinkActive="active" title="Заряди">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-charge"></use></svg>
+            <b>Заряди</b>
           </a>
-          <a routerLink="/fuzes" routerLinkActive="active" title="РџС–РґСЂРёРІРЅРёРєРё">
-            <span aria-hidden="true">в–Ў</span>
-            <b>РџС–РґСЂРёРІРЅРёРєРё</b>
+          <a routerLink="/fuzes" routerLinkActive="active" title="Підривники">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-fuze"></use></svg>
+            <b>Підривники</b>
           </a>
-          <a routerLink="/primers" routerLinkActive="active" title="РџСЂР°Р№РјРµСЂРё">
-            <span aria-hidden="true">в–Ў</span>
-            <b>РџСЂР°Р№РјРµСЂРё</b>
+          <a routerLink="/primers" routerLinkActive="active" title="Праймери">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-primer"></use></svg>
+            <b>Праймери</b>
           </a>
-          <a routerLink="/shot-configurations" routerLinkActive="active" title="РљРѕРјРїРѕРЅРѕРІРєРё РїРѕСЃС‚СЂС–Р»Сѓ">
-            <span aria-hidden="true">в–Ў</span>
-            <b>РљРѕРјРїРѕРЅРѕРІРєРё РїРѕСЃС‚СЂС–Р»Сѓ</b>
+          <a routerLink="/shot-configurations" routerLinkActive="active" title="Комплекти пострілу">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-kit"></use></svg>
+            <b>Комплекти пострілу</b>
           </a>
-          <a routerLink="/weapon-models" routerLinkActive="active" title="РўРёРїРё РѕР·Р±СЂРѕС”РЅРЅСЏ">
-            <span aria-hidden="true">в–Ў</span>
-            <b>РўРёРїРё РѕР·Р±СЂРѕС”РЅРЅСЏ</b>
+          <a routerLink="/weapon-models" routerLinkActive="active" title="Типи озброєння">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-model"></use></svg>
+            <b>Типи озброєння</b>
           </a>
         </div>
       </section>
@@ -213,14 +248,14 @@
         <button
           type="button"
           class="core2-nav-group-button"
-          aria-label="РЎРёСЃС‚РµРјР°"
+          aria-label="Система"
           (click)="toggleGroup('system')"
           [attr.aria-expanded]="isGroupOpen('system')"
-          title="РЎРёСЃС‚РµРјР°"
+          title="Система"
         >
-          <span aria-hidden="true">вљ™</span>
-          <b>РЎРёСЃС‚РµРјР°</b>
-          <i aria-hidden="true">{{ isGroupOpen('system') ? 'в€’' : '+' }}</i>
+          <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-system"></use></svg>
+          <b>Система</b>
+          <svg class="core2-group-chevron" [class.open]="isGroupOpen('system')" aria-hidden="true"><use href="#c2i-chevron"></use></svg>
         </button>
 
         <div class="core2-nav-items" *ngIf="!sidebarCollapsed && isGroupOpen('system')">
@@ -228,14 +263,14 @@
             *ngIf="canManageData || isAdmin"
             routerLink="/settings"
             routerLinkActive="active"
-            title="РќР°Р»Р°С€С‚СѓРІР°РЅРЅСЏ"
+            title="Налаштування"
           >
-            <span aria-hidden="true">вљ™</span>
-            <b>РќР°Р»Р°С€С‚СѓРІР°РЅРЅСЏ</b>
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-system"></use></svg>
+            <b>Налаштування</b>
           </a>
-          <a *ngIf="isAdmin" routerLink="/users" routerLinkActive="active" title="РљРѕСЂРёСЃС‚СѓРІР°С‡С–">
-            <span aria-hidden="true">вљ™</span>
-            <b>РљРѕСЂРёСЃС‚СѓРІР°С‡С–</b>
+          <a *ngIf="isAdmin" routerLink="/users" routerLinkActive="active" title="Користувачі">
+            <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-users"></use></svg>
+            <b>Користувачі</b>
           </a>
         </div>
       </section>
@@ -243,7 +278,7 @@
 
     <footer class="core2-user">
       <div class="core2-user-id">
-        <strong>{{ currentUser?.fullName || currentUser?.login || 'РћРїРµСЂР°С‚РѕСЂ' }}</strong>
+        <strong>{{ currentUser?.fullName || currentUser?.login || 'Оператор' }}</strong>
         <span>{{ currentUser?.scope || 'main' }} - {{ currentUser?.role || 'operator' }}</span>
       </div>
 
@@ -258,11 +293,11 @@
       <button
         type="button"
         class="core2-logout"
-        aria-label="Р’РёР№С‚Рё"
+        aria-label="Вийти"
         (click)="logout()"
-        title="Р’РёР№С‚Рё"
+        title="Вийти"
       >
-        Р’РёР№С‚Рё
+        Вийти
       </button>
     </footer>
   </aside>
@@ -271,24 +306,22 @@
     <router-outlet></router-outlet>
   </main>
 
-  <nav class="core2-mobile-nav" aria-label="РњРѕР±С–Р»СЊРЅР° РЅР°РІС–РіР°С†С–СЏ">
-    <a routerLink="/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
-      >вЊ‚<span>Р“РѕР»РѕРІРЅР°</span></a
-    >
-    <a routerLink="/map" routerLinkActive="active">вЊ–<span>РљР°СЂС‚Р°</span></a>
-    <a routerLink="/recon" routerLinkActive="active">R<span>Р РѕР·РІС–РґРєР°</span></a>
-    <a routerLink="/service-orders" routerLinkActive="active">в—†<span>Р’Р“Р—</span></a>
-    <a routerLink="/analytics" routerLinkActive="active">в—‡<span>РђРЅР°Р»С–С‚РёРєР°</span></a>
-    <a *ngIf="canManageData" routerLink="/stock" routerLinkActive="active">в–Ј<span>Р‘Рљ</span></a>
+  <nav class="core2-mobile-nav" aria-label="Мобільна навігація">
+    <a routerLink="/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg class="core2-nav-icon core2-mobile-icon" aria-hidden="true"><use href="#c2i-home"></use></svg><span>Головна</span></a>
+    <a routerLink="/map" routerLinkActive="active"><svg class="core2-nav-icon core2-mobile-icon" aria-hidden="true"><use href="#c2i-map"></use></svg><span>Карта</span></a>
+    <a routerLink="/recon" routerLinkActive="active"><svg class="core2-nav-icon core2-mobile-icon" aria-hidden="true"><use href="#c2i-recon"></use></svg><span>Розвідка</span></a>
+    <a routerLink="/service-orders" routerLinkActive="active"><svg class="core2-nav-icon core2-mobile-icon" aria-hidden="true"><use href="#c2i-missions"></use></svg><span>ВГЗ</span></a>
+    <a routerLink="/analytics" routerLinkActive="active"><svg class="core2-nav-icon core2-mobile-icon" aria-hidden="true"><use href="#c2i-analytics"></use></svg><span>Аналітика</span></a>
+    <a *ngIf="canManageData" routerLink="/stock" routerLinkActive="active"><svg class="core2-nav-icon core2-mobile-icon" aria-hidden="true"><use href="#c2i-stock"></use></svg><span>БК</span></a>
   </nav>
 
   <button
     type="button"
     class="core2-command-button"
     (click)="openCommandBar()"
-    title="РЁРІРёРґРєРёР№ РїРµСЂРµС…С–Рґ"
+    title="Швидкий перехід"
   >
-    Ctrl K - РїРѕС€СѓРє
+    Ctrl K - пошук
   </button>
 
   <section class="core2-command-backdrop" *ngIf="commandOpen" (click)="closeCommandBar()">
@@ -296,29 +329,29 @@
       class="core2-command"
       (click)="$event.stopPropagation()"
       role="dialog"
-      aria-label="РЁРІРёРґРєРёР№ РїРµСЂРµС…С–Рґ"
+      aria-label="Швидкий перехід"
     >
       <header>
         <div>
-          <strong>РЁРІРёРґРєРёР№ РїРµСЂРµС…С–Рґ</strong>
-          <span>РЎС‚РѕСЂС–РЅРєРё, Р’Рџ, Р’Р“Р—, РЎР“, СЃРєР»Р°РґРё</span>
+          <strong>Швидкий перехід</strong>
+          <span>Сторінки, ВП, ВГЗ, СГ, склади</span>
         </div>
-        <button type="button" (click)="closeCommandBar()" aria-label="Р—Р°РєСЂРёС‚Рё">Г—</button>
+        <button type="button" (click)="closeCommandBar()" aria-label="Закрити">X</button>
       </header>
 
       <label>
-        <span aria-hidden="true">вЊ•</span>
+        <svg class="core2-nav-icon core2-search-icon" aria-hidden="true"><use href="#c2i-search"></use></svg>
         <input
           type="text"
           name="commandQuery"
           [(ngModel)]="commandQuery"
           (ngModelChange)="onCommandQueryChange()"
-          placeholder="Р’Рџ, MGRS, РЅРѕРјРµСЂ Р’Р“Р—, РїРѕР·РёРІРЅРёР№, СЃРєР»Р°Рґ..."
+          placeholder="ВП, MGRS, номер ВГЗ, позивний, склад..."
           autocomplete="off"
         />
       </label>
 
-      <div class="core2-command-state" *ngIf="commandLoading">Р—Р°РІР°РЅС‚Р°Р¶РµРЅРЅСЏ...</div>
+      <div class="core2-command-state" *ngIf="commandLoading">Завантаження...</div>
 
       <button
         type="button"
@@ -337,7 +370,7 @@
       </button>
 
       <div class="core2-command-state" *ngIf="!commandLoading && filteredCommandItems.length === 0">
-        РќС–С‡РѕРіРѕ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.
+        Нічого не знайдено.
       </div>
     </div>
   </section>
@@ -347,4 +380,5 @@
 </div>
 
 <router-outlet *ngIf="isLoginPage"></router-outlet>
+
 
