@@ -4,6 +4,7 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
   ValueTransformer,
@@ -16,6 +17,7 @@ import { FirePosition } from '../fire-positions/fire-position.entity';
 import { Shell } from '../shells/shell.entity';
 import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { Zone } from '../zones/zone.entity';
+import { ServiceOrderDelivery } from './service-order-delivery.entity';
 
 const integerNumericTransformer: ValueTransformer = {
   to: (value: number | null) => value,
@@ -265,4 +267,7 @@ linkedAirTaskId!: string | null;
 
   @Column({ name: 'recon_link_checked_at', type: 'timestamptz', nullable: true })
   reconLinkCheckedAt!: Date | null;
+
+  @OneToMany(() => ServiceOrderDelivery, (delivery) => delivery.serviceOrder)
+  deliveries!: ServiceOrderDelivery[];
 }

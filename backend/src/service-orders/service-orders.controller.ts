@@ -16,6 +16,7 @@ import { CancelServiceOrderDto } from './dto/cancel-service-order.dto';
 import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { RejectServiceOrderDto } from './dto/reject-service-order.dto';
+import { RespondServiceOrderDeliveryDto } from './dto/respond-service-order-delivery.dto';
 import { SendServiceOrderDto } from './dto/send-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
 import { ServiceOrder } from './service-order.entity';
@@ -43,12 +44,49 @@ export class ServiceOrdersController {
     return this.service.findMapResults(user);
   }
 
+  @Get('deliveries')
+  findDeliveries(@CurrentUser() user: AuthUser) {
+    return this.service.findDeliveries(user);
+  }
+
+  @Get('deliveries/unread-count')
+  countUnreadDeliveries(@CurrentUser() user: AuthUser) {
+    return this.service.countUnreadDeliveries(user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post('deliveries/:deliveryId/view')
+  markDeliveryViewed(
+    @CurrentUser() user: AuthUser,
+    @Param('deliveryId') deliveryId: string,
+  ) {
+    return this.service.markDeliveryViewed(deliveryId, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post('deliveries/:deliveryId/respond')
+  respondDelivery(
+    @CurrentUser() user: AuthUser,
+    @Param('deliveryId') deliveryId: string,
+    @Body() body: RespondServiceOrderDeliveryDto,
+  ) {
+    return this.service.respondDelivery(deliveryId, body, user);
+  }
+
   @Get(':id')
   findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ): Promise<ServiceOrder> {
     return this.service.findOne(id, user);
+  }
+
+  @Get(':id/deliveries')
+  findOrderDeliveries(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.service.findOrderDeliveries(id, user);
   }
 
   @UseGuards(WriteAccessGuard)

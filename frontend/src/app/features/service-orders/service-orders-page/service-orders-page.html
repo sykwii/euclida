@@ -166,6 +166,135 @@
       <span *ngIf="errorMessage && !loading">{{ errorMessage }}</span>
     </div>
 
+    <section class="co-inbox" aria-label="Вхідні цілі">
+      <header class="co-inbox-header">
+        <div>
+          <h2>Вхідні цілі</h2>
+          <p>Доставки ВГЗ для вашого рівня управління</p>
+        </div>
+        <span class="co-inbox-badge" [class.has-items]="unreadDeliveryCount > 0">
+          Нові: {{ unreadDeliveryCount }}
+        </span>
+      </header>
+
+      <div class="co-inbox-empty" *ngIf="deliveriesLoading">Завантаження доставок...</div>
+      <div class="co-inbox-empty" *ngIf="!deliveriesLoading && deliveries.length === 0">
+        Вхідних цілей немає
+      </div>
+
+      <div class="co-inbox-sections" *ngIf="!deliveriesLoading && deliveries.length > 0">
+        <section class="co-inbox-section" *ngFor="let section of ['new', 'viewed', 'processed']">
+          <h3>
+            {{
+              section === 'new'
+                ? 'Нові'
+                : section === 'viewed'
+                  ? 'Переглянуті'
+                  : 'Опрацьовані'
+            }}
+            <b>{{ getDeliverySection(section === 'new' ? 'new' : section === 'viewed' ? 'viewed' : 'processed').length }}</b>
+          </h3>
+
+          <article
+            class="co-delivery-card"
+            [class.is-open]="selectedDeliveryId === delivery.id"
+            [class.is-new]="delivery.status === 'new'"
+            [class.is-rejected]="delivery.status === 'rejected'"
+            *ngFor="let delivery of getDeliverySection(section === 'new' ? 'new' : section === 'viewed' ? 'viewed' : 'processed')"
+          >
+            <button type="button" class="co-delivery-summary" (click)="openDelivery(delivery)">
+              <span>
+                <b>{{ delivery.serviceOrder.orderNumber }}</b>
+                <small>{{ getDeliveryLevelLabel(delivery.recipientLevel) }} · {{ delivery.recipientUnit?.name || 'Підрозділ' }}</small>
+              </span>
+              <span>{{ delivery.serviceOrder.targetSettlement || delivery.serviceOrder.targetMgrs || 'Ціль' }}</span>
+              <span class="co-status" [class]="delivery.status">
+                {{ getDeliveryStatusLabel(delivery.status) }}
+              </span>
+            </button>
+
+            <div class="co-delivery-body" *ngIf="selectedDeliveryId === delivery.id">
+              <dl>
+                <div>
+                  <dt>Координати</dt>
+                  <dd>{{ delivery.serviceOrder.targetMgrs || (delivery.serviceOrder.targetLat + ', ' + delivery.serviceOrder.targetLng) }}</dd>
+                </div>
+                <div>
+                  <dt>ВП</dt>
+                  <dd>{{ delivery.serviceOrder.selectedFirePosition?.name || 'Не визначено' }}</dd>
+                </div>
+                <div>
+                  <dt>Підрозділ</dt>
+                  <dd>{{ delivery.serviceOrder.selectedFirePosition?.unit?.name || 'Підрозділ' }}</dd>
+                </div>
+              </dl>
+
+              <div class="co-delivery-form" *ngIf="delivery.status === 'new' || delivery.status === 'viewed'">
+                <label>
+                  <span>Орієнтовна готовність</span>
+                  <input type="datetime-local" [(ngModel)]="ensureDeliveryForm(delivery).estimatedReadyAt" />
+                </label>
+
+                <label *ngIf="delivery.recipientLevel === 'battery'">
+                  <span>Фактична ВП</span>
+                  <select [(ngModel)]="ensureDeliveryForm(delivery).selectedFirePositionId">
+                    <option value="">Поточна ВП</option>
+                    <option *ngFor="let fp of getAllowedFirePositions(delivery)" [value]="fp.id">
+                      {{ fp.name }} · {{ fp.readinessStatus }}{{ fp.notReadyReason ? ' / ' + fp.notReadyReason : '' }}
+                    </option>
+                  </select>
+                </label>
+
+                <label *ngIf="delivery.recipientLevel === 'battery'">
+                  <span>Гармата</span>
+                  <select [(ngModel)]="ensureDeliveryForm(delivery).selectedWeaponSystemId">
+                    <option value="">Не обрано</option>
+                    <option *ngFor="let weapon of getAllowedWeapons(delivery)" [value]="weapon.id">
+                      {{ weapon.callsign || weapon.serialNumber || weapon.id }} · {{ weapon.readinessStatus }} · {{ weapon.deploymentStatus }}
+                    </option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Коментар</span>
+                  <textarea rows="2" [(ngModel)]="ensureDeliveryForm(delivery).comment"></textarea>
+                </label>
+
+                <label>
+                  <span>Причина відхилення</span>
+                  <textarea rows="2" [(ngModel)]="ensureDeliveryForm(delivery).rejectionReason"></textarea>
+                </label>
+
+                <div class="co-delivery-actions">
+                  <button
+                    type="button"
+                    class="co-btn primary compact"
+                    [disabled]="ensureDeliveryForm(delivery).submitting"
+                    (click)="respondToDelivery(delivery, 'accepted')"
+                  >
+                    Прийняти
+                  </button>
+                  <button
+                    type="button"
+                    class="co-btn compact danger"
+                    [disabled]="ensureDeliveryForm(delivery).submitting"
+                    (click)="respondToDelivery(delivery, 'rejected')"
+                  >
+                    Відхилити
+                  </button>
+                </div>
+              </div>
+
+              <p class="co-delivery-result" *ngIf="delivery.status === 'accepted' || delivery.status === 'rejected'">
+                Опрацьовано: {{ delivery.respondedAt ? formatKyivDateTime(delivery.respondedAt) : 'час не вказано' }}
+                <span *ngIf="delivery.rejectionReason"> · {{ delivery.rejectionReason }}</span>
+              </p>
+            </div>
+          </article>
+        </section>
+      </div>
+    </section>
+
     <section class="co-loading" *ngIf="loading && items.length === 0" aria-label="Завантаження ВГЗ">
       <div *ngFor="let item of pageSkeleton"></div>
     </section>

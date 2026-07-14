@@ -26,8 +26,14 @@ import { Fuze } from '../fuzes/fuze.entity';
 import { Primer } from '../primers/primer.entity';
 import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
+import { RespondServiceOrderDeliveryDto } from './dto/respond-service-order-delivery.dto';
 import { SendServiceOrderDto } from './dto/send-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
+import {
+  ServiceOrderDelivery,
+  ServiceOrderDeliveryLevel,
+  ServiceOrderDeliveryStatus,
+} from './service-order-delivery.entity';
 import { ServiceOrder } from './service-order.entity';
 import { ServiceOrderActualAmmo } from './service-order-actual-ammo.entity';
 import { ServiceOrderActualShotConfigurationCharge } from './service-order-actual-shot-configuration-charge.entity';
@@ -37,6 +43,7 @@ import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { ShellCompatibleCharge } from '../shell-compatible-charges/shell-compatible-charge.entity';
 import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { StockMovement } from '../stock-movements/stock-movement.entity';
+import { Unit } from '../units/unit.entity';
 import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
 
 export interface ServiceOrderMapResult {
@@ -81,6 +88,12 @@ interface ResolvedShotConfiguration {
   zoneNumber: number | null;
   maxRangeM: number;
   charges: ResolvedShotConfigurationComponent[];
+}
+
+interface ServiceOrderDeliveryRecipient {
+  recipientUnitId: string;
+  recipientLevel: ServiceOrderDeliveryLevel;
+  selectedFirePositionId: string | null;
 }
 
 @Injectable()
@@ -207,6 +220,202 @@ export class ServiceOrdersService {
     }
 
     return item;
+  }
+
+  async findDeliveries(user: AuthUser): Promise<ServiceOrderDelivery[]> {
+    const query = this.dataSource
+      .getRepository(ServiceOrderDelivery)
+      .createQueryBuilder('delivery')
+      .leftJoinAndSelect('delivery.serviceOrder', 'serviceOrder')
+      .leftJoinAndSelect('serviceOrder.selectedFirePosition', 'selectedFirePosition')
+      .leftJoinAndSelect('selectedFirePosition.unit', 'firePositionUnit')
+      .leftJoinAndSelect('serviceOrder.selectedShotConfiguration', 'selectedShotConfiguration')
+      .leftJoinAndSelect('selectedShotConfiguration.shell', 'selectedShotShell')
+      .leftJoinAndSelect('selectedShotConfiguration.fuze', 'selectedShotFuze')
+      .leftJoinAndSelect('selectedShotConfiguration.primer', 'selectedShotPrimer')
+      .leftJoinAndSelect('selectedShotConfiguration.charges', 'selectedShotCharges')
+      .leftJoinAndSelect('selectedShotCharges.charge', 'selectedShotCharge')
+      .leftJoinAndSelect('delivery.recipientUnit', 'recipientUnit')
+      .leftJoinAndSelect('delivery.selectedFirePosition', 'deliveryFirePosition')
+      .leftJoinAndSelect('delivery.selectedWeaponSystem', 'deliveryWeaponSystem')
+      .orderBy('delivery.deliveredAt', 'DESC');
+
+    if (user.role !== 'admin' && user.scope !== 'main') {
+      const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
+
+      if (allowedUnitIds === null || allowedUnitIds.length === 0) {
+        return [];
+      }
+
+      query.andWhere('delivery.recipientUnitId IN (:...allowedUnitIds)', {
+        allowedUnitIds,
+      });
+
+      if (user.scope === 'battery') {
+        query.andWhere('delivery.recipientLevel = :level', { level: 'battery' });
+      } else if (user.scope === 'division') {
+        query.andWhere('delivery.recipientLevel IN (:...levels)', {
+          levels: ['division', 'battery'],
+        });
+      }
+    }
+
+    return query.getMany();
+  }
+
+  async findOrderDeliveries(
+    orderId: string,
+    user: AuthUser,
+  ): Promise<ServiceOrderDelivery[]> {
+    const order = await this.findOne(orderId, user);
+
+    if (user.role !== 'admin' && user.scope !== 'main') {
+      const canAccess = await this.accessScope.canAccessUnit(user, order.assignedUnitId);
+
+      if (!canAccess) {
+        throw new BadRequestException('Немає доступу до доставок цього ВГЗ');
+      }
+    }
+
+    return this.dataSource.getRepository(ServiceOrderDelivery).find({
+      where: { serviceOrderId: order.id },
+      relations: {
+        recipientUnit: true,
+        selectedFirePosition: true,
+        selectedWeaponSystem: true,
+      },
+      order: {
+        recipientLevel: 'ASC',
+        deliveredAt: 'ASC',
+      },
+    });
+  }
+
+  async countUnreadDeliveries(user: AuthUser): Promise<{ count: number }> {
+    const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
+
+    if (allowedUnitIds !== null && allowedUnitIds.length === 0) {
+      return { count: 0 };
+    }
+
+    const query = this.dataSource
+      .getRepository(ServiceOrderDelivery)
+      .createQueryBuilder('delivery')
+      .where('delivery.status = :status', { status: 'new' });
+
+    if (allowedUnitIds !== null) {
+      query.andWhere('delivery.recipientUnitId IN (:...allowedUnitIds)', {
+        allowedUnitIds,
+      });
+    }
+
+    if (user.scope === 'battery') {
+      query.andWhere('delivery.recipientLevel = :level', { level: 'battery' });
+    }
+
+    return { count: await query.getCount() };
+  }
+
+  async markDeliveryViewed(
+    deliveryId: string,
+    user: AuthUser,
+  ): Promise<ServiceOrderDelivery> {
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const delivery = await this.findDeliveryForUpdate(manager, deliveryId);
+      await this.ensureCanRespondToDelivery(delivery, user, true);
+
+      if (delivery.status === 'new') {
+        delivery.status = 'viewed';
+        delivery.viewedAt = new Date();
+        const updated = await manager.save(ServiceOrderDelivery, delivery);
+        await this.writeDeliveryEvent(manager, updated, user);
+        return updated;
+      }
+
+      return delivery;
+    });
+
+    this.notifyDeliveryRealtime(saved, 'updated');
+    return this.getDeliveryWithRelations(saved.id);
+  }
+
+  async respondDelivery(
+    deliveryId: string,
+    body: RespondServiceOrderDeliveryDto,
+    user: AuthUser,
+  ): Promise<ServiceOrderDelivery> {
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const delivery = await this.findDeliveryForUpdate(manager, deliveryId);
+      await this.ensureCanRespondToDelivery(delivery, user, false);
+
+      const nextStatus = body.status;
+      const rejectionReason = body.rejectionReason?.trim() ?? '';
+      const comment = body.comment?.trim() ?? '';
+
+      if (delivery.status === 'accepted' || delivery.status === 'rejected') {
+        throw new BadRequestException('Доставка вже опрацьована');
+      }
+
+      if (nextStatus === 'rejected' && !rejectionReason) {
+        throw new BadRequestException('Для відхилення потрібно вказати причину');
+      }
+
+      if (delivery.recipientLevel === 'division' && (body.selectedFirePositionId || body.selectedWeaponSystemId)) {
+        throw new BadRequestException('Дивізіон не обирає фактичну ВП або гармату');
+      }
+
+      if (delivery.recipientLevel === 'battery') {
+        await this.validateBatteryDeliverySelection(manager, delivery, body);
+      }
+
+      const estimatedReadyAt = body.estimatedReadyAt
+        ? new Date(body.estimatedReadyAt)
+        : null;
+
+      if (estimatedReadyAt && Number.isNaN(estimatedReadyAt.getTime())) {
+        throw new BadRequestException('Некоректний очікуваний час готовності');
+      }
+
+      delivery.status = nextStatus;
+      delivery.viewedAt = delivery.viewedAt ?? new Date();
+      delivery.respondedAt = new Date();
+      delivery.respondedByUserId = user.sub;
+      delivery.rejectionReason = nextStatus === 'rejected' ? rejectionReason : null;
+      delivery.comment = comment || null;
+      delivery.estimatedReadyAt = estimatedReadyAt;
+      delivery.selectedFirePositionId =
+        body.selectedFirePositionId ?? delivery.selectedFirePositionId;
+      delivery.selectedWeaponSystemId =
+        body.selectedWeaponSystemId ?? delivery.selectedWeaponSystemId;
+
+      const updated = await manager.save(ServiceOrderDelivery, delivery);
+      await this.writeDeliveryEvent(manager, updated, user);
+
+      if (updated.recipientLevel === 'battery' && updated.status === 'accepted') {
+        const order = await manager.findOne(ServiceOrder, {
+          where: { id: updated.serviceOrderId },
+          relations: {
+            selectedFirePosition: {
+              unit: true,
+            },
+          },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (order && ['sent', 'sent_to_battery', 'sent_to_division'].includes(order.status)) {
+          order.status = 'accepted';
+          order.acceptedByUserId = user.sub;
+          order.rejectionReason = null;
+          await manager.save(ServiceOrder, order);
+        }
+      }
+
+      return updated;
+    });
+
+    this.notifyDeliveryRealtime(saved, 'updated');
+    this.notifyRealtime(saved.serviceOrderId, 'updated', ['missions', 'events']);
+    return this.getDeliveryWithRelations(saved.id);
   }
 
   async create(
@@ -566,7 +775,11 @@ export class ServiceOrdersService {
     item.sentByUserId = user.sub;
     item.status = 'sent';
 
-    const saved = await this.repository.save(item);
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const savedOrder = await manager.save(ServiceOrder, item);
+      await this.createDeliveriesForOrder(manager, savedOrder);
+      return savedOrder;
+    });
 
     await this.writeOrderEvent(
       saved,
@@ -578,6 +791,7 @@ export class ServiceOrdersService {
     );
 
     this.notifyRealtime(saved, 'sent');
+    await this.notifyOrderDeliveriesCreated(saved.id);
 
     return saved;
   }
@@ -773,6 +987,8 @@ async selectAirAsset(
     if (order.executorType !== 'air_asset_position') {
       await this.ensureWeaponReadyForFirePositionExecution(order.selectedFirePositionId!);
     }
+
+    await this.ensureBatteryDeliveryAccepted(order);
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       order.status = 'in_progress';
@@ -2258,6 +2474,314 @@ async selectAirAsset(
     }
   }
 
+  private async createDeliveriesForOrder(
+    manager: EntityManager,
+    order: ServiceOrder,
+  ): Promise<void> {
+    const recipients = await this.resolveDeliveryRecipients(manager, order);
+
+    if (recipients.length === 0) {
+      throw new BadRequestException('Не вдалося визначити отримувачів доставки ВГЗ');
+    }
+
+    const values = recipients.map((recipient) => ({
+      serviceOrderId: order.id,
+      recipientUnitId: recipient.recipientUnitId,
+      recipientLevel: recipient.recipientLevel,
+      status: 'new' as ServiceOrderDeliveryStatus,
+      deliveredAt: new Date(),
+      selectedFirePositionId: recipient.selectedFirePositionId,
+    }));
+
+    await manager
+      .createQueryBuilder()
+      .insert()
+      .into(ServiceOrderDelivery)
+      .values(values)
+      .orIgnore()
+      .execute();
+  }
+
+  private async resolveDeliveryRecipients(
+    manager: EntityManager,
+    order: ServiceOrder,
+  ): Promise<ServiceOrderDeliveryRecipient[]> {
+    const batteryUnitId =
+      order.selectedFirePosition?.unitId ??
+      order.selectedAirAssetPosition?.unitId ??
+      order.assignedUnitId;
+
+    if (!batteryUnitId) {
+      return [];
+    }
+
+    const batteryUnit = await manager.findOne(Unit, {
+      where: { id: batteryUnitId },
+      relations: { parent: true },
+    });
+
+    if (!batteryUnit) {
+      return [];
+    }
+
+    const recipients: ServiceOrderDeliveryRecipient[] = [
+      {
+        recipientUnitId: batteryUnit.id,
+        recipientLevel: 'battery',
+        selectedFirePositionId: order.selectedFirePositionId,
+      },
+    ];
+
+    const divisionUnit = await this.findDivisionForUnit(manager, batteryUnit);
+
+    if (divisionUnit && divisionUnit.id !== batteryUnit.id) {
+      recipients.unshift({
+        recipientUnitId: divisionUnit.id,
+        recipientLevel: 'division',
+        selectedFirePositionId: order.selectedFirePositionId,
+      });
+    }
+
+    return recipients;
+  }
+
+  private async findDivisionForUnit(
+    manager: EntityManager,
+    unit: Unit,
+  ): Promise<Unit | null> {
+    let current: Unit | null = unit;
+
+    for (let depth = 0; depth < 6 && current; depth += 1) {
+      if (current.type === 'division') {
+        return current;
+      }
+
+      if (!current.parentId) {
+        return null;
+      }
+
+      current = await manager.findOne(Unit, {
+        where: { id: current.parentId },
+        relations: { parent: true },
+      });
+    }
+
+    return null;
+  }
+
+  private async ensureBatteryDeliveryAccepted(order: ServiceOrder): Promise<void> {
+    const deliveryRepository = this.dataSource.getRepository(ServiceOrderDelivery);
+    const deliveryCount = await deliveryRepository.count({
+      where: { serviceOrderId: order.id },
+    });
+
+    if (deliveryCount === 0) {
+      return;
+    }
+
+    const acceptedBatteryDelivery = await deliveryRepository.findOne({
+      where: {
+        serviceOrderId: order.id,
+        recipientLevel: 'battery',
+        status: 'accepted',
+      },
+    });
+
+    if (!acceptedBatteryDelivery) {
+      throw new BadRequestException(
+        'Почати виконання можна тільки після прийняття доставки батареєю',
+      );
+    }
+  }
+
+  private async findDeliveryForUpdate(
+    manager: EntityManager,
+    deliveryId: string,
+  ): Promise<ServiceOrderDelivery> {
+    const delivery = await manager.findOne(ServiceOrderDelivery, {
+      where: { id: deliveryId },
+      relations: {
+        serviceOrder: {
+          selectedFirePosition: {
+            unit: true,
+          },
+        },
+        recipientUnit: true,
+        selectedFirePosition: true,
+        selectedWeaponSystem: true,
+      },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!delivery) {
+      throw new NotFoundException('Доставку ВГЗ не знайдено');
+    }
+
+    return delivery;
+  }
+
+  private async getDeliveryWithRelations(
+    deliveryId: string,
+  ): Promise<ServiceOrderDelivery> {
+    const delivery = await this.dataSource.getRepository(ServiceOrderDelivery).findOne({
+      where: { id: deliveryId },
+      relations: {
+        serviceOrder: {
+          selectedFirePosition: {
+            unit: true,
+          },
+          selectedShotConfiguration: {
+            shell: true,
+            fuze: true,
+            primer: true,
+            charges: {
+              charge: true,
+            },
+          },
+        },
+        recipientUnit: true,
+        selectedFirePosition: true,
+        selectedWeaponSystem: true,
+      },
+    });
+
+    if (!delivery) {
+      throw new NotFoundException('Доставку ВГЗ не знайдено');
+    }
+
+    return delivery;
+  }
+
+  private async ensureCanRespondToDelivery(
+    delivery: ServiceOrderDelivery,
+    user: AuthUser,
+    allowObserver: boolean,
+  ): Promise<void> {
+    if (!allowObserver && user.role === 'observer') {
+      throw new BadRequestException('Спостерігач не може змінювати доставку ВГЗ');
+    }
+
+    if (user.role === 'admin') {
+      return;
+    }
+
+    if (!user.unitId) {
+      throw new BadRequestException('Для користувача не визначено підрозділ');
+    }
+
+    if (delivery.recipientLevel === 'battery') {
+      if (user.scope !== 'battery' || delivery.recipientUnitId !== user.unitId) {
+        throw new BadRequestException('Ця доставка належить іншій батареї');
+      }
+      return;
+    }
+
+    if (delivery.recipientLevel === 'division') {
+      if (user.scope !== 'division' || delivery.recipientUnitId !== user.unitId) {
+        throw new BadRequestException('Ця доставка належить іншому дивізіону');
+      }
+      return;
+    }
+
+    throw new BadRequestException('Невідомий рівень доставки ВГЗ');
+  }
+
+  private async validateBatteryDeliverySelection(
+    manager: EntityManager,
+    delivery: ServiceOrderDelivery,
+    body: RespondServiceOrderDeliveryDto,
+  ): Promise<void> {
+    if (body.selectedFirePositionId) {
+      const firePosition = await manager.findOne(FirePosition, {
+        where: { id: body.selectedFirePositionId },
+      });
+
+      if (!firePosition) {
+        throw new BadRequestException('Обрану ВП не знайдено');
+      }
+
+      if (firePosition.unitId !== delivery.recipientUnitId) {
+        throw new BadRequestException('Обрана ВП не належить батареї доставки');
+      }
+    }
+
+    if (body.selectedWeaponSystemId) {
+      const weapon = await manager.findOne(WeaponSystem, {
+        where: { id: body.selectedWeaponSystemId },
+      });
+
+      if (!weapon) {
+        throw new BadRequestException('Обрану гармату не знайдено');
+      }
+
+      if (weapon.unitId !== delivery.recipientUnitId) {
+        throw new BadRequestException('Обрана гармата не належить батареї доставки');
+      }
+
+      if (
+        body.selectedFirePositionId &&
+        weapon.currentFirePositionId &&
+        weapon.currentFirePositionId !== body.selectedFirePositionId
+      ) {
+        throw new BadRequestException('Гармата розгорнута на іншій ВП');
+      }
+    }
+  }
+
+  private async writeDeliveryEvent(
+    _manager: EntityManager,
+    delivery: ServiceOrderDelivery,
+    user: AuthUser,
+  ): Promise<void> {
+    const action = `delivery_${delivery.status}`;
+    const levelLabel = delivery.recipientLevel === 'division' ? 'дивізіону' : 'батареї';
+    const statusLabel: Record<ServiceOrderDeliveryStatus, string> = {
+      new: 'створено',
+      viewed: 'переглянуто',
+      accepted: 'прийнято',
+      rejected: 'відхилено',
+    };
+
+    try {
+      await this.eventLogs.create({
+        eventType: 'service_order',
+        action,
+        actor: user,
+        unitId: delivery.recipientUnitId,
+        unitName: delivery.recipientUnit?.name ?? null,
+        entityType: 'service_order_delivery',
+        entityId: delivery.id,
+        entityName: delivery.serviceOrder?.orderNumber ?? delivery.serviceOrderId,
+        title: `Доставку ВГЗ для ${levelLabel} ${statusLabel[delivery.status]}`,
+        details: delivery.comment || delivery.rejectionReason || null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to write service order delivery event ${delivery.id}: ${message}`);
+    }
+  }
+
+  private notifyDeliveryRealtime(
+    delivery: ServiceOrderDelivery,
+    action: 'created' | 'updated',
+  ): void {
+    this.realtimeEvents.emitMany(['missions', 'events'], action, {
+      entity: 'service_order_delivery',
+      id: delivery.id,
+      unitId: delivery.recipientUnitId,
+    });
+  }
+
+  private async notifyOrderDeliveriesCreated(orderId: string): Promise<void> {
+    const deliveries = await this.dataSource.getRepository(ServiceOrderDelivery).find({
+      where: { serviceOrderId: orderId },
+    });
+
+    for (const delivery of deliveries) {
+      this.notifyDeliveryRealtime(delivery, 'created');
+    }
+  }
+
   private async ensureCanViewOrder(
     order: ServiceOrder,
     user: AuthUser,
@@ -2285,6 +2809,33 @@ async selectAirAsset(
 
     if (!order.assignedUnitId) {
       return false;
+    }
+
+    const hasDelivery = await this.dataSource.getRepository(ServiceOrderDelivery).exists({
+      where: {
+        serviceOrderId: order.id,
+      },
+    });
+
+    if (hasDelivery) {
+      const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
+
+      if (allowedUnitIds === null) {
+        return true;
+      }
+
+      if (allowedUnitIds.length === 0) {
+        return false;
+      }
+
+      const delivery = await this.dataSource.getRepository(ServiceOrderDelivery).findOne({
+        where: allowedUnitIds.map((unitId) => ({
+          serviceOrderId: order.id,
+          recipientUnitId: unitId,
+        })),
+      });
+
+      return !!delivery;
     }
 
     return this.accessScope.canAccessUnit(user, order.assignedUnitId);

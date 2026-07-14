@@ -4,6 +4,56 @@ import { ApiService } from '../../core/api.service';
 import { ServiceOrder, ServiceOrderAssignedScope } from './service-order.model';
 import { ServiceOrderMapResult } from './service-order-map-result.model';
 
+export type ServiceOrderDeliveryLevel = 'division' | 'battery';
+export type ServiceOrderDeliveryStatus = 'new' | 'viewed' | 'accepted' | 'rejected';
+
+export interface ServiceOrderDelivery {
+  id: string;
+  serviceOrderId: string;
+  recipientUnitId: string;
+  recipientLevel: ServiceOrderDeliveryLevel;
+  status: ServiceOrderDeliveryStatus;
+  deliveredAt: string;
+  viewedAt: string | null;
+  respondedAt: string | null;
+  respondedByUserId: string | null;
+  rejectionReason: string | null;
+  comment: string | null;
+  estimatedReadyAt: string | null;
+  selectedFirePositionId: string | null;
+  selectedWeaponSystemId: string | null;
+  serviceOrder: ServiceOrder;
+  recipientUnit?: {
+    id: string;
+    name: string;
+    type?: string | null;
+  } | null;
+  selectedFirePosition?: {
+    id: string;
+    name: string;
+    readinessStatus?: string | null;
+    notReadyReason?: string | null;
+  } | null;
+  selectedWeaponSystem?: {
+    id: string;
+    callsign?: string | null;
+    serialNumber?: string | null;
+    readinessStatus?: string | null;
+    notReadyReason?: string | null;
+    deploymentStatus?: string | null;
+    currentFirePositionId?: string | null;
+  } | null;
+}
+
+export interface RespondServiceOrderDeliveryRequest {
+  status: 'accepted' | 'rejected';
+  rejectionReason?: string;
+  comment?: string;
+  estimatedReadyAt?: string;
+  selectedFirePositionId?: string;
+  selectedWeaponSystemId?: string;
+}
+
 export interface CompleteServiceOrderRequest {
   startedAt: string;
   completedAt: string;
@@ -172,6 +222,28 @@ export class ServiceOrdersService {
 
   getAll(): Observable<ServiceOrder[]> {
     return this.api.get<ServiceOrder[]>('/service-orders');
+  }
+
+  getDeliveries(): Observable<ServiceOrderDelivery[]> {
+    return this.api.get<ServiceOrderDelivery[]>('/service-orders/deliveries');
+  }
+
+  getDeliveryUnreadCount(): Observable<{ count: number }> {
+    return this.api.get<{ count: number }>('/service-orders/deliveries/unread-count');
+  }
+
+  markDeliveryViewed(deliveryId: string): Observable<ServiceOrderDelivery> {
+    return this.api.post<ServiceOrderDelivery>(`/service-orders/deliveries/${deliveryId}/view`, {});
+  }
+
+  respondDelivery(
+    deliveryId: string,
+    body: RespondServiceOrderDeliveryRequest,
+  ): Observable<ServiceOrderDelivery> {
+    return this.api.post<ServiceOrderDelivery>(
+      `/service-orders/deliveries/${deliveryId}/respond`,
+      body,
+    );
   }
 
   getOne(id: string): Observable<ServiceOrder> {

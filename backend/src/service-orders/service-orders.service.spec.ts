@@ -8,16 +8,18 @@ import { AccessScopeService } from '../access-scope/access-scope.service';
 import { AuthUser } from '../auth/auth-user.types';
 import { ServiceOrderSuggestionsService } from './service-order-suggestions.service';
 import { CompleteServiceOrderDto } from './dto/complete-service-order.dto';
+import { ServiceOrderDelivery } from './service-order-delivery.entity';
 import { ServiceOrder } from './service-order.entity';
 import { ServiceOrdersService } from './service-orders.service';
 
 type ServiceOrderRepositoryMock = Pick<Repository<ServiceOrder>, 'findOne' | 'save'>;
 type ExecutionRecordRepositoryMock = Pick<Repository<ExecutionRecord>, 'find'>;
 type TransactionManagerMock = {
-  findOne: jest.Mock<Promise<ServiceOrder | FirePosition | null>, [unknown, unknown]>;
-  save: jest.Mock<Promise<ServiceOrder | FirePosition>, [unknown, ServiceOrder | FirePosition]>;
+  findOne: jest.Mock<Promise<unknown>, [unknown, unknown]>;
+  save: jest.Mock<Promise<unknown>, [unknown, unknown]>;
+  createQueryBuilder: jest.Mock;
 };
-type DataSourceMock = Pick<DataSource, 'transaction'>;
+type DataSourceMock = Pick<DataSource, 'transaction' | 'getRepository'>;
 type PrivateServiceOrdersApi = {
   completeLegacy: (
     id: string,
@@ -45,6 +47,10 @@ type PrivateServiceOrdersApi = {
     scopes?: Array<'missions' | 'map' | 'stock' | 'analytics' | 'events'>,
   ) => void;
   ensureCanExecuteOrder: (order: ServiceOrder, user: AuthUser) => Promise<void>;
+  createDeliveriesForOrder: (
+    manager: TransactionManagerMock,
+    order: ServiceOrder,
+  ) => Promise<void>;
 };
 
 describe('ServiceOrdersService SE-5 completion flow', () => {
@@ -85,11 +91,18 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     manager = {
       findOne: jest.fn(),
       save: jest.fn(),
+      createQueryBuilder: jest.fn(),
     };
 
     dataSource = {
       transaction: jest.fn(async (callback: (tx: TransactionManagerMock) => Promise<ServiceOrder>) =>
         callback(manager),
+      ),
+      getRepository: jest.fn(
+        () =>
+          ({
+            exists: jest.fn(async () => false),
+          }) as unknown as Repository<unknown>,
       ),
     };
 
@@ -103,9 +116,17 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
       {} as ServiceOrderSuggestionsService,
       { emitMany: jest.fn() } as unknown as RealtimeEventsService,
       accessScope as AccessScopeService,
-      {} as EventLogsService,
+      { create: jest.fn(async () => undefined) } as unknown as EventLogsService,
       dataSource as DataSource,
     );
+
+    manager.createQueryBuilder.mockReturnValue({
+      insert: jest.fn().mockReturnThis(),
+      into: jest.fn().mockReturnThis(),
+      values: jest.fn().mockReturnThis(),
+      orIgnore: jest.fn().mockReturnThis(),
+      execute: jest.fn(async () => undefined),
+    });
 
     jest
       .spyOn(service as unknown as PrivateServiceOrdersApi, 'ensureCanExecuteOrder')
@@ -242,6 +263,56 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     } as ExecutionRecord;
   }
 
+  it('creates division and battery deliveries with idempotent insert', async () => {
+    const order = createOrder({
+      selectedFirePositionId: 'fp-1',
+      selectedFirePosition: createFirePosition({ unitId: 'unit-1' }),
+    });
+    const batteryUnit = {
+      id: 'unit-1',
+      name: 'Battery',
+      type: 'battery',
+      parentId: 'division-1',
+      parent: null,
+      sortOrder: 0,
+      createdAt: new Date('2026-07-11T09:00:00.000Z'),
+      updatedAt: new Date('2026-07-11T09:00:00.000Z'),
+    };
+    const divisionUnit = {
+      ...batteryUnit,
+      id: 'division-1',
+      name: 'Division',
+      type: 'division',
+      parentId: null,
+    };
+    const queryBuilder = manager.createQueryBuilder();
+
+    manager.findOne
+      .mockResolvedValueOnce(batteryUnit)
+      .mockResolvedValueOnce(divisionUnit);
+
+    await (service as unknown as PrivateServiceOrdersApi).createDeliveriesForOrder(
+      manager,
+      order,
+    );
+
+    expect(queryBuilder.orIgnore).toHaveBeenCalledTimes(1);
+    expect(queryBuilder.values).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          serviceOrderId: 'order-1',
+          recipientUnitId: 'division-1',
+          recipientLevel: 'division',
+        }),
+        expect.objectContaining({
+          serviceOrderId: 'order-1',
+          recipientUnitId: 'unit-1',
+          recipientLevel: 'battery',
+        }),
+      ]),
+    );
+  });
+
   it('rejects completion when journal exists but has no posted records', async () => {
     const order = createOrder();
     repository.findOne.mockResolvedValue(order);
@@ -347,4 +418,102 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     expect(completeLegacySpy).toHaveBeenCalledWith(order.id, body, user);
     expect(saved).toBe(expected);
   });
+
+  it('marks delivery viewed exactly once', async () => {
+    const delivery = createDelivery({ status: 'new', viewedAt: null });
+    const viewedAt = new Date('2026-07-11T10:00:00.000Z');
+
+    manager.findOne.mockResolvedValueOnce(delivery);
+    manager.save.mockResolvedValueOnce({
+      ...delivery,
+      status: 'viewed',
+      viewedAt,
+    } as ServiceOrderDelivery);
+    (dataSource.getRepository as jest.Mock).mockReturnValueOnce({
+      findOne: jest.fn(async () => ({
+        ...delivery,
+        status: 'viewed',
+        viewedAt,
+      })),
+    });
+
+    const result = await service.markDeliveryViewed('delivery-1', user);
+
+    expect(result.status).toBe('viewed');
+    expect(manager.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires rejection reason for delivery rejection', async () => {
+    manager.findOne.mockResolvedValueOnce(createDelivery({ status: 'viewed' }));
+
+    await expect(
+      service.respondDelivery('delivery-1', { status: 'rejected' }, user),
+    ).rejects.toThrow('Для відхилення потрібно вказати причину');
+  });
+
+  it('accepts battery delivery independently and keeps one order source', async () => {
+    const delivery = createDelivery({ status: 'viewed' });
+    const order = createOrder({ status: 'sent' });
+
+    manager.findOne
+      .mockResolvedValueOnce(delivery)
+      .mockResolvedValueOnce(order);
+    manager.save
+      .mockImplementationOnce(async (_entity, value) => value as ServiceOrderDelivery)
+      .mockImplementationOnce(async (_entity, value) => value as ServiceOrder);
+    (dataSource.getRepository as jest.Mock).mockReturnValueOnce({
+      findOne: jest.fn(async () => ({
+        ...delivery,
+        status: 'accepted',
+        respondedByUserId: user.sub,
+      })),
+    });
+
+    const result = await service.respondDelivery(
+      'delivery-1',
+      { status: 'accepted', comment: 'ready' },
+      user,
+    );
+
+    expect(result.status).toBe('accepted');
+    expect(order.status).toBe('accepted');
+    expect(manager.save).toHaveBeenCalledTimes(2);
+  });
+
+  function createDelivery(
+    overrides: Partial<ServiceOrderDelivery> = {},
+  ): ServiceOrderDelivery {
+    return {
+      id: 'delivery-1',
+      serviceOrderId: 'order-1',
+      serviceOrder: createOrder({ status: 'sent' }),
+      recipientUnitId: 'unit-1',
+      recipientUnit: {
+        id: 'unit-1',
+        name: 'Battery',
+        type: 'battery',
+        parentId: 'division-1',
+        parent: null,
+        sortOrder: 0,
+        createdAt: new Date('2026-07-11T09:00:00.000Z'),
+        updatedAt: new Date('2026-07-11T09:00:00.000Z'),
+      },
+      recipientLevel: 'battery',
+      status: 'new',
+      deliveredAt: new Date('2026-07-11T09:00:00.000Z'),
+      viewedAt: null,
+      respondedAt: null,
+      respondedByUserId: null,
+      rejectionReason: null,
+      comment: null,
+      estimatedReadyAt: null,
+      selectedFirePositionId: null,
+      selectedFirePosition: null,
+      selectedWeaponSystemId: null,
+      selectedWeaponSystem: null,
+      createdAt: new Date('2026-07-11T09:00:00.000Z'),
+      updatedAt: new Date('2026-07-11T09:00:00.000Z'),
+      ...overrides,
+    } as ServiceOrderDelivery;
+  }
 });

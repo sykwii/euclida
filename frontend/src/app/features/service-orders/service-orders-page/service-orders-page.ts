@@ -9,14 +9,18 @@ import { AutoRefreshService } from '../../../core/auto-refresh.service';
 import { ToastService } from '../../../core/toast.service';
 import { AuthService, LoginResponse } from '../../auth/auth.service';
 import { FirePositionCard } from '../../fire-positions/fire-position-card.model';
+import { FirePosition } from '../../fire-positions/fire-position.model';
 import { FirePositionsService } from '../../fire-positions/fire-positions.service';
 import { ReconPuarProposal } from '../../recon/recon.model';
 import { ReconService } from '../../recon/recon.service';
+import { WeaponSystem } from '../../weapon-systems/weapon-system.model';
+import { WeaponSystemsService } from '../../weapon-systems/weapon-systems.service';
 import { ExecutionRecord, ExecutionRecordPurpose } from '../execution-record.model';
 import { ExecutionRecordsService } from '../execution-records.service';
 import { ServiceOrder } from '../service-order.model';
 import {
  ServiceOrderAirPayloadVariant,
+ServiceOrderDelivery,
 ServiceOrderSuggestion,
 ServiceOrderSuggestionVariant,
 ServiceOrdersService,
@@ -65,6 +69,23 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   expandedSuggestionIds: Record<string, boolean> = {};
   openedActionsOrderId: string | null = null;
   readonly pageSkeleton = Array.from({ length: 6 });
+  deliveries: ServiceOrderDelivery[] = [];
+  deliveriesLoading = false;
+  unreadDeliveryCount = 0;
+  selectedDeliveryId: string | null = null;
+  firePositionCandidates: FirePosition[] = [];
+  weaponCandidates: WeaponSystem[] = [];
+  deliveryForms: Record<
+    string,
+    {
+      estimatedReadyAt: string;
+      comment: string;
+      rejectionReason: string;
+      selectedFirePositionId: string;
+      selectedWeaponSystemId: string;
+      submitting: boolean;
+    }
+  > = {};
 
   selectedDetailsOrderId: string | null = null;
 
@@ -195,12 +216,15 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     private readonly firePositions: FirePositionsService,
     private readonly reconService: ReconService,
     private readonly executionRecords: ExecutionRecordsService,
+    private readonly weaponSystems: WeaponSystemsService,
   ) {}
 
   ngOnInit(): void {
     this.currentUser = this.auth.getUser();
     this.restoreViewPreferences();
     this.loadPlannedPuar();
+    this.loadDeliveryReferenceData();
+    this.loadDeliveries();
     this.load();
     this.route.queryParamMap.subscribe((params) => {
       if (params.get('create') === 'true') {
@@ -243,6 +267,12 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
         this.closeActions();
         this.load(true);
         this.loadPlannedPuar();
+      }),
+    );
+
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['missions', 'events'], () => {
+        this.loadDeliveries(true);
       }),
     );
   }
@@ -302,6 +332,174 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
         this.plannedPuarProposals = [];
       },
     });
+  }
+
+  loadDeliveries(silent = false): void {
+    this.deliveriesLoading = !silent && this.deliveries.length === 0;
+
+    this.service.getDeliveries().subscribe({
+      next: (items) => {
+        this.deliveries = items;
+        this.deliveriesLoading = false;
+        this.unreadDeliveryCount = items.filter((item) => item.status === 'new').length;
+        for (const item of items) {
+          this.ensureDeliveryForm(item);
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.deliveriesLoading = false;
+        if (!silent) {
+          this.toast.show('Не вдалося завантажити вхідні цілі', 'danger');
+        }
+      },
+    });
+
+    this.service.getDeliveryUnreadCount().subscribe({
+      next: ({ count }) => {
+        this.unreadDeliveryCount = count;
+        this.cdr.detectChanges();
+      },
+      error: () => undefined,
+    });
+  }
+
+  private loadDeliveryReferenceData(): void {
+    this.firePositions.getAll().subscribe({
+      next: (items) => {
+        this.firePositionCandidates = items;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.firePositionCandidates = [];
+      },
+    });
+
+    this.weaponSystems.getAll().subscribe({
+      next: (items) => {
+        this.weaponCandidates = items;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.weaponCandidates = [];
+      },
+    });
+  }
+
+  openDelivery(delivery: ServiceOrderDelivery): void {
+    this.selectedDeliveryId = this.selectedDeliveryId === delivery.id ? null : delivery.id;
+    this.ensureDeliveryForm(delivery);
+
+    if (delivery.status !== 'new') {
+      return;
+    }
+
+    this.service.markDeliveryViewed(delivery.id).subscribe({
+      next: (updated) => {
+        this.replaceDelivery(updated);
+        this.loadDeliveries(true);
+      },
+      error: (error) =>
+        this.fail(error, error?.error?.message || 'Не вдалося позначити доставку як переглянуту'),
+    });
+  }
+
+  respondToDelivery(delivery: ServiceOrderDelivery, status: 'accepted' | 'rejected'): void {
+    const form = this.ensureDeliveryForm(delivery);
+
+    if (status === 'rejected' && !form.rejectionReason.trim()) {
+      this.errorMessage = 'Для відхилення потрібно вказати причину';
+      return;
+    }
+
+    form.submitting = true;
+    this.service
+      .respondDelivery(delivery.id, {
+        status,
+        rejectionReason: form.rejectionReason.trim() || undefined,
+        comment: form.comment.trim() || undefined,
+        estimatedReadyAt: form.estimatedReadyAt || undefined,
+        selectedFirePositionId:
+          delivery.recipientLevel === 'battery' && form.selectedFirePositionId
+            ? form.selectedFirePositionId
+            : undefined,
+        selectedWeaponSystemId:
+          delivery.recipientLevel === 'battery' && form.selectedWeaponSystemId
+            ? form.selectedWeaponSystemId
+            : undefined,
+      })
+      .pipe(finalize(() => (form.submitting = false)))
+      .subscribe({
+        next: (updated) => {
+          this.replaceDelivery(updated);
+          this.load(true);
+          this.loadDeliveries(true);
+          this.toast.show(status === 'accepted' ? 'Доставку прийнято' : 'Доставку відхилено', status === 'accepted' ? 'success' : 'warning');
+        },
+        error: (error) =>
+          this.fail(error, error?.error?.message || 'Не вдалося опрацювати доставку'),
+      });
+  }
+
+  getDeliverySection(status: 'new' | 'viewed' | 'processed'): ServiceOrderDelivery[] {
+    if (status === 'new') {
+      return this.deliveries.filter((item) => item.status === 'new');
+    }
+
+    if (status === 'viewed') {
+      return this.deliveries.filter((item) => item.status === 'viewed');
+    }
+
+    return this.deliveries.filter((item) => item.status === 'accepted' || item.status === 'rejected');
+  }
+
+  getDeliveryStatusLabel(status: ServiceOrderDelivery['status']): string {
+    const labels: Record<ServiceOrderDelivery['status'], string> = {
+      new: 'Нова',
+      viewed: 'Переглянута',
+      accepted: 'Прийнята',
+      rejected: 'Відхилена',
+    };
+    return labels[status] ?? status;
+  }
+
+  getDeliveryLevelLabel(level: ServiceOrderDelivery['recipientLevel']): string {
+    return level === 'division' ? 'Дивізіон' : 'Батарея';
+  }
+
+  getAllowedFirePositions(delivery: ServiceOrderDelivery): FirePosition[] {
+    return this.firePositionCandidates.filter(
+      (item) => item.unitId === delivery.recipientUnitId && item.positionType === 'fire_position',
+    );
+  }
+
+  getAllowedWeapons(delivery: ServiceOrderDelivery): WeaponSystem[] {
+    return this.weaponCandidates.filter((item) => item.unitId === delivery.recipientUnitId);
+  }
+
+  ensureDeliveryForm(delivery: ServiceOrderDelivery) {
+    if (!this.deliveryForms[delivery.id]) {
+      this.deliveryForms[delivery.id] = {
+        estimatedReadyAt: delivery.estimatedReadyAt
+          ? this.toLocalDatetimeValue(new Date(delivery.estimatedReadyAt))
+          : '',
+        comment: delivery.comment || '',
+        rejectionReason: delivery.rejectionReason || '',
+        selectedFirePositionId:
+          delivery.selectedFirePositionId || delivery.serviceOrder.selectedFirePositionId || '',
+        selectedWeaponSystemId: delivery.selectedWeaponSystemId || '',
+        submitting: false,
+      };
+    }
+
+    return this.deliveryForms[delivery.id];
+  }
+
+  private replaceDelivery(updated: ServiceOrderDelivery): void {
+    this.deliveries = this.deliveries.map((item) => (item.id === updated.id ? updated : item));
+    this.unreadDeliveryCount = this.deliveries.filter((item) => item.status === 'new').length;
+    this.ensureDeliveryForm(updated);
+    this.cdr.detectChanges();
   }
 
   acceptPuarProposal(proposal: ReconPuarProposal): void {
