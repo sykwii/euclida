@@ -173,3 +173,26 @@ OPS-1.4 verification:
 - Backend full tests: `npm test -- --runInBand` passed: 9 suites / 56 tests.
 - Frontend build: `npm run build` passed outside sandbox after the sandboxed run hit Windows path access denial.
 - Frontend tests: `npm test -- --watch=false` passed outside sandbox: 6 files / 8 tests.
+
+## OPS-1.5 Fire Readiness UI Polish
+
+- Fire-position cards compute `Готовність до вогню` from visible facts, not from a potentially stale server flag:
+  - FP readiness is `combat_ready`;
+  - assigned weapon exists;
+  - weapon deployment is `at_fire_position`;
+  - weapon readiness is `combat_ready`;
+  - weapon has no active maintenance.
+- A card can no longer display `ВП НЕ БГ` together with `Готова до вогню`.
+- The readiness action is now a two-state toggle:
+  - non-ready FP shows `Позначити ВП БГ` and calls existing `POST /fire-positions/:id/readiness/confirm`;
+  - ready FP shows `Позначити ВП НЕ БГ` and calls existing `POST /fire-positions/:id/readiness/not-ready`.
+- No schema, DTO, API, or route changes were introduced.
+- Fire-position detail aggregation now uses the synchronized fire-position object after assigned weapon resolution.
+
+OPS-1.5 verification:
+
+- Frontend tests: `npm test -- --watch=false` passed outside sandbox: 7 files / 12 tests.
+- Frontend build: `npm run build` passed outside sandbox.
+- Backend focused test: `npm test -- fire-positions.service.spec.ts --runInBand` passed.
+- Backend build: `npm run build` passed.
+- Backend full tests: `npm test -- --runInBand` passed: 9 suites / 56 tests.

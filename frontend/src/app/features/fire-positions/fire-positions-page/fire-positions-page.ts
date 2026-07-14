@@ -542,6 +542,10 @@ private syncPageKindFromUrl(url: string): void {
     return this.normalizeReadiness(status) === 'combat_ready' ? 'ВП БГ' : 'ВП НЕ БГ';
   }
 
+  isFpCombatReady(item: FirePosition): boolean {
+    return this.normalizeReadiness(item.readinessStatus) === 'combat_ready';
+  }
+
   getFpReasonLabel(reason: string | null | undefined): string {
     const labels: Record<string, string> = {
       threat: 'Під загрозою',
@@ -571,11 +575,13 @@ private syncPageKindFromUrl(url: string): void {
   }
 
   getAggregateReadinessLabel(item: FirePosition): string {
-    return item.aggregateReady ? 'Готова до вогню' : 'Не готова до вогню';
+    return this.getAggregateReadinessReasons(item).length === 0
+      ? 'Готова до вогню'
+      : 'Не готова до вогню';
   }
 
   getAggregateReadinessClass(item: FirePosition): string {
-    return item.aggregateReady ? 'ready' : 'danger';
+    return this.getAggregateReadinessReasons(item).length === 0 ? 'ready' : 'danger';
   }
 
   getAggregateReasonLabels(item: FirePosition): string[] {
@@ -588,7 +594,46 @@ private syncPageKindFromUrl(url: string): void {
       weapon_active_maintenance: 'активний ремонт',
     };
 
-    return (item.aggregateReadinessReasons ?? []).map((reason) => labels[reason] ?? reason);
+    return this.getAggregateReadinessReasons(item).map((reason) => labels[reason] ?? reason);
+  }
+
+  private getAggregateReadinessReasons(item: FirePosition): string[] {
+    const reasons: string[] = [];
+
+    if (this.normalizeReadiness(item.readinessStatus) !== 'combat_ready') {
+      reasons.push(item.notReadyReason === 'threat' ? 'fp_threat' : 'fp_not_prepared');
+    }
+
+    const weapon = item.assignedWeapon;
+    if (!weapon) {
+      reasons.push('weapon_missing');
+      return reasons;
+    }
+
+    if (weapon.deploymentStatus !== 'at_fire_position') {
+      reasons.push('weapon_moving');
+    }
+
+    if (this.normalizeReadiness(weapon.readinessStatus) !== 'combat_ready') {
+      reasons.push('weapon_not_ready');
+    }
+
+    if (this.hasActiveWeaponMaintenance(weapon)) {
+      reasons.push('weapon_active_maintenance');
+    }
+
+    return reasons;
+  }
+
+  private hasActiveWeaponMaintenance(
+    weapon: NonNullable<FirePosition['assignedWeapon']>,
+  ): boolean {
+    return (
+      weapon.maintenanceStatus === 'opened' ||
+      weapon.maintenanceStatus === 'in_progress' ||
+      weapon.maintenanceStatus === 'pending' ||
+      weapon.maintenanceStatus === 'approved'
+    );
   }
 
   private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {

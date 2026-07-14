@@ -524,15 +524,15 @@ private normalizePositionType(value: string | null | undefined): string {
 
     return {
       firePosition: {
-        ...firePosition,
-        unit: assignedWeapon?.unit ?? firePosition.unit,
+        ...syncedFirePosition,
+        unit: assignedWeapon?.unit ?? syncedFirePosition.unit,
       },
       assignedWeapon,
       incomingWeapon,
       incomingDeployment,
-      aggregateReady: this.isFireReady(firePosition, assignedWeapon),
+      aggregateReady: this.isFireReady(syncedFirePosition, assignedWeapon),
       aggregateReadinessReasons: this.getFireReadinessReasons(
-        firePosition,
+        syncedFirePosition,
         assignedWeapon,
       ),
       localStock: {
@@ -555,7 +555,7 @@ private normalizePositionType(value: string | null | undefined): string {
       },
       maxSectorDistanceM,
       lastSupplyAt: lastSupply?.movementDatetime ?? null,
-      completedRequestsCount: firePosition.completedVgzCount ?? 0,
+      completedRequestsCount: syncedFirePosition.completedVgzCount ?? 0,
     };
   }
 

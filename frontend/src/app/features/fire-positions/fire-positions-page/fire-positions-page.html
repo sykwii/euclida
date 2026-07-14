@@ -349,15 +349,15 @@
         <button
           type="button"
           class="ghost-button"
-          *ngIf="item.canEdit && item.readinessStatus !== 'combat_ready'"
+          *ngIf="item.canEdit && !isFpCombatReady(item)"
           (click)="confirmFirePositionReadiness(item, $event)"
           [disabled]="readinessActionId === item.id"
         >
-          Підтвердити готовність ВП
+          Позначити ВП БГ
         </button>
 
         <select
-          *ngIf="item.canEdit && item.readinessStatus === 'combat_ready'"
+          *ngIf="item.canEdit && isFpCombatReady(item)"
           [(ngModel)]="notReadyReasons[item.id]"
           [name]="'fp-reason-' + item.id"
           (click)="$event.stopPropagation()"
@@ -372,7 +372,7 @@
         <button
           type="button"
           class="ghost-button"
-          *ngIf="item.canEdit && item.readinessStatus === 'combat_ready'"
+          *ngIf="item.canEdit && isFpCombatReady(item)"
           (click)="setFirePositionNotReady(item, $event)"
           [disabled]="readinessActionId === item.id"
         >
