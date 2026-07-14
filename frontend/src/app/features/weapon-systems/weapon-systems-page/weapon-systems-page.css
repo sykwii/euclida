@@ -148,9 +148,22 @@
 }
 
 .equipment-form input,
-.equipment-form select {
+.equipment-form select,
+.equipment-form textarea {
   min-width: 0;
   width: 100%;
+}
+
+.equipment-form textarea,
+.equipment-form .field-label {
+  grid-column: span 3;
+}
+
+.field-label {
+  display: grid;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .equipment-form input[name='notReadyReason'] {
@@ -297,6 +310,7 @@
 
 .maintenance-box {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   margin-top: 12px;
@@ -309,6 +323,11 @@
 
 .maintenance-box span {
   color: #fcd34d;
+}
+
+.maintenance-box small {
+  flex-basis: 100%;
+  color: #fde68a;
 }
 
 .deploy-row {

@@ -348,8 +348,9 @@ export class WeaponSystemsService implements OnModuleInit {
       const reason = this.normalizeMaintenanceReason(body.reason);
       const startedAt = this.parseDate(body.startedAt);
       const durationMinutes = Number(body.durationMinutes ?? 0);
-      const expectedCompletedAt =
-        Number.isFinite(durationMinutes) && durationMinutes > 0
+      const expectedCompletedAt = body.expectedCompletedAt
+        ? this.parseDate(body.expectedCompletedAt)
+        : Number.isFinite(durationMinutes) && durationMinutes > 0
           ? new Date(startedAt.getTime() + durationMinutes * 60_000)
           : null;
 

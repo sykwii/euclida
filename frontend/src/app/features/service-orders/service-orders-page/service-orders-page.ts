@@ -1988,6 +1988,13 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
     ].join(' · ');
   }
 
+  getSuggestionRejectionText(suggestion: ServiceOrderSuggestion): string {
+    const reasons = suggestion.rejectionReasons?.filter(Boolean) || [];
+    return reasons.length > 0
+      ? reasons.join(' · ')
+      : 'Немає активного повного комплекту пострілу для моделі СГ, дальності або доступного БК.';
+  }
+
   getShortCoordinates(order: ServiceOrder): string {
     return this.getDecimalCoordinates(order) !== '—'
       ? this.getDecimalCoordinates(order)

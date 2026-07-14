@@ -113,6 +113,48 @@
     </section>
   </div>
 
+  <div class="equipment-modal" *ngIf="maintenanceModalWeapon" (click)="closeMaintenanceModal()">
+    <section class="editor-card equipment-dialog" (click)="$event.stopPropagation()">
+      <div class="editor-head">
+        <div>
+          <span>ТО / ремонт</span>
+          <h2>{{ maintenanceModalWeapon.callsign || maintenanceModalWeapon.serialNumber || 'СГ' }}</h2>
+        </div>
+
+        <button type="button" class="ghost-button" (click)="closeMaintenanceModal()">Скасувати</button>
+      </div>
+
+      <form class="equipment-form" (ngSubmit)="submitMaintenance()">
+        <select name="maintenanceReason" [(ngModel)]="maintenanceForm.reason">
+          <option value="breakdown">Поломка</option>
+          <option value="scheduled">Планове ТО</option>
+          <option value="inspection">Огляд</option>
+          <option value="other">Інше</option>
+        </select>
+
+        <textarea
+          name="maintenanceDescription"
+          [(ngModel)]="maintenanceForm.description"
+          placeholder="Опис робіт"
+          rows="3"
+        ></textarea>
+
+        <label class="field-label">
+          Очікуване завершення
+          <input
+            type="datetime-local"
+            name="maintenanceExpectedCompletedAt"
+            [(ngModel)]="maintenanceForm.expectedCompletedAt"
+          />
+        </label>
+
+        <button type="submit" class="primary-button" [disabled]="maintenanceId === maintenanceModalWeapon.id">
+          {{ maintenanceId === maintenanceModalWeapon.id ? 'Відкриваємо...' : 'Відкрити ТО/ремонт' }}
+        </button>
+      </form>
+    </section>
+  </div>
+
   <div class="ui-skeleton-grid" *ngIf="loading" aria-label="Завантаження СГ">
     <span></span>
     <span></span>
@@ -165,6 +207,7 @@
       <section class="maintenance-box" *ngIf="hasOpenMaintenance(item) || item.maintenanceStatus">
         <span>ТО / ремонт</span>
         <strong>{{ getMaintenanceLabel(item) }}</strong>
+        <small>{{ getMaintenanceDetails(item) }}</small>
       </section>
 
       <div class="deploy-row" *ngIf="canAssign(item)">
@@ -270,11 +313,11 @@
         <button
           type="button"
           class="ghost-button"
-          *ngIf="!hasOpenMaintenance(item)"
+          *ngIf="canOpenMaintenance(item)"
           (click)="openRepair(item)"
           [disabled]="maintenanceId === item.id"
         >
-          Відкрити ремонт
+          Відкрити ТО/ремонт
         </button>
 
         <button

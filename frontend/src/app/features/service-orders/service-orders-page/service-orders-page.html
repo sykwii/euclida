@@ -617,6 +617,14 @@
                     <span>{{ getSuggestionVariantCount(suggestion) }} вар.</span>
                   </div>
 
+                  <div
+                    class="co-empty compact"
+                    *ngIf="suggestion.executorType === 'fire_position' && getSuggestionVariantCount(suggestion) === 0"
+                  >
+                    <b>Комплекти пострілу недоступні</b>
+                    <span>{{ getSuggestionRejectionText(suggestion) }}</span>
+                  </div>
+
                   <ng-container
                     *ngIf="
     suggestion.executorType === 'fire_position' &&

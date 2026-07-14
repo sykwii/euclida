@@ -15,6 +15,7 @@ import { WeaponSystemsService } from '../weapon-systems.service';
 
 type WeaponStatusFilter = 'all' | 'combat_ready' | 'not_combat_ready' | 'moving';
 type NotReadyReason = 'breakdown' | 'threat' | 'crew' | 'maintenance' | 'other';
+type MaintenanceReason = 'breakdown' | 'scheduled' | 'inspection' | 'other';
 
 @Component({
   selector: 'app-weapon-systems-page',
@@ -42,6 +43,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   errorMessage = '';
   editingId: string | null = null;
   formModalOpen = false;
+  maintenanceModalWeapon: WeaponSystem | null = null;
   activeFilter: WeaponStatusFilter = 'all';
 
   form = {
@@ -51,6 +53,12 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     unitId: '',
     readinessStatus: 'not_combat_ready',
     notReadyReason: 'other' as NotReadyReason,
+  };
+
+  maintenanceForm = {
+    reason: 'breakdown' as MaintenanceReason,
+    description: '',
+    expectedCompletedAt: '',
   };
 
   constructor(
@@ -384,13 +392,41 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   openRepair(item: WeaponSystem): void {
-    if (this.maintenanceId) {
+    if (!this.canOpenMaintenance(item)) {
+      return;
+    }
+
+    this.maintenanceModalWeapon = item;
+    this.maintenanceForm = {
+      reason: 'breakdown',
+      description: '',
+      expectedCompletedAt: '',
+    };
+  }
+
+  closeMaintenanceModal(): void {
+    this.maintenanceModalWeapon = null;
+  }
+
+  submitMaintenance(): void {
+    const item = this.maintenanceModalWeapon;
+
+    if (!item || this.maintenanceId) {
       return;
     }
 
     this.maintenanceId = item.id;
-    this.service.openMaintenance(item.id, { reason: 'breakdown', description: 'Ремонт відкрито оператором' }).subscribe({
-      next: () => this.afterAction(),
+    this.service.openMaintenance(item.id, {
+      reason: this.maintenanceForm.reason,
+      description: this.maintenanceForm.description.trim() || undefined,
+      expectedCompletedAt: this.maintenanceForm.expectedCompletedAt
+        ? new Date(this.maintenanceForm.expectedCompletedAt).toISOString()
+        : undefined,
+    }).subscribe({
+      next: () => {
+        this.closeMaintenanceModal();
+        this.afterAction();
+      },
       error: (error) => this.failAction(error, 'Не вдалося відкрити ремонт'),
     });
   }
@@ -587,19 +623,24 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   hasOpenMaintenance(item: WeaponSystem): boolean {
     return item.maintenances?.some((maintenance) =>
       ['opened', 'in_progress'].includes(maintenance.status),
-    ) || ['opened', 'in_progress', 'pending', 'approved'].includes(item.maintenanceStatus || '');
+    ) || ['opened', 'in_progress'].includes(item.maintenanceStatus || '');
+  }
+
+  canOpenMaintenance(item: WeaponSystem): boolean {
+    const status = this.getMaintenanceStatus(item);
+    return !status || status === 'cancelled';
   }
 
   canStartMaintenance(item: WeaponSystem): boolean {
-    return this.getMaintenanceStatus(item) === 'opened' || item.maintenanceStatus === 'pending';
+    return this.getMaintenanceStatus(item) === 'opened';
   }
 
   canCompleteMaintenance(item: WeaponSystem): boolean {
-    return this.getMaintenanceStatus(item) === 'in_progress' || item.maintenanceStatus === 'approved';
+    return this.getMaintenanceStatus(item) === 'in_progress';
   }
 
   canCancelMaintenance(item: WeaponSystem): boolean {
-    return this.hasOpenMaintenance(item);
+    return ['opened', 'in_progress'].includes(this.getMaintenanceStatus(item) || '');
   }
 
   getReadinessLabel(status: string): string {
@@ -663,17 +704,45 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   getMaintenanceLabel(item: WeaponSystem): string {
-    const status = this.getMaintenanceStatus(item) || 'opened';
+    const status = this.getMaintenanceStatus(item) || 'none';
     const labels: Record<string, string> = {
-      pending: 'запит',
-      approved: 'у роботі',
       completed: 'завершено',
       cancelled: 'скасовано',
       opened: 'відкрито',
       in_progress: 'у роботі',
+      none: 'немає активного ТО',
     };
 
     return labels[status] ?? status;
+  }
+
+  getMaintenanceReasonLabel(reason: string | null | undefined): string {
+    const labels: Record<string, string> = {
+      breakdown: 'поломка',
+      scheduled: 'планове ТО',
+      inspection: 'огляд',
+      other: 'інше',
+    };
+
+    return reason ? labels[reason] ?? reason : '—';
+  }
+
+  getMaintenanceDetails(item: WeaponSystem): string {
+    const maintenance = this.getDisplayedMaintenance(item);
+
+    if (!maintenance) {
+      return 'Активне ТО або ремонт відсутні';
+    }
+
+    const parts = [
+      this.getMaintenanceReasonLabel(maintenance.reason),
+      maintenance.expectedCompletedAt
+        ? `очікувано до ${this.formatDateTime(maintenance.expectedCompletedAt)}`
+        : '',
+      maintenance.description || maintenance.result || '',
+    ].filter(Boolean);
+
+    return parts.join(' · ');
   }
 
   getDeploymentActionLabel(item: WeaponSystem): string {
@@ -723,11 +792,33 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   private getMaintenanceStatus(item: WeaponSystem): string | null {
-    const active = item.maintenances?.find((maintenance) =>
-      maintenance.status === 'opened' || maintenance.status === 'in_progress',
-    );
+    const active = this.getDisplayedMaintenance(item);
 
     return active?.status ?? item.maintenanceStatus ?? null;
+  }
+
+  private getDisplayedMaintenance(item: WeaponSystem) {
+    const maintenances = item.maintenances ?? [];
+    return (
+      maintenances.find((maintenance) =>
+        ['opened', 'in_progress'].includes(maintenance.status),
+      ) ??
+      maintenances.find((maintenance) => maintenance.status === item.maintenanceStatus) ??
+      maintenances[0] ??
+      null
+    );
+  }
+
+  private formatDateTime(value: string): string {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : date.toLocaleString('uk-UA', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
   }
 
   private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {
@@ -754,6 +845,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     this.movingId = '';
     this.maintenanceId = '';
     this.readinessId = '';
+    this.maintenanceModalWeapon = null;
     this.errorMessage = '';
     this.load();
   }

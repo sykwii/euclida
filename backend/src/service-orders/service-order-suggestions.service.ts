@@ -120,10 +120,10 @@ export class ServiceOrderSuggestionsService {
         )`,
       )
       .andWhere(
-        `NOT (
-          weapon.maintenance_status = 'approved'
-          AND weapon.maintenance_requested_start_at <= NOW()
-          AND weapon.maintenance_planned_end_at > NOW()
+        `(
+          weapon.id IS NULL
+          OR weapon.maintenance_status IS NULL
+          OR weapon.maintenance_status NOT IN ('opened', 'in_progress', 'pending', 'approved')
         )`,
       )
       .getMany();
@@ -163,7 +163,7 @@ export class ServiceOrderSuggestionsService {
         ),
       );
 
-      const variants = await this.findResourcePairs(
+      const kitResult = await this.findResourcePairs(
         position.id,
         position.ammoDepotId,
         distanceM,
@@ -175,8 +175,8 @@ export class ServiceOrderSuggestionsService {
         firePosition: position,
         distanceM,
         completedVgzCount: position.completedVgzCount ?? 0,
-        variants: variants.filter((item) => item.rejectionReasons.length === 0),
-        rejectionReasons: this.collectRejectionReasons(variants),
+        variants: kitResult.variants.filter((item) => item.rejectionReasons.length === 0),
+        rejectionReasons: kitResult.rejectionReasons,
       });
     }
 
@@ -252,12 +252,21 @@ export class ServiceOrderSuggestionsService {
     depotId: string,
     distanceM: number,
     plannedQuantity: number,
-  ): Promise<ServiceOrderSuggestionVariant[]> {
+  ): Promise<{
+    variants: ServiceOrderSuggestionVariant[];
+    rejectionReasons: string[];
+  }> {
     const weaponSystems = await this.dataSource.getRepository(WeaponSystem).find({
-      where: {
-        firePositionId,
-        locationType: 'fire_position',
-      },
+      where: [
+        {
+          currentFirePositionId: firePositionId,
+          deploymentStatus: 'at_fire_position',
+        },
+        {
+          firePositionId,
+          locationType: 'fire_position',
+        },
+      ],
     });
 
     const weaponModelIds = Array.from(
@@ -269,13 +278,15 @@ export class ServiceOrderSuggestionsService {
     );
 
     if (weaponModelIds.length === 0) {
-      return [];
+      return {
+        variants: [],
+        rejectionReasons: ['На ВП немає прибулої СГ з визначеною моделлю озброєння'],
+      };
     }
 
     const configurations = await this.dataSource.getRepository(ShotConfiguration).find({
       where: weaponModelIds.map((weaponModelId) => ({
         weaponModelId,
-        isActive: true,
       })),
       relations: {
         shell: true,
@@ -293,14 +304,11 @@ export class ServiceOrderSuggestionsService {
       },
     });
 
-    const candidateConfigurations = configurations.filter(
-      (item) =>
-        Number(item.maxRangeM) >= Math.ceil(distanceM) &&
-        item.charges.length > 0,
-    );
-
-    if (candidateConfigurations.length === 0) {
-      return [];
+    if (configurations.length === 0) {
+      return {
+        variants: [],
+        rejectionReasons: ['Для моделі СГ немає комплектів пострілу'],
+      };
     }
 
     const [shells, charges, fuzes, primers] = await Promise.all([
@@ -323,7 +331,8 @@ export class ServiceOrderSuggestionsService {
       primers.map((item) => [item.primerId, Number(item.quantity)]),
     );
 
-    return candidateConfigurations
+    const allVariants = configurations
+      .filter((configuration) => configuration.charges.length > 0)
       .map((configuration) => {
         const primaryCharge = configuration.charges[0];
         const availableQuantity = this.getAvailableShotsForConfiguration(
@@ -335,6 +344,7 @@ export class ServiceOrderSuggestionsService {
         );
         const rejectionReasons = this.getConfigurationRejectionReasons(
           configuration,
+          distanceM,
           plannedQuantity,
           availableQuantity,
           shellStock,
@@ -398,6 +408,31 @@ export class ServiceOrderSuggestionsService {
         ...variant,
         priority: index + 1,
       }));
+
+    const rejectionReasons = Array.from(
+      new Set([
+        ...this.collectRejectionReasons(allVariants),
+        ...configurations
+          .filter((configuration) => configuration.charges.length === 0)
+          .flatMap((configuration) =>
+            this.getConfigurationRejectionReasons(
+              configuration,
+              distanceM,
+              plannedQuantity,
+              0,
+              shellStock,
+              chargeStock,
+              fuzeStock,
+              primerStock,
+            ),
+          ),
+      ]),
+    );
+
+    return {
+      variants: allVariants,
+      rejectionReasons,
+    };
   }
 
   private getAvailableShotsForConfiguration(
@@ -428,6 +463,7 @@ export class ServiceOrderSuggestionsService {
 
   private getConfigurationRejectionReasons(
     configuration: ShotConfiguration,
+    distanceM: number,
     plannedQuantity: number,
     availableQuantity: number,
     shellStock: Map<string, number>,
@@ -438,6 +474,32 @@ export class ServiceOrderSuggestionsService {
     const reasons: string[] = [];
     const requiredShots = Math.max(plannedQuantity, 1);
     const availableShells = Math.floor(Number(shellStock.get(configuration.shellId) ?? 0));
+
+    if (!configuration.isActive) {
+      reasons.push(`Комплект "${configuration.name}" не активний`);
+    }
+
+    if (!configuration.fuzeId) {
+      reasons.push(`Комплект "${configuration.name}" без підривника`);
+    }
+
+    if (!configuration.primerId) {
+      reasons.push(`Комплект "${configuration.name}" без праймера`);
+    }
+
+    if (configuration.zoneNumber == null) {
+      reasons.push(`Комплект "${configuration.name}" без номера зони`);
+    }
+
+    if (configuration.charges.length === 0) {
+      reasons.push(`Комплект "${configuration.name}" не містить зарядів`);
+    }
+
+    if (Number(configuration.maxRangeM) < Math.ceil(distanceM)) {
+      reasons.push(
+        `Комплект "${configuration.name}" не покриває дальність: потрібно ${Math.ceil(distanceM)} м, максимум ${Number(configuration.maxRangeM)} м`,
+      );
+    }
 
     if (availableShells < requiredShots) {
       reasons.push(`Недостатньо снарядів: потрібно ${requiredShots}, доступно ${availableShells}`);

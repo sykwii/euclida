@@ -11,6 +11,10 @@ export class OpenWeaponMaintenanceDto {
   startedAt?: string;
 
   @IsOptional()
+  @IsString()
+  expectedCompletedAt?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

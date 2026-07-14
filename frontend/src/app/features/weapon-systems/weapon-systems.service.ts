@@ -142,6 +142,7 @@ export class WeaponSystemsService {
     body: {
       reason?: 'breakdown' | 'scheduled' | 'inspection' | 'other';
       startedAt?: string;
+      expectedCompletedAt?: string;
       durationMinutes?: number;
       description?: string;
     },

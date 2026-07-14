@@ -346,6 +346,30 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     );
   });
 
+  it('opens maintenance with explicit expected completion date', async () => {
+    const weapon = createWeapon();
+    const expectedCompletedAt = '2026-07-15T08:30:00.000Z';
+
+    weaponRepository.findOne.mockResolvedValue(weapon);
+    maintenanceRepository.findOne.mockResolvedValueOnce(null);
+
+    await service.openMaintenance(
+      'weapon-1',
+      { reason: 'scheduled', expectedCompletedAt },
+      user,
+    );
+
+    expect(weapon.maintenancePlannedEndAt?.toISOString()).toBe(expectedCompletedAt);
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponMaintenance,
+      expect.objectContaining({
+        status: 'opened',
+        reason: 'scheduled',
+        expectedCompletedAt: new Date(expectedCompletedAt),
+      }),
+    );
+  });
+
   it('starts maintenance', async () => {
     const weapon = createWeapon({ maintenanceStatus: 'opened' });
     const maintenance = createMaintenance({ status: 'opened' });
