@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entity';
@@ -652,9 +652,15 @@ export class ExecutionEngineService {
       }
 
       const maintenance = await this.dataSource.getRepository(WeaponMaintenance).findOne({
-        where: { weaponSystemId: weapon.id, status: 'in_progress' },
+        where: { weaponSystemId: weapon.id, status: In(['opened', 'in_progress']) },
       });
-      if (maintenance || weapon.maintenanceStatus === 'approved') {
+      if (
+        maintenance ||
+        weapon.maintenanceStatus === 'opened' ||
+        weapon.maintenanceStatus === 'in_progress' ||
+        weapon.maintenanceStatus === 'pending' ||
+        weapon.maintenanceStatus === 'approved'
+      ) {
         reasons.push({
           code: 'weapon_active_maintenance',
           message: 'Для СГ активне ТО або ремонт',

@@ -317,7 +317,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     this.movingId = item.id;
-    this.service.assignToFirePosition(item.id, targetFirePositionId, item.unitId ?? undefined, force).subscribe({
+    this.service.planMoveToFirePosition(item.id, { targetFirePositionId, force }).subscribe({
       next: () => this.afterAction(),
       error: (error) => this.failAction(error, 'Не вдалося призначити СГ на ВП'),
     });
@@ -329,7 +329,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     this.movingId = item.id;
-    this.service.moveToReserve(item.id).subscribe({
+    this.service.planMoveToReserve(item.id).subscribe({
       next: () => this.afterAction(),
       error: (error) => this.failAction(error, 'Не вдалося зняти СГ з ВП'),
     });
@@ -341,10 +341,15 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     this.movingId = item.id;
+    const deployment = this.getActiveDeployment(item);
     const request =
-      item.deploymentStatus === 'moving_to_reserve_area'
-        ? this.service.confirmReserveArrival(item.id)
-        : this.service.confirmFirePositionArrival(item.id);
+      deployment?.status === 'planned'
+        ? deployment.toLocationType === 'reserve_area'
+          ? this.service.startMoveToReserve(item.id)
+          : this.service.startMoveToFirePosition(item.id)
+        : item.deploymentStatus === 'moving_to_reserve_area'
+          ? this.service.confirmReserveArrival(item.id)
+          : this.service.confirmFirePositionArrival(item.id);
 
     request.subscribe({
       next: () => this.afterAction(),
@@ -396,7 +401,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     this.maintenanceId = item.id;
-    this.service.approveMaintenance(item.id).subscribe({
+    this.service.startMaintenance(item.id).subscribe({
       next: () => this.afterAction(),
       error: (error) => this.failAction(error, 'Не вдалося розпочати ТО'),
     });
@@ -411,6 +416,30 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     this.service.completeMaintenance(item.id, { result: 'Завершено оператором' }).subscribe({
       next: () => this.afterAction(),
       error: (error) => this.failAction(error, 'Не вдалося завершити ТО'),
+    });
+  }
+
+  cancelMaintenance(item: WeaponSystem): void {
+    if (this.maintenanceId) {
+      return;
+    }
+
+    this.maintenanceId = item.id;
+    this.service.cancelMaintenance(item.id).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося скасувати ТО'),
+    });
+  }
+
+  cancelDeployment(item: WeaponSystem): void {
+    if (this.movingId) {
+      return;
+    }
+
+    this.movingId = item.id;
+    this.service.cancelDeployment(item.id).subscribe({
+      next: () => this.afterAction(),
+      error: (error) => this.failAction(error, 'Не вдалося скасувати переміщення'),
     });
   }
 
@@ -477,15 +506,25 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   canAssign(item: WeaponSystem): boolean {
-    return this.canEditWeapon(item) && this.getDeploymentStatus(item) === 'reserve_area';
+    return (
+      this.canEditWeapon(item) &&
+      this.getDeploymentStatus(item) === 'reserve_area' &&
+      !this.getActiveDeployment(item) &&
+      !this.hasOpenMaintenance(item)
+    );
   }
 
   canWithdraw(item: WeaponSystem): boolean {
-    return this.canEditWeapon(item) && this.isAtFirePosition(item);
+    return (
+      this.canEditWeapon(item) &&
+      this.isAtFirePosition(item) &&
+      !this.getActiveDeployment(item) &&
+      !this.hasOpenMaintenance(item)
+    );
   }
 
   canConfirmArrival(item: WeaponSystem): boolean {
-    return this.canEditWeapon(item) && this.isMoving(item);
+    return this.canEditWeapon(item) && (!!this.getActiveDeployment(item) || this.isMoving(item));
   }
 
   isAtFirePosition(item: WeaponSystem): boolean {
@@ -501,7 +540,19 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   hasOpenMaintenance(item: WeaponSystem): boolean {
     return item.maintenances?.some((maintenance) =>
       ['opened', 'in_progress'].includes(maintenance.status),
-    ) || ['pending', 'approved'].includes(item.maintenanceStatus || '');
+    ) || ['opened', 'in_progress', 'pending', 'approved'].includes(item.maintenanceStatus || '');
+  }
+
+  canStartMaintenance(item: WeaponSystem): boolean {
+    return this.getMaintenanceStatus(item) === 'opened' || item.maintenanceStatus === 'pending';
+  }
+
+  canCompleteMaintenance(item: WeaponSystem): boolean {
+    return this.getMaintenanceStatus(item) === 'in_progress' || item.maintenanceStatus === 'approved';
+  }
+
+  canCancelMaintenance(item: WeaponSystem): boolean {
+    return this.hasOpenMaintenance(item);
   }
 
   getReadinessLabel(status: string): string {
@@ -541,7 +592,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   getMaintenanceLabel(item: WeaponSystem): string {
-    const status = item.maintenanceStatus || item.maintenances?.[0]?.status || 'opened';
+    const status = this.getMaintenanceStatus(item) || 'opened';
     const labels: Record<string, string> = {
       pending: 'запит',
       approved: 'у роботі',
@@ -552,6 +603,16 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     };
 
     return labels[status] ?? status;
+  }
+
+  getDeploymentActionLabel(item: WeaponSystem): string {
+    const deployment = this.getActiveDeployment(item);
+
+    if (deployment?.status === 'planned') {
+      return deployment.toLocationType === 'reserve_area' ? 'Почати вихід у РЗ' : 'Почати рух до ВП';
+    }
+
+    return 'Підтвердити прибуття';
   }
 
   getLocationName(item: WeaponSystem): string {
@@ -568,6 +629,20 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     return item.locationType === 'fire_position' ? 'at_fire_position' : 'reserve_area';
+  }
+
+  private getActiveDeployment(item: WeaponSystem) {
+    return item.deployments?.find((deployment) =>
+      deployment.status === 'planned' || deployment.status === 'moving',
+    ) ?? null;
+  }
+
+  private getMaintenanceStatus(item: WeaponSystem): string | null {
+    const active = item.maintenances?.find((maintenance) =>
+      maintenance.status === 'opened' || maintenance.status === 'in_progress',
+    );
+
+    return active?.status ?? item.maintenanceStatus ?? null;
   }
 
   private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {

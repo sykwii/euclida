@@ -298,8 +298,9 @@ export class WeaponSystemsService implements OnModuleInit {
         throw new BadRequestException('Немає активного переміщення для скасування');
       }
 
+      const previousStatus = deployment.status;
       deployment.status = 'cancelled';
-      if (deployment.status !== 'planned') {
+      if (previousStatus !== 'planned') {
         deployment.arrivedAt = new Date();
       }
 
@@ -365,7 +366,7 @@ export class WeaponSystemsService implements OnModuleInit {
 
       weapon.readinessStatus = 'not_combat_ready';
       weapon.notReadyReason = reason === 'breakdown' ? 'breakdown' : 'maintenance';
-      weapon.maintenanceStatus = 'pending';
+      weapon.maintenanceStatus = 'opened';
       weapon.maintenanceRequestedStartAt = startedAt;
       weapon.maintenancePlannedEndAt = expectedCompletedAt;
       weapon.maintenanceActualEndAt = null;
@@ -388,7 +389,7 @@ export class WeaponSystemsService implements OnModuleInit {
   }
 
   async startMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
-    this.ensureMainOperator(user);
+    this.ensureMaintenanceFieldOperator(user);
     const result = await this.dataSource.transaction(async (manager) => {
       const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
       const maintenance = await this.findOpenMaintenance(
@@ -397,7 +398,7 @@ export class WeaponSystemsService implements OnModuleInit {
       );
 
       maintenance.status = 'in_progress';
-      weapon.maintenanceStatus = 'approved';
+      weapon.maintenanceStatus = 'in_progress';
       weapon.maintenanceApprovedByUserId = user.sub;
       await manager.save(WeaponMaintenance, maintenance);
       await manager.save(WeaponSystem, weapon);
@@ -410,7 +411,11 @@ export class WeaponSystemsService implements OnModuleInit {
   }
 
   async rejectMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
-    this.ensureMainOperator(user);
+    return this.cancelMaintenance(id, user);
+  }
+
+  async cancelMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
+    this.ensureMaintenanceFieldOperator(user);
     const result = await this.dataSource.transaction(async (manager) => {
       const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
       const maintenance = await this.findOpenMaintenance(
@@ -604,6 +609,7 @@ export class WeaponSystemsService implements OnModuleInit {
   ): Promise<WeaponDeploymentContext> {
     return this.dataSource.transaction(async (manager) => {
       const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      this.ensureWeaponCanStartDeployment(weapon);
       const deployment =
         (await this.findMutableDeployment(
           manager.getRepository(WeaponDeployment),
@@ -672,6 +678,10 @@ export class WeaponSystemsService implements OnModuleInit {
       const firePosition = await this.loadTargetFirePosition(manager, targetId, user);
       const force = 'force' in body && body.force === true;
 
+      if (!mutableDeployment) {
+        this.ensureWeaponCanStartDeployment(weapon);
+      }
+
       if (
         weapon.deploymentStatus === 'at_fire_position' &&
         weapon.currentFirePositionId === firePosition.id
@@ -684,6 +694,14 @@ export class WeaponSystemsService implements OnModuleInit {
           this.getDeploymentNote(body),
         );
         return { weapon, firePosition, deployment };
+      }
+
+      if (
+        weapon.deploymentStatus === 'at_fire_position' &&
+        weapon.currentFirePositionId &&
+        weapon.currentFirePositionId !== firePosition.id
+      ) {
+        throw new BadRequestException('СГ вже перебуває на іншій ВП. Спочатку виведіть її в РЗ');
       }
 
       this.ensureNonReadyAssignmentConfirmed(weapon, force);
@@ -1139,12 +1157,33 @@ export class WeaponSystemsService implements OnModuleInit {
   }
 
   private ensureWeaponCanStartDeployment(weapon: WeaponSystem): void {
+    if (this.hasActiveMaintenance(weapon)) {
+      throw new BadRequestException('Неможливо переміщувати СГ під час активного ТО або ремонту');
+    }
+
     if (
       weapon.deploymentStatus === 'moving_to_fire_position' ||
       weapon.deploymentStatus === 'moving_to_reserve_area'
     ) {
       throw new BadRequestException('СГ вже в русі');
     }
+  }
+
+  private hasActiveMaintenance(weapon: WeaponSystem): boolean {
+    if (
+      weapon.maintenanceStatus === 'opened' ||
+      weapon.maintenanceStatus === 'in_progress' ||
+      weapon.maintenanceStatus === 'pending' ||
+      weapon.maintenanceStatus === 'approved'
+    ) {
+      return true;
+    }
+
+    return (
+      weapon.maintenances?.some((item) =>
+        item.status === 'opened' || item.status === 'in_progress',
+      ) ?? false
+    );
   }
 
   private getCurrentLocationType(weapon: WeaponSystem): DeploymentLocationType {

@@ -194,7 +194,17 @@
           (click)="startMove(item)"
           [disabled]="movingId === item.id"
         >
-          Підтвердити прибуття
+          {{ getDeploymentActionLabel(item) }}
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="canConfirmArrival(item)"
+          (click)="cancelDeployment(item)"
+          [disabled]="movingId === item.id"
+        >
+          Скасувати переміщення
         </button>
 
         <button
@@ -240,7 +250,7 @@
         <button
           type="button"
           class="ghost-button"
-          *ngIf="item.maintenanceStatus === 'pending'"
+          *ngIf="canStartMaintenance(item)"
           (click)="startMaintenance(item)"
           [disabled]="maintenanceId === item.id"
         >
@@ -250,11 +260,21 @@
         <button
           type="button"
           class="ghost-button"
-          *ngIf="item.maintenanceStatus === 'approved'"
+          *ngIf="canCompleteMaintenance(item)"
           (click)="completeMaintenance(item)"
           [disabled]="maintenanceId === item.id"
         >
           Завершити ТО
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="canCancelMaintenance(item)"
+          (click)="cancelMaintenance(item)"
+          [disabled]="maintenanceId === item.id"
+        >
+          Скасувати ТО
         </button>
 
         <button

@@ -163,6 +163,91 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     });
   });
 
+  it('plans, starts and confirms movement to a fire position', async () => {
+    const reserveWeapon = createWeapon({ readinessStatus: 'combat_ready' });
+    const movingWeapon = createWeapon({
+      deploymentStatus: 'moving_to_fire_position',
+      currentFirePositionId: null,
+    });
+    const arrivedWeapon = createWeapon({
+      deploymentStatus: 'at_fire_position',
+      currentFirePositionId: 'fp-1',
+      firePositionId: 'fp-1',
+      locationType: 'fire_position',
+    });
+
+    weaponRepository.findOne.mockResolvedValue(reserveWeapon);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(reserveWeapon)
+      .mockResolvedValueOnce(reserveWeapon)
+      .mockResolvedValueOnce(null);
+    firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
+    deploymentRepository.findOne.mockResolvedValueOnce(null);
+
+    await service.planMoveToFirePosition(
+      'weapon-1',
+      { targetFirePositionId: 'fp-1', force: true },
+      user,
+    );
+
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponDeployment,
+      expect.objectContaining({ status: 'planned', toLocationId: 'fp-1' }),
+    );
+
+    weaponRepository.findOne.mockReset();
+    firePositionRepository.findOne.mockReset();
+    deploymentRepository.findOne.mockReset();
+    manager.save.mockClear();
+
+    weaponRepository.findOne.mockResolvedValue(movingWeapon);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(reserveWeapon)
+      .mockResolvedValueOnce(reserveWeapon)
+      .mockResolvedValueOnce(null);
+    firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
+    deploymentRepository.findOne.mockResolvedValueOnce(
+      createDeployment({ status: 'planned', toLocationType: 'fire_position', toLocationId: 'fp-1' }),
+    );
+
+    await service.startMoveToFirePosition('weapon-1', {}, user);
+
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponSystem,
+      expect.objectContaining({ deploymentStatus: 'moving_to_fire_position' }),
+    );
+
+    weaponRepository.findOne.mockReset();
+    firePositionRepository.findOne.mockReset();
+    deploymentRepository.findOne.mockReset();
+    manager.save.mockClear();
+
+    weaponRepository.findOne.mockResolvedValue(arrivedWeapon);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(movingWeapon)
+      .mockResolvedValueOnce(movingWeapon)
+      .mockResolvedValueOnce(null);
+    firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
+    deploymentRepository.findOne.mockResolvedValueOnce(
+      createDeployment({ status: 'moving', toLocationType: 'fire_position', toLocationId: 'fp-1' }),
+    );
+
+    const result = await service.confirmFirePositionArrival(
+      'weapon-1',
+      { targetFirePositionId: 'fp-1' },
+      user,
+    );
+
+    expect(result.deploymentStatus).toBe('at_fire_position');
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponSystem,
+      expect.objectContaining({
+        deploymentStatus: 'at_fire_position',
+        currentFirePositionId: 'fp-1',
+      }),
+    );
+  });
+
   it('rejects duplicate fire position occupancy', async () => {
     const weapon = createWeapon({ readinessStatus: 'combat_ready' });
     weaponRepository.findOne
@@ -190,6 +275,83 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
         user,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('opens maintenance and marks weapon not combat ready', async () => {
+    const weapon = createWeapon();
+
+    weaponRepository.findOne.mockResolvedValue(weapon);
+    maintenanceRepository.findOne.mockResolvedValueOnce(null);
+
+    await service.openMaintenance(
+      'weapon-1',
+      { reason: 'breakdown', durationMinutes: 60, description: 'repair' },
+      user,
+    );
+
+    expect(weapon.readinessStatus).toBe('not_combat_ready');
+    expect(weapon.notReadyReason).toBe('breakdown');
+    expect(weapon.maintenanceStatus).toBe('opened');
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponMaintenance,
+      expect.objectContaining({ status: 'opened', reason: 'breakdown' }),
+    );
+  });
+
+  it('starts maintenance', async () => {
+    const weapon = createWeapon({ maintenanceStatus: 'opened' });
+    const maintenance = createMaintenance({ status: 'opened' });
+
+    weaponRepository.findOne.mockResolvedValue(weapon);
+    maintenanceRepository.findOne.mockResolvedValueOnce(maintenance);
+
+    await service.startMaintenance('weapon-1', user);
+
+    expect(maintenance.status).toBe('in_progress');
+    expect(weapon.maintenanceStatus).toBe('in_progress');
+  });
+
+  it('cancels active maintenance', async () => {
+    const weapon = createWeapon({ maintenanceStatus: 'opened' });
+    const maintenance = createMaintenance({ status: 'opened' });
+
+    weaponRepository.findOne.mockResolvedValue(weapon);
+    maintenanceRepository.findOne.mockResolvedValueOnce(maintenance);
+
+    await service.cancelMaintenance('weapon-1', user);
+
+    expect(maintenance.status).toBe('cancelled');
+    expect(weapon.maintenanceStatus).toBe('cancelled');
+  });
+
+  it('rejects duplicate active maintenance', async () => {
+    const weapon = createWeapon({ maintenanceStatus: 'opened' });
+
+    weaponRepository.findOne.mockResolvedValue(weapon);
+    maintenanceRepository.findOne.mockResolvedValueOnce(
+      createMaintenance({ status: 'opened' }),
+    );
+
+    await expect(
+      service.openMaintenance('weapon-1', { reason: 'scheduled' }, user),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('blocks deployment while maintenance is active', async () => {
+    const weapon = createWeapon({
+      maintenanceStatus: 'opened',
+      maintenances: [createMaintenance({ status: 'opened' })],
+    });
+
+    weaponRepository.findOne.mockResolvedValue(weapon);
+
+    await expect(
+      service.planMoveToFirePosition(
+        'weapon-1',
+        { targetFirePositionId: 'fp-1', force: true },
+        user,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('blocks withdrawal while a fire position has active execution', async () => {
@@ -351,5 +513,29 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       updatedAt: new Date('2026-07-14T00:00:00.000Z'),
       ...overrides,
     } as WeaponMaintenance;
+  }
+
+  function createDeployment(
+    overrides: Partial<WeaponDeployment> = {},
+  ): WeaponDeployment {
+    return {
+      id: 'deployment-1',
+      weaponSystemId: 'weapon-1',
+      weaponSystem: null,
+      fromLocationType: 'reserve_area',
+      fromLocationId: null,
+      toLocationType: 'fire_position',
+      toLocationId: 'fp-1',
+      status: 'planned',
+      orderedAt: new Date('2026-07-14T00:00:00.000Z'),
+      departedAt: null,
+      arrivedAt: null,
+      orderedByUserId: 'user-1',
+      confirmedByUserId: null,
+      note: null,
+      createdAt: new Date('2026-07-14T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-14T00:00:00.000Z'),
+      ...overrides,
+    } as WeaponDeployment;
   }
 });

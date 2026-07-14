@@ -116,8 +116,16 @@ export class WeaponSystemsService {
     return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/approve`, {});
   }
 
+  startMaintenance(id: string): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/start`, {});
+  }
+
   rejectMaintenance(id: string): Observable<WeaponSystem> {
     return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/reject`, {});
+  }
+
+  cancelMaintenance(id: string): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/maintenance/cancel`, {});
   }
 
   extendMaintenance(id: string, body: { extraMinutes: number; note?: string }): Observable<WeaponSystem> {

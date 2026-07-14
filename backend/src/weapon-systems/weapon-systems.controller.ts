@@ -198,12 +198,30 @@ approveMaintenance(
 }
 
 @UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/start')
+startMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+): Promise<WeaponSystem> {
+  return this.service.startMaintenance(id, user);
+}
+
+@UseGuards(WriteAccessGuard)
 @Post(':id/maintenance/reject')
 rejectMaintenance(
   @CurrentUser() user: AuthUser,
   @Param('id') id: string,
 ): Promise<WeaponSystem> {
   return this.service.rejectMaintenance(id, user);
+}
+
+@UseGuards(WriteAccessGuard)
+@Post(':id/maintenance/cancel')
+cancelMaintenance(
+  @CurrentUser() user: AuthUser,
+  @Param('id') id: string,
+): Promise<WeaponSystem> {
+  return this.service.cancelMaintenance(id, user);
 }
 
 @UseGuards(WriteAccessGuard)
