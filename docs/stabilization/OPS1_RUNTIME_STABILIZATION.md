@@ -151,3 +151,25 @@ OPS-1.3 verification:
 - Backend full tests: `npm test -- --runInBand` passed: 9 suites / 48 tests.
 - Frontend build: `npm run build` passed.
 - Frontend tests: `npm test -- --watch=false` passed: 6 files / 8 tests.
+
+## OPS-1.4 Fire Position Scope From Canonical Weapon
+
+- Fire-position scope/readiness resolution now uses an effective unit:
+  1. `fire_positions.unit_id`;
+  2. canonical arrived weapon unit where `weapon_systems.current_fire_position_id = firePosition.id` and `deployment_status = 'at_fire_position'`;
+  3. active incoming deployment weapon unit for planned/moving deployment to that FP;
+  4. `null`.
+- `fire_positions` still has no `current_weapon_system_id`; canonical current assignment remains `weapon_systems.current_fire_position_id + deployment_status`.
+- `GET /fire-positions` resolves assigned/incoming weapon before masking by scope, so a null-unit FP with an arrived canonical weapon is visible to the weapon unit.
+- `GET /fire-positions/map` includes null-unit FPs when a canonical arrived weapon or active incoming deployment belongs to the allowed unit, then rechecks effective unit before returning each row.
+- `POST /fire-positions/:id/readiness/confirm` locks only the FP root row, resolves the canonical arrived weapon, backfills `fire_positions.unit_id` from that weapon inside the same transaction, and then validates scope.
+- Readiness confirmation does not infer unit from planned/incoming deployment. If neither FP nor arrived weapon has a unit, the API returns `Не визначено підрозділ ВП`.
+- Legacy `weapon_systems.fire_position_id + location_type` remains readable as fallback, but does not authorize effective-unit readiness resolution.
+
+OPS-1.4 verification:
+
+- Backend focused test: `npm test -- fire-positions.service.spec.ts --runInBand` passed: 12 tests.
+- Backend build: `npm run build` passed.
+- Backend full tests: `npm test -- --runInBand` passed: 9 suites / 56 tests.
+- Frontend build: `npm run build` passed outside sandbox after the sandboxed run hit Windows path access denial.
+- Frontend tests: `npm test -- --watch=false` passed outside sandbox: 6 files / 8 tests.

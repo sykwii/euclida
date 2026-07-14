@@ -17,6 +17,12 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
   function createService(
     firePosition: FirePosition,
     assignedWeapon: WeaponSystem | null,
+    options: {
+      incomingDeployment?: WeaponDeployment | null;
+      legacyWeapon?: WeaponSystem | null;
+      allowedUnitIds?: string[];
+      canAccessUnit?: boolean;
+    } = {},
   ): FirePositionsService {
     const firePositionRepository = {
       find: jest.fn(async () => [firePosition]),
@@ -25,10 +31,23 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
       remove: jest.fn(),
     };
     const weaponRepository = {
-      findOne: jest.fn(async () => assignedWeapon),
+      find: jest.fn(async () => (assignedWeapon ? [assignedWeapon] : [])),
+      findOne: jest.fn(async (query: { where?: Partial<WeaponSystem> }) => {
+        const where = query.where;
+        if (where?.currentFirePositionId !== undefined) {
+          return assignedWeapon;
+        }
+        if (where?.firePositionId !== undefined) {
+          return options.legacyWeapon ?? null;
+        }
+        return assignedWeapon;
+      }),
     };
     const deploymentRepository = {
-      findOne: jest.fn(async () => null),
+      find: jest.fn(async () =>
+        options.incomingDeployment ? [options.incomingDeployment] : [],
+      ),
+      findOne: jest.fn(async () => options.incomingDeployment ?? null),
     };
     const dataSource = {
       getRepository: jest.fn((entity: unknown) => {
@@ -37,9 +56,16 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
         if (entity === FirePosition) return firePositionRepository;
         return { find: jest.fn(async () => []), findOne: jest.fn(async () => null) };
       }),
-      transaction: jest.fn(async (callback: (manager: unknown) => Promise<unknown>) =>
+      transaction: jest.fn(async (callback: (manager: {
+        getRepository: (entity: unknown) => unknown;
+        save: (entity: unknown, item: unknown) => Promise<unknown>;
+      }) => Promise<unknown>) =>
         callback({
-          getRepository: () => firePositionRepository,
+          getRepository: (entity: unknown) => {
+            if (entity === WeaponSystem) return weaponRepository;
+            if (entity === WeaponDeployment) return deploymentRepository;
+            return firePositionRepository;
+          },
           save: async (_entity: unknown, item: unknown) => item,
         }),
       ),
@@ -49,8 +75,8 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
     return new FirePositionsService(
       firePositionRepository as never,
       {
-        getAllowedUnitIds: jest.fn(async () => ['unit-1']),
-        canAccessUnit: jest.fn(async () => true),
+        getAllowedUnitIds: jest.fn(async () => options.allowedUnitIds ?? ['unit-1']),
+        canAccessUnit: jest.fn(async () => options.canAccessUnit ?? true),
       } as never,
       dataSource as never,
       { emitMany: jest.fn() } as never,
@@ -101,6 +127,113 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
     expect(item.assignedWeapon).toBeNull();
     expect(item.aggregateReady).toBe(false);
     expect(item.aggregateReadinessReasons).toContain('weapon_missing');
+  });
+
+  it('returns assigned weapon for null-unit fire position with canonical arrived weapon unit', async () => {
+    const service = createService(
+      createFirePosition({ unitId: null, readinessStatus: 'combat_ready' }),
+      createWeapon({ unitId: 'unit-1' }),
+    );
+
+    const [item] = await service.findAll(user);
+
+    expect(item.isOwnScope).toBe(true);
+    expect(item.assignedWeapon?.id).toBe('weapon-1');
+    expect(item.unitId).toBe('unit-1');
+  });
+
+  it('shows null-unit fire position on map when canonical arrived weapon belongs to scope', async () => {
+    const service = createService(
+      createFirePosition({ unitId: null, readinessStatus: 'combat_ready' }),
+      createWeapon({ unitId: 'unit-1' }),
+    );
+
+    const [item] = await service.findAllForMap(user);
+
+    expect(item.assignedWeapon?.id).toBe('weapon-1');
+    expect(item.unitId).toBe('unit-1');
+  });
+
+  it('backfills fire-position unit from canonical arrived weapon on readiness confirmation', async () => {
+    const firePosition = createFirePosition({ unitId: null });
+    const service = createService(firePosition, createWeapon({ unitId: 'unit-1' }));
+
+    const result = await service.confirmReadiness(
+      'fp-1',
+      { readinessStatus: 'combat_ready' },
+      user,
+    );
+
+    expect(result.unitId).toBe('unit-1');
+    expect(result.readinessStatus).toBe('combat_ready');
+  });
+
+  it('rejects readiness confirmation for mismatching scope', async () => {
+    const service = createService(
+      createFirePosition({ unitId: null }),
+      createWeapon({ unitId: 'unit-2' }),
+      { canAccessUnit: false },
+    );
+
+    await expect(
+      service.confirmReadiness('fp-1', { readinessStatus: 'combat_ready' }, user),
+    ).rejects.toThrow('Немає доступу до цього підрозділу');
+  });
+
+  it('returns explicit error when fire position and arrived weapon both have no unit', async () => {
+    const service = createService(
+      createFirePosition({ unitId: null }),
+      createWeapon({ unitId: null }),
+    );
+
+    await expect(
+      service.confirmReadiness('fp-1', { readinessStatus: 'combat_ready' }, user),
+    ).rejects.toThrow('Не визначено підрозділ ВП');
+  });
+
+  it('does not authorize readiness confirmation from planned incoming weapon', async () => {
+    const service = createService(
+      createFirePosition({ unitId: null }),
+      null,
+      {
+        incomingDeployment: createDeployment(createWeapon({ unitId: 'unit-1' })),
+      },
+    );
+
+    await expect(
+      service.confirmReadiness('fp-1', { readinessStatus: 'combat_ready' }, user),
+    ).rejects.toThrow('Не визначено підрозділ ВП');
+  });
+
+  it('does not leak cross-unit fire position on map', async () => {
+    const service = createService(
+      createFirePosition({ unitId: null }),
+      createWeapon({ unitId: 'unit-2' }),
+      { allowedUnitIds: ['unit-1'] },
+    );
+
+    const items = await service.findAllForMap(user);
+
+    expect(items).toEqual([]);
+  });
+
+  it('keeps legacy assigned weapon readable for historical positions', async () => {
+    const service = createService(
+      createFirePosition({ unitId: 'unit-1' }),
+      null,
+      {
+        legacyWeapon: createWeapon({
+          currentFirePositionId: null,
+          deploymentStatus: 'reserve_area',
+          firePositionId: 'fp-1',
+          locationType: 'fire_position',
+        }),
+      },
+    );
+
+    const [item] = await service.findAll(user);
+
+    expect(item.assignedWeapon?.firePositionId).toBe('fp-1');
   });
 
   function createFirePosition(overrides: Partial<FirePosition> = {}): FirePosition {
@@ -168,5 +301,26 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
       deployments: [],
       ...overrides,
     } as WeaponSystem;
+  }
+
+  function createDeployment(weapon: WeaponSystem): WeaponDeployment {
+    return {
+      id: 'deployment-1',
+      weaponSystemId: weapon.id,
+      weaponSystem: weapon,
+      fromLocationType: 'reserve_area',
+      fromLocationId: null,
+      toLocationType: 'fire_position',
+      toLocationId: 'fp-1',
+      status: 'planned',
+      orderedAt: new Date(),
+      departedAt: null,
+      arrivedAt: null,
+      orderedByUserId: user.sub,
+      confirmedByUserId: null,
+      note: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
   }
 });

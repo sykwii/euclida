@@ -5,7 +5,7 @@
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { CreateFirePositionDto } from './dto/create-fire-position.dto';
 import { FirePosition } from './fire-position.entity';
 import { UpdateFirePositionDto } from './dto/update-fire-position.dto';
@@ -95,31 +95,17 @@ export class FirePositionsService implements OnModuleInit {
     > = [];
 
     for (const position of positions) {
-      const assignedWeapon = await this.dataSource
-        .getRepository(WeaponSystem)
-        .findOne({
-          where: [
-            {
-              currentFirePositionId: position.id,
-              deploymentStatus: 'at_fire_position',
-            },
-            {
-              firePositionId: position.id,
-              locationType: 'fire_position',
-            },
-          ],
-          relations: {
-            weaponModel: true,
-            unit: true,
-            maintenances: true,
-          },
-        });
-
-      const isOwnScope =
-        allowedUnitIds === null ||
-        (!!position.unitId && allowedUnitIds.includes(position.unitId));
+      const assignedWeapon = await this.findAssignedWeaponForPosition(position.id);
       const incomingDeployment = await this.findIncomingDeployment(position.id);
       const incomingWeapon = incomingDeployment?.weaponSystem ?? null;
+      const effectiveUnitId = this.resolveEffectiveUnitId(
+        position,
+        assignedWeapon,
+        incomingWeapon,
+      );
+      const isOwnScope =
+        allowedUnitIds === null ||
+        (!!effectiveUnitId && allowedUnitIds.includes(effectiveUnitId));
 
       const syncedPosition = this.applyWeaponStateToFirePosition(
         position,
@@ -168,9 +154,9 @@ export class FirePositionsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<FirePosition> {
     const saved = await this.dataSource.transaction(async (manager) => {
-      const item = await manager.getRepository(FirePosition).findOne({
+      const firePositionRepository = manager.getRepository(FirePosition);
+      const item = await firePositionRepository.findOne({
         where: { id },
-        relations: { unit: true, ammoDepot: true },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -178,7 +164,21 @@ export class FirePositionsService implements OnModuleInit {
         throw new NotFoundException('ВП не знайдено');
       }
 
-      await this.ensureCanUseUnit(user, item.unitId);
+      const assignedWeapon = await this.findCanonicalAssignedWeapon(
+        manager.getRepository(WeaponSystem),
+        item.id,
+      );
+      const effectiveUnitId = item.unitId ?? assignedWeapon?.unitId ?? null;
+
+      if (!effectiveUnitId) {
+        throw new BadRequestException('Не визначено підрозділ ВП');
+      }
+
+      if (!item.unitId && assignedWeapon?.unitId) {
+        item.unitId = assignedWeapon.unitId;
+      }
+
+      await this.ensureCanUseUnit(user, effectiveUnitId);
 
       if (body.readinessStatus === 'combat_ready') {
         item.readinessStatus = 'combat_ready';
@@ -440,25 +440,7 @@ private normalizePositionType(value: string | null | undefined): string {
     if (!firePosition) {
       throw new NotFoundException('ВП не знайдено');
     }
-    const assignedWeapon = await this.dataSource
-      .getRepository(WeaponSystem)
-      .findOne({
-        where: [
-          {
-            currentFirePositionId: id,
-            deploymentStatus: 'at_fire_position',
-          },
-          {
-            firePositionId: id,
-            locationType: 'fire_position',
-          },
-        ],
-        relations: {
-          weaponModel: true,
-          unit: true,
-          maintenances: true,
-        },
-      });
+    const assignedWeapon = await this.findAssignedWeaponForPosition(id);
     const incomingDeployment = await this.findIncomingDeployment(id);
     const incomingWeapon = incomingDeployment?.weaponSystem ?? null;
 
@@ -584,13 +566,22 @@ private normalizePositionType(value: string | null | undefined): string {
       return [];
     }
 
+    const scopedPositionIds =
+      allowedUnitIds === null
+        ? []
+        : await this.findScopedPositionIdsFromWeapons(allowedUnitIds);
+    const where: FindOptionsWhere<FirePosition> | FindOptionsWhere<FirePosition>[] =
+      allowedUnitIds === null
+        ? {}
+        : [
+            { unitId: In(allowedUnitIds) },
+            ...(scopedPositionIds.length > 0
+              ? [{ id: In(scopedPositionIds) }]
+              : []),
+          ];
+
     const positions = await this.repository.find({
-      where:
-        allowedUnitIds === null
-          ? {}
-          : {
-              unitId: In(allowedUnitIds),
-            },
+      where,
       relations: {
         unit: true,
         ammoDepot: true,
@@ -612,31 +603,26 @@ private normalizePositionType(value: string | null | undefined): string {
     > = [];
 
     for (const position of positions) {
-      const assignedWeapon = await this.dataSource
-        .getRepository(WeaponSystem)
-        .findOne({
-          where: [
-            {
-              currentFirePositionId: position.id,
-              deploymentStatus: 'at_fire_position',
-            },
-            {
-              firePositionId: position.id,
-              locationType: 'fire_position',
-            },
-          ],
-          relations: {
-            weaponModel: true,
-            unit: true,
-            maintenances: true,
-          },
-        });
+      const assignedWeapon = await this.findAssignedWeaponForPosition(position.id);
       const syncedPosition = this.applyWeaponStateToFirePosition(
         position,
         assignedWeapon,
       );
       const incomingDeployment = await this.findIncomingDeployment(position.id);
       const incomingWeapon = incomingDeployment?.weaponSystem ?? null;
+      const effectiveUnitId = this.resolveEffectiveUnitId(
+        position,
+        assignedWeapon,
+        incomingWeapon,
+      );
+
+      if (
+        allowedUnitIds !== null &&
+        (!effectiveUnitId || !allowedUnitIds.includes(effectiveUnitId))
+      ) {
+        continue;
+      }
+
       const maxSectorDistanceM =
         await this.getMaxSectorDistanceForPosition(syncedPosition);
 
@@ -719,6 +705,120 @@ private normalizePositionType(value: string | null | undefined): string {
       },
       order: { updatedAt: 'DESC' },
     });
+  }
+
+  private resolveEffectiveUnitId(
+    position: FirePosition,
+    assignedWeapon?: WeaponSystem | null,
+    incomingWeapon?: WeaponSystem | null,
+  ): string | null {
+    if (position.unitId) {
+      return position.unitId;
+    }
+
+    if (
+      assignedWeapon?.unitId &&
+      assignedWeapon.deploymentStatus === 'at_fire_position' &&
+      assignedWeapon.currentFirePositionId === position.id
+    ) {
+      return assignedWeapon.unitId;
+    }
+
+    return incomingWeapon?.unitId ?? null;
+  }
+
+  private async findAssignedWeaponForPosition(
+    firePositionId: string,
+  ): Promise<WeaponSystem | null> {
+    const repository = this.dataSource.getRepository(WeaponSystem);
+    const canonical = await this.findCanonicalAssignedWeapon(
+      repository,
+      firePositionId,
+    );
+
+    if (canonical) {
+      return canonical;
+    }
+
+    return this.findLegacyAssignedWeapon(repository, firePositionId);
+  }
+
+  private async findCanonicalAssignedWeapon(
+    repository: Repository<WeaponSystem>,
+    firePositionId: string,
+  ): Promise<WeaponSystem | null> {
+    return repository.findOne({
+      where: {
+        currentFirePositionId: firePositionId,
+        deploymentStatus: 'at_fire_position',
+      },
+      relations: {
+        weaponModel: true,
+        unit: true,
+        maintenances: true,
+      },
+    });
+  }
+
+  private async findLegacyAssignedWeapon(
+    repository: Repository<WeaponSystem>,
+    firePositionId: string,
+  ): Promise<WeaponSystem | null> {
+    return repository.findOne({
+      where: {
+        firePositionId,
+        locationType: 'fire_position',
+      },
+      relations: {
+        weaponModel: true,
+        unit: true,
+        maintenances: true,
+      },
+    });
+  }
+
+  private async findScopedPositionIdsFromWeapons(
+    allowedUnitIds: string[],
+  ): Promise<string[]> {
+    const canonicalWeapons = await this.dataSource.getRepository(WeaponSystem).find({
+      where: {
+        deploymentStatus: 'at_fire_position',
+        unitId: In(allowedUnitIds),
+      },
+      select: { currentFirePositionId: true },
+    });
+    const incomingDeployments = await this.dataSource
+      .getRepository(WeaponDeployment)
+      .find({
+        where: {
+          toLocationType: 'fire_position',
+          status: In(['planned', 'moving']),
+          weaponSystem: {
+            unitId: In(allowedUnitIds),
+          },
+        },
+        relations: {
+          weaponSystem: true,
+        },
+        select: {
+          toLocationId: true,
+          weaponSystem: {
+            id: true,
+            unitId: true,
+          },
+        },
+      });
+
+    return Array.from(
+      new Set([
+        ...canonicalWeapons
+          .map((weapon) => weapon.currentFirePositionId)
+          .filter((id): id is string => !!id),
+        ...incomingDeployments
+          .map((deployment) => deployment.toLocationId)
+          .filter((id): id is string => !!id),
+      ]),
+    );
   }
 
   private async ensureCanUseUnit(
