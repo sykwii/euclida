@@ -11,6 +11,7 @@ import { AuthModule } from '../auth/auth.module';
 import { AccessScopeModule } from '../access-scope/access-scope.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { EventLogsModule } from '../event-logs/event-logs.module';
+import { OperationalNotificationsModule } from '../operational-notifications/operational-notifications.module';
 
 
 @Module({
@@ -26,6 +27,7 @@ import { EventLogsModule } from '../event-logs/event-logs.module';
     AccessScopeModule,
     RealtimeModule,
     EventLogsModule,
+    OperationalNotificationsModule,
   ],
   controllers: [WeaponSystemsController],
   providers: [WeaponSystemsService],

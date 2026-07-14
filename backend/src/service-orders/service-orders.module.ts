@@ -17,9 +17,10 @@ import { AuthModule } from '../auth/auth.module';
 import { EventLogsModule } from '../event-logs/event-logs.module';
 import { ReconModule } from '../modules/recon/recon.module';
 import { ShotConfigurationsModule } from '../shot-configurations/shot-configurations.module';
+import { OperationalNotificationsModule } from '../operational-notifications/operational-notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ServiceOrder, ServiceOrderDelivery, ServiceOrderActualAmmo, ServiceOrderActualShotConfiguration, ServiceOrderActualShotConfigurationCharge, ExecutionRecord, ExecutionRecordArtillery, ExecutionRecordCharge]),RealtimeModule,AccessScopeModule,AuthModule,EventLogsModule,ReconModule,ShotConfigurationsModule],
+  imports: [TypeOrmModule.forFeature([ServiceOrder, ServiceOrderDelivery, ServiceOrderActualAmmo, ServiceOrderActualShotConfiguration, ServiceOrderActualShotConfigurationCharge, ExecutionRecord, ExecutionRecordArtillery, ExecutionRecordCharge]),RealtimeModule,AccessScopeModule,AuthModule,EventLogsModule,ReconModule,ShotConfigurationsModule,OperationalNotificationsModule],
   controllers: [ServiceOrdersController],
   providers: [
   ServiceOrdersService,

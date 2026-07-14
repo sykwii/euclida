@@ -88,6 +88,7 @@
           <a routerLink="/notifications" routerLinkActive="active" title="Центр повідомлень">
             <svg class="core2-nav-icon" aria-hidden="true"><use href="#c2i-bell"></use></svg>
             <b>Центр повідомлень</b>
+            <em class="critical" *ngIf="operationalUnreadCount > 0">{{ operationalUnreadCount }}</em>
           </a>
         </div>
       </section>
@@ -375,6 +376,7 @@
     </div>
   </section>
 
+  <app-operational-notification-overlay></app-operational-notification-overlay>
   <app-operator-push></app-operator-push>
   <app-toast-container></app-toast-container>
 </div>

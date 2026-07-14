@@ -13,6 +13,7 @@ import type { AuthUser } from '../auth/auth-user.types';
 import { EventLogsService } from '../event-logs/event-logs.service';
 import { FirePosition } from '../fire-positions/fire-position.entity';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { OperationalNotificationsService } from '../operational-notifications/operational-notifications.service';
 import { ServiceOrder } from '../service-orders/service-order.entity';
 import { AssignWeaponToFirePositionDto } from './dto/assign-weapon-to-fire-position.dto';
 import { CompleteWeaponMaintenanceDto } from './dto/complete-weapon-maintenance.dto';
@@ -76,6 +77,7 @@ export class WeaponSystemsService implements OnModuleInit {
     private readonly eventLogs: EventLogsService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly operationalNotifications?: OperationalNotificationsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -158,6 +160,7 @@ export class WeaponSystemsService implements OnModuleInit {
   ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const item = await this.findOne(id, user);
+    const previousReadinessStatus = item.readinessStatus;
     await this.ensureCanUseUnit(user, data.unitId ?? item.unitId);
     this.rejectDirectLocationMutation(data, item);
 
@@ -187,6 +190,11 @@ export class WeaponSystemsService implements OnModuleInit {
     const saved = await this.repository.save(item);
     await this.writeWeaponEvent(saved, user, 'updated');
     this.emitWeaponChanged('updated', saved.id);
+    await this.operationalNotifications?.notifyWeaponReadinessTransition(
+      previousReadinessStatus,
+      saved.id,
+      user.sub,
+    );
     return this.findOne(saved.id, user);
   }
 
@@ -343,6 +351,7 @@ export class WeaponSystemsService implements OnModuleInit {
     this.ensureMaintenanceFieldOperator(user);
     const result = await this.dataSource.transaction(async (manager) => {
       const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const previousReadinessStatus = weapon.readinessStatus;
       await this.ensureNoOpenMaintenance(manager.getRepository(WeaponMaintenance), weapon.id);
 
       const reason = this.normalizeMaintenanceReason(body.reason);
@@ -378,12 +387,17 @@ export class WeaponSystemsService implements OnModuleInit {
 
       await manager.save(WeaponMaintenance, maintenance);
       await manager.save(WeaponSystem, weapon);
-      return weapon;
+      return { weapon, previousReadinessStatus };
     });
 
-    await this.writeMaintenanceEvent(result, user, 'opened');
-    this.emitWeaponChanged('updated', result.id);
-    return this.findOne(result.id, user);
+    await this.writeMaintenanceEvent(result.weapon, user, 'opened');
+    this.emitWeaponChanged('updated', result.weapon.id);
+    await this.operationalNotifications?.notifyWeaponReadinessTransition(
+      result.previousReadinessStatus,
+      result.weapon.id,
+      user.sub,
+    );
+    return this.findOne(result.weapon.id, user);
   }
 
   async approveMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
@@ -523,6 +537,7 @@ export class WeaponSystemsService implements OnModuleInit {
   ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const item = await this.findOne(id, user);
+    const previousReadinessStatus = item.readinessStatus;
     item.readinessStatus = this.normalizeWeaponReadiness(body.readinessStatus);
     item.notReadyReason = this.normalizeWeaponReason(
       body.notReadyReason ?? null,
@@ -531,6 +546,11 @@ export class WeaponSystemsService implements OnModuleInit {
     const saved = await this.repository.save(item);
     await this.writeWeaponEvent(saved, user, 'updated');
     this.emitWeaponChanged('updated', saved.id);
+    await this.operationalNotifications?.notifyWeaponReadinessTransition(
+      previousReadinessStatus,
+      saved.id,
+      user.sub,
+    );
     return this.findOne(saved.id, user);
   }
 

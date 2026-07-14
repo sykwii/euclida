@@ -40,6 +40,7 @@ import { ServiceOrderActualShotConfigurationCharge } from './service-order-actua
 import { ServiceOrderActualShotConfiguration } from './service-order-actual-shot-configuration.entity';
 import { ServiceOrderSuggestionsService } from './service-order-suggestions.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { OperationalNotificationsService } from '../operational-notifications/operational-notifications.service';
 import { ShellCompatibleCharge } from '../shell-compatible-charges/shell-compatible-charge.entity';
 import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { StockMovement } from '../stock-movements/stock-movement.entity';
@@ -112,6 +113,7 @@ export class ServiceOrdersService {
     private readonly eventLogs: EventLogsService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly operationalNotifications?: OperationalNotificationsService,
   ) {}
 
   async findAll(user: AuthUser): Promise<ServiceOrder[]> {
@@ -788,6 +790,7 @@ export class ServiceOrdersService {
 
     this.notifyRealtime(saved, 'sent');
     await this.notifyOrderDeliveriesCreated(saved.id);
+    await this.operationalNotifications?.createForDeliveries(saved.id, user.sub);
 
     return saved;
   }

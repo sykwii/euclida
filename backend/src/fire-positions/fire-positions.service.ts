@@ -29,6 +29,7 @@ import { AccessScopeService } from '../access-scope/access-scope.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { EventLogsService } from '../event-logs/event-logs.service';
 import { ConfirmFirePositionReadinessDto } from './dto/confirm-fire-position-readiness.dto';
+import { OperationalNotificationsService } from '../operational-notifications/operational-notifications.service';
 
 type FireReadinessReason =
   | 'fp_not_prepared'
@@ -50,6 +51,7 @@ export class FirePositionsService implements OnModuleInit {
     private readonly dataSource: DataSource,
     private readonly realtimeEvents: RealtimeEventsService,
     private readonly eventLogs: EventLogsService,
+    private readonly operationalNotifications?: OperationalNotificationsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -164,6 +166,7 @@ export class FirePositionsService implements OnModuleInit {
         throw new NotFoundException('ВП не знайдено');
       }
 
+      const previousReadinessStatus = item.readinessStatus;
       const assignedWeapon = await this.findCanonicalAssignedWeapon(
         manager.getRepository(WeaponSystem),
         item.id,
@@ -188,12 +191,18 @@ export class FirePositionsService implements OnModuleInit {
         item.notReadyReason = this.normalizeNotReadyReason(body.notReadyReason);
       }
 
-      return manager.save(FirePosition, item);
+      const savedItem = await manager.save(FirePosition, item);
+      return { savedItem, previousReadinessStatus };
     });
 
-    await this.writeReadinessEvent(saved, user);
-    this.emitFirePositionChanged('updated', saved.id);
-    return saved;
+    await this.writeReadinessEvent(saved.savedItem, user);
+    this.emitFirePositionChanged('updated', saved.savedItem.id);
+    await this.operationalNotifications?.notifyFirePositionReadinessTransition(
+      saved.previousReadinessStatus,
+      saved.savedItem.id,
+      user.sub,
+    );
+    return saved.savedItem;
   }
 
   async create(

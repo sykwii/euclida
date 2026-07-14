@@ -8,10 +8,11 @@ import { AuthModule } from '../auth/auth.module';
 import { AccessScopeModule } from '../access-scope/access-scope.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { EventLogsModule } from '../event-logs/event-logs.module';
+import { OperationalNotificationsModule } from '../operational-notifications/operational-notifications.module';
 
 @Module({
   imports: [RealtimeModule, TypeOrmModule.forFeature([FirePosition, Depot]), AuthModule,
-  AccessScopeModule, EventLogsModule],
+  AccessScopeModule, EventLogsModule, OperationalNotificationsModule],
   controllers: [FirePositionsController],
   providers: [FirePositionsService],
 })

@@ -15,6 +15,8 @@ import { RealtimeEventName, RealtimePayload, RealtimeService } from './core/real
 import { ToastContainerComponent } from './core/toast-container.component';
 import { OperatorPushComponent } from './core/operator-push.component';
 import { EventFeedService } from './core/event-feed.service';
+import { OperationalNotificationOverlayComponent } from './features/notifications/operational-notification-overlay.component';
+import { OperationalNotificationsService } from './features/notifications/operational-notifications.service';
 
 type CommandEntity = 'page' | 'firePosition' | 'serviceOrder' | 'weaponSystem' | 'depot';
 type NavGroup = 'situation' | 'missions' | 'logistics' | 'reference' | 'system';
@@ -39,6 +41,7 @@ interface CommandItem {
     RouterLinkActive,
     ToastContainerComponent,
     OperatorPushComponent,
+    OperationalNotificationOverlayComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
@@ -60,6 +63,7 @@ export class AppComponent implements OnInit, OnDestroy {
   realtimeLastEventAt: Date | null = null;
   realtimeUpdatedAt: Date | null = null;
   realtimeEventsCount = 0;
+  operationalUnreadCount = 0;
   commandOpen = false;
   commandQuery = '';
   commandLoading = false;
@@ -84,6 +88,7 @@ export class AppComponent implements OnInit, OnDestroy {
     private readonly weaponSystems: WeaponSystemsService,
     private readonly depots: DepotsService,
     private readonly eventFeed: EventFeedService,
+    private readonly operationalNotifications: OperationalNotificationsService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -150,6 +155,7 @@ export class AppComponent implements OnInit, OnDestroy {
         if (user && !this.isLoginPage) {
           setTimeout(() => {
             this.eventFeed.load();
+            this.loadOperationalNotificationCount();
             this.loadOperatorCounters(true);
           });
         }
@@ -167,6 +173,7 @@ export class AppComponent implements OnInit, OnDestroy {
         this.scrollContentToTop();
 
         if (this.auth.isLoggedIn() && !this.isLoginPage) {
+          this.loadOperationalNotificationCount();
           setTimeout(() => this.loadOperatorCounters());
         }
       }),
@@ -195,6 +202,12 @@ export class AppComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.realtime.onAnyChanged((eventName, payload) => {
         this.trackRealtimeEvent(eventName, payload);
+        if (
+          payload?.entity === 'operational_notification' ||
+          (payload?.entity === 'system' && payload?.reason === 'reconnect')
+        ) {
+          this.loadOperationalNotificationCount();
+        }
       }),
     );
   }
@@ -510,6 +523,22 @@ export class AppComponent implements OnInit, OnDestroy {
     if (!this.realtimeLastEventAt) {
       this.realtimeLastEventLabel = 'Підключено';
     }
+  }
+
+  private loadOperationalNotificationCount(): void {
+    if (!this.auth.isLoggedIn() || this.isLoginPage) {
+      this.operationalUnreadCount = 0;
+      return;
+    }
+
+    this.operationalNotifications.getCount().subscribe({
+      next: (counter) => {
+        this.operationalUnreadCount = counter.unread;
+      },
+      error: () => {
+        this.operationalUnreadCount = 0;
+      },
+    });
   }
 
   private getRealtimeEventLabel(eventName: RealtimeEventName, payload?: RealtimePayload): string {

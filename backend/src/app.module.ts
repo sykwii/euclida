@@ -43,6 +43,7 @@ import { PlannedTripsModule } from './planned-trips/planned-trips.module';
 import { ReconModule } from './modules/recon/recon.module';
 import { ShotConfigurationsModule } from './shot-configurations/shot-configurations.module';
 import { ExecutionModule } from './execution/execution.module';
+import { OperationalNotificationsModule } from './operational-notifications/operational-notifications.module';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ PlannedTripsModule,
 ReconModule,
 ShotConfigurationsModule,
 ExecutionModule,
+OperationalNotificationsModule,
   ],
   providers: [
     {
