@@ -160,4 +160,96 @@ export class ExecutionJournalWriter {
     record.postedByUserId = postedByUserId;
     return manager.save(ExecutionRecord, record);
   }
+
+  async replaceDraft(
+    recordId: string,
+    context: ExecutionPipelineContext,
+  ): Promise<ExecutionRecord> {
+    return this.dataSource.transaction(async (manager) => {
+      const record = await manager.findOne(ExecutionRecord, {
+        where: { id: recordId },
+        relations: { artillery: { charges: true } },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!record) {
+        throw new NotFoundException('Запис журналу не знайдено');
+      }
+
+      if (record.status !== 'draft') {
+        throw new BadRequestException('Редагувати можна тільки чернетку журналу');
+      }
+
+      record.executionType = context.body.executionType;
+      record.purpose = context.body.purpose;
+      record.result = context.body.result;
+      record.startedAt = context.startedAt;
+      record.completedAt = context.completedAt;
+      record.executorType = context.body.executorType?.trim() || null;
+      record.executorId = context.body.executorId ?? null;
+      record.executorSnapshot = context.executorSnapshot;
+      record.quantity = context.body.quantity;
+      record.resourceSnapshot = context.resourceSnapshot;
+      record.comment = context.body.comment?.trim() || null;
+
+      const saved = await manager.save(ExecutionRecord, record);
+
+      await manager.delete(ExecutionRecordCharge, { executionRecordId: record.id });
+      await manager.delete(ExecutionRecordArtillery, { executionRecordId: record.id });
+
+      if (context.artillerySnapshot) {
+        const artillery = manager.create(ExecutionRecordArtillery, {
+          executionRecordId: saved.id,
+          compositionSource: context.artillerySnapshot.compositionSource,
+          sourceShotConfigurationId:
+            context.artillerySnapshot.sourceShotConfigurationId,
+          weaponModelId: context.artillerySnapshot.weaponModelId,
+          shellId: context.artillerySnapshot.shellId,
+          fuzeId: context.artillerySnapshot.fuzeId,
+          primerId: context.artillerySnapshot.primerId,
+          zoneId: context.artillerySnapshot.zoneId,
+          maxRangeM: context.artillerySnapshot.maxRangeM,
+          compositionSnapshot:
+            context.artillerySnapshot.compositionSnapshot,
+        });
+
+        await manager.save(ExecutionRecordArtillery, artillery);
+
+        const charges = context.artillerySnapshot.charges.map((component) =>
+          manager.create(ExecutionRecordCharge, {
+            executionRecordId: saved.id,
+            chargeId: component.chargeId,
+            chargeNameSnapshot: component.chargeNameSnapshot,
+            quantityPerShot: component.quantityPerShot,
+            accountingUnit: component.accountingUnit,
+            sortOrder: component.sortOrder,
+          }),
+        );
+
+        await manager.save(ExecutionRecordCharge, charges);
+      }
+
+      return saved;
+    });
+  }
+
+  async cancelDraft(recordId: string): Promise<ExecutionRecord> {
+    return this.dataSource.transaction(async (manager) => {
+      const record = await manager.findOne(ExecutionRecord, {
+        where: { id: recordId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!record) {
+        throw new NotFoundException('Запис журналу не знайдено');
+      }
+
+      if (record.status !== 'draft') {
+        throw new BadRequestException('Скасувати можна тільки чернетку журналу');
+      }
+
+      record.status = 'cancelled';
+      return manager.save(ExecutionRecord, record);
+    });
+  }
 }

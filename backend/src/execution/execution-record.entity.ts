@@ -25,14 +25,13 @@ export type ExecutionType =
   | 'bomber'
   | 'other';
 export type ExecutionPurpose =
-  | 'main'
+  | 'barrel_warmup'
   | 'adjustment'
-  | 'warmup'
-  | 'calibration'
-  | 'test'
+  | 'main_fire'
+  | 'additional_fire'
   | 'other';
 export type ExecutionResult = 'executed' | 'misfire' | 'aborted' | 'cancelled';
-export type ExecutionRecordStatus = 'draft' | 'posted' | 'reversed';
+export type ExecutionRecordStatus = 'draft' | 'posted' | 'reversed' | 'cancelled';
 
 @Entity('execution_records')
 export class ExecutionRecord {

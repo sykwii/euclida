@@ -17,6 +17,7 @@ describe('ExecutionEngineService', () => {
     record?: ExecutionRecord | null;
     stockExecute?: jest.Mock;
     transactionImpl?: jest.Mock;
+    getRepository?: jest.Mock;
   }) {
     const record = options?.record ?? null;
     const recordsRepository = {
@@ -116,6 +117,7 @@ describe('ExecutionEngineService', () => {
       emitMany: jest.fn(),
     };
     const dataSource = {
+      ...(options?.getRepository ? { getRepository: options.getRepository } : {}),
       transaction:
         options?.transactionImpl ??
         jest.fn().mockImplementation(async (callback: (manager: unknown) => Promise<unknown>) =>
@@ -200,10 +202,18 @@ describe('ExecutionEngineService', () => {
         status: 'in_progress',
         executorType: 'fire_position',
         assignedUnitId: 'unit-1',
+        selectedFirePositionId: 'fp-1',
         selectedFirePosition: {
+          id: 'fp-1',
           ammoDepotId: 'depot-1',
           unitId: 'unit-1',
+          readinessStatus: 'combat_ready',
+          notReadyReason: null,
+          lat: 50,
+          lng: 30,
         },
+        targetLat: 50,
+        targetLng: 30.01,
         selectedAirAssetPosition: null,
       } as never,
       artillery: {
@@ -363,5 +373,42 @@ describe('ExecutionEngineService', () => {
 
     expect(mocks.stockEngine.execute).not.toHaveBeenCalled();
     expect(mocks.journalWriter.markPosted).not.toHaveBeenCalled();
+  });
+
+  it('returns structured rejection when selected weapon is not ready', async () => {
+    const record = createDraftArtilleryRecord();
+    const getRepository = jest.fn((entity: { name?: string }) => {
+      if (entity.name === 'WeaponSystem') {
+        return {
+          findOne: jest.fn().mockResolvedValue({
+            id: 'weapon-1',
+            readinessStatus: 'not_combat_ready',
+            notReadyReason: 'breakdown',
+            deploymentStatus: 'at_fire_position',
+            currentFirePositionId: 'fp-1',
+          }),
+        };
+      }
+
+      if (entity.name === 'WeaponMaintenance') {
+        return { findOne: jest.fn().mockResolvedValue(null) };
+      }
+
+      if (entity.name === 'ShotConfiguration') {
+        return { findOne: jest.fn().mockResolvedValue(null) };
+      }
+
+      return { findOne: jest.fn().mockResolvedValue({ quantity: 100 }) };
+    });
+    const { service } = createService({ record, getRepository });
+
+    const result = await service.validateRecord(record.id, user);
+
+    expect(result.valid).toBe(false);
+    expect(result.reasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'weapon_not_ready' }),
+      ]),
+    );
   });
 });

@@ -863,7 +863,7 @@ async selectAirAsset(
     }
 
     const activeExecutionRecords = executionRecords.filter(
-      (item) => item.status !== 'reversed',
+      (item) => item.status !== 'reversed' && item.status !== 'cancelled',
     );
     const postedExecutionRecords = activeExecutionRecords.filter(
       (item) => item.status === 'posted',
@@ -890,6 +890,18 @@ async selectAirAsset(
         0,
       ),
     );
+    const plannedQuantity = Number(order.plannedQuantity ?? 0);
+    const deviationSummary = this.buildExecutionDeviationSummary(
+      plannedQuantity,
+      actualQuantity,
+      postedExecutionRecords,
+    );
+
+    if (actualQuantity < plannedQuantity && !body.resultComment?.trim()) {
+      throw new BadRequestException(
+        'Фактична кількість менша за планову. Потрібен коментар результату',
+      );
+    }
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const lockedOrder = await manager.findOne(ServiceOrder, {
@@ -930,7 +942,9 @@ async selectAirAsset(
       lockedOrder.completedAt = completedAt;
       lockedOrder.actualQuantity = actualQuantity;
       lockedOrder.resultType = body.resultType;
-      lockedOrder.resultComment = body.resultComment?.trim() || null;
+      lockedOrder.resultComment = [body.resultComment?.trim(), deviationSummary]
+        .filter(Boolean)
+        .join('\n') || null;
       lockedOrder.completedByUserId = user.sub;
 
       const saved = await manager.save(ServiceOrder, lockedOrder);
@@ -2343,6 +2357,24 @@ async selectAirAsset(
 
   private isConsumableExecutionRecord(record: ExecutionRecord): boolean {
     return record.executionType === 'artillery' || record.artillery !== null;
+  }
+
+  private buildExecutionDeviationSummary(
+    plannedQuantity: number,
+    actualQuantity: number,
+    postedRecords: ExecutionRecord[],
+  ): string | null {
+    if (plannedQuantity === actualQuantity) {
+      return null;
+    }
+
+    const purposes = postedRecords.reduce<Record<string, number>>((acc, item) => {
+      acc[item.purpose] = this.roundStockQuantity((acc[item.purpose] ?? 0) + Number(item.quantity ?? 0));
+      return acc;
+    }, {});
+
+    const direction = actualQuantity > plannedQuantity ? 'перевищення плану' : 'менше плану';
+    return `Відхилення: ${direction}. План: ${plannedQuantity}, факт: ${actualQuantity}. Журнал: ${JSON.stringify(purposes)}`;
   }
 
   private async writeOrderEvent(

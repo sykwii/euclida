@@ -89,7 +89,17 @@ export class CreateExecutionRecordDto {
   @IsIn(['artillery', 'mortar', 'mlrs', 'fpv', 'bomber', 'other'])
   executionType!: ExecutionType;
 
-  @IsIn(['main', 'adjustment', 'warmup', 'calibration', 'test', 'other'])
+  @IsIn([
+    'barrel_warmup',
+    'adjustment',
+    'main_fire',
+    'additional_fire',
+    'other',
+    'main',
+    'warmup',
+    'calibration',
+    'test',
+  ])
   purpose!: ExecutionPurpose;
 
   @IsIn(['executed', 'misfire', 'aborted', 'cancelled'])

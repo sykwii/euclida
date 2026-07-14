@@ -992,3 +992,70 @@
     grid-column: span 1;
   }
 }
+.execution-journal {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(46, 230, 214, 0.14);
+  border-radius: 8px;
+  background: rgba(6, 18, 24, 0.66);
+}
+
+.execution-head,
+.execution-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.execution-head span,
+.execution-row span,
+.execution-row small {
+  display: block;
+  color: #94a3b8;
+}
+
+.execution-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 100px minmax(180px, 2fr) auto;
+  gap: 8px;
+}
+
+.execution-form input,
+.execution-form select {
+  min-width: 0;
+}
+
+.execution-list {
+  display: grid;
+  gap: 8px;
+}
+
+.execution-row {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.execution-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.execution-errors {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  color: #fecaca;
+}
+
+@media (max-width: 900px) {
+  .execution-form {
+    grid-template-columns: 1fr;
+  }
+}

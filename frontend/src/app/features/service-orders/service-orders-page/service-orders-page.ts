@@ -12,6 +12,8 @@ import { FirePositionCard } from '../../fire-positions/fire-position-card.model'
 import { FirePositionsService } from '../../fire-positions/fire-positions.service';
 import { ReconPuarProposal } from '../../recon/recon.model';
 import { ReconService } from '../../recon/recon.service';
+import { ExecutionRecord, ExecutionRecordPurpose } from '../execution-record.model';
+import { ExecutionRecordsService } from '../execution-records.service';
 import { ServiceOrder } from '../service-order.model';
 import {
  ServiceOrderAirPayloadVariant,
@@ -76,6 +78,7 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
 
   selectOrderDetails(order: ServiceOrder): void {
     this.selectedDetailsOrderId = order.id;
+    this.loadExecutionRecords(order);
   }
 
   get activeCount(): number {
@@ -165,6 +168,18 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     }
   > = {};
   completeStockLoadingByOrderId: Record<string, boolean> = {};
+  executionRecordsByOrderId: Record<string, ExecutionRecord[]> = {};
+  executionLoadingByOrderId: Record<string, boolean> = {};
+  executionSavingByOrderId: Record<string, boolean> = {};
+  executionValidationByRecordId: Record<string, string[]> = {};
+  executionFormByOrderId: Record<
+    string,
+    {
+      purpose: ExecutionRecordPurpose;
+      quantity: string;
+      comment: string;
+    }
+  > = {};
 
   form = this.getEmptyForm();
 
@@ -179,6 +194,7 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     private readonly autoRefresh: AutoRefreshService,
     private readonly firePositions: FirePositionsService,
     private readonly reconService: ReconService,
+    private readonly executionRecords: ExecutionRecordsService,
   ) {}
 
   ngOnInit(): void {
@@ -1893,6 +1909,173 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
     }
 
     return order.selectedFirePosition?.name || '—';
+  }
+
+  loadExecutionRecords(order: ServiceOrder): void {
+    if (order.status !== 'in_progress' && order.status !== 'completed') {
+      return;
+    }
+
+    this.executionLoadingByOrderId[order.id] = true;
+    this.executionRecords.list(order.id).subscribe({
+      next: (records) => {
+        this.executionRecordsByOrderId[order.id] = records;
+        this.executionLoadingByOrderId[order.id] = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        this.executionLoadingByOrderId[order.id] = false;
+        this.toast.show(error?.error?.message || 'Не вдалося завантажити журнал виконання', 'danger');
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  getExecutionForm(order: ServiceOrder): {
+    purpose: ExecutionRecordPurpose;
+    quantity: string;
+    comment: string;
+  } {
+    if (!this.executionFormByOrderId[order.id]) {
+      this.executionFormByOrderId[order.id] = {
+        purpose: 'main_fire',
+        quantity: String(Math.max(Number(order.plannedQuantity || 1), 1)),
+        comment: '',
+      };
+    }
+
+    return this.executionFormByOrderId[order.id];
+  }
+
+  createExecutionDraft(order: ServiceOrder): void {
+    const form = this.getExecutionForm(order);
+    const quantity = Number(form.quantity);
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      this.toast.show('Вкажіть кількість пострілів', 'danger');
+      return;
+    }
+
+    if (quantity > Number(order.plannedQuantity ?? 0) && !form.comment.trim()) {
+      this.toast.show('Для перевищення плану потрібен коментар', 'danger');
+      return;
+    }
+
+    const kit = order.selectedShotConfiguration;
+    const fuzeId = kit?.fuzeId || kit?.fuze?.id || null;
+    const primerId = kit?.primerId || kit?.primer?.id || null;
+    const zoneId = kit?.zoneId || order.selectedZoneId || null;
+    const weaponModelId = kit?.weaponModelId || null;
+
+    if (!kit || !weaponModelId || !order.selectedShellId || !fuzeId || !primerId || !zoneId || kit.charges.length === 0) {
+      this.toast.show('Для швидкого запису потрібен повний комплект пострілу', 'danger');
+      return;
+    }
+
+    this.executionSavingByOrderId[order.id] = true;
+    this.executionRecords
+      .create(order.id, {
+        idempotencyKey: `ui:${order.id}:${Date.now()}`,
+        executionType: 'artillery',
+        purpose: form.purpose,
+        result: 'executed',
+        startedAt: new Date().toISOString(),
+        quantity,
+        comment: form.comment.trim() || undefined,
+        artillery: {
+          compositionSource: 'planned',
+          sourceShotConfigurationId: kit.id,
+          weaponModelId,
+          shellId: order.selectedShellId,
+          fuzeId,
+          primerId,
+          zoneId,
+          maxRangeM: kit.maxRangeM,
+          compositionSnapshot: {
+            shotConfigurationId: kit.id,
+            name: kit.name,
+            zoneNumber: kit.zoneNumber ?? order.selectedZone?.zoneNumber ?? null,
+          },
+          charges: kit.charges.map((component) => ({
+            chargeId: component.chargeId,
+            chargeName: component.charge.marking,
+            quantityPerShot: component.quantityPerShot,
+            accountingUnit: component.accountingUnit || 'piece',
+            sortOrder: component.sortOrder,
+          })),
+        },
+      })
+      .subscribe({
+        next: () => {
+          this.executionSavingByOrderId[order.id] = false;
+          form.comment = '';
+          this.loadExecutionRecords(order);
+        },
+        error: (error) => {
+          this.executionSavingByOrderId[order.id] = false;
+          this.toast.show(error?.error?.message || 'Не вдалося створити запис журналу', 'danger');
+          this.cdr.detectChanges();
+        },
+      });
+  }
+
+  postExecutionRecord(order: ServiceOrder, record: ExecutionRecord): void {
+    this.executionValidationByRecordId[record.id] = [];
+    this.executionRecords.post(record.id).subscribe({
+      next: () => this.loadExecutionRecords(order),
+      error: (error) => {
+        const reasons = error?.error?.reasons as Array<{ message: string }> | undefined;
+        this.executionValidationByRecordId[record.id] = reasons?.map((item) => item.message) || [
+          error?.error?.message || 'Не вдалося провести запис',
+        ];
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  cancelExecutionRecord(order: ServiceOrder, record: ExecutionRecord): void {
+    this.executionRecords.cancel(record.id).subscribe({
+      next: () => this.loadExecutionRecords(order),
+      error: (error) => this.toast.show(error?.error?.message || 'Не вдалося скасувати чернетку', 'danger'),
+    });
+  }
+
+  getExecutionRecords(order: ServiceOrder): ExecutionRecord[] {
+    return this.executionRecordsByOrderId[order.id] || [];
+  }
+
+  getExecutionPurposeLabel(value: string): string {
+    const labels: Record<string, string> = {
+      barrel_warmup: 'Прогрів ствола',
+      adjustment: 'Пристрілка',
+      main_fire: 'Основний вогонь',
+      additional_fire: 'Додатковий вогонь',
+      other: 'Інше',
+    };
+
+    return labels[value] || value;
+  }
+
+  getExecutionStatusLabel(value: string): string {
+    const labels: Record<string, string> = {
+      draft: 'Чернетка',
+      posted: 'Проведено',
+      reversed: 'Сторновано',
+      cancelled: 'Скасовано',
+    };
+
+    return labels[value] || value;
+  }
+
+  getExecutionRequirementLabel(record: ExecutionRecord): string {
+    if (!record.artillery) {
+      return 'Без витрат БК';
+    }
+
+    const chargeText = record.artillery.charges
+      .map((item) => `${item.chargeNameSnapshot} x${Number(record.quantity) * item.quantityPerShot}`)
+      .join(', ');
+    return `Снаряд x${record.quantity}, підривник x${record.quantity}, праймер x${record.quantity}, ${chargeText}`;
   }
 
   getExecutorUnitName(order: ServiceOrder): string {

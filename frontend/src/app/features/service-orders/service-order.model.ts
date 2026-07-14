@@ -107,7 +107,9 @@ linkedAirTaskId?: string | null;
   selectedShotConfiguration?: {
     id: string;
     name: string;
+    weaponModelId?: string | null;
     maxRangeM: number;
+    zoneId?: string | null;
     zoneNumber?: number | null;
     fuzeId?: string | null;
     primerId?: string | null;

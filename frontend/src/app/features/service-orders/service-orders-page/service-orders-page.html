@@ -376,6 +376,69 @@
               </button>
             </div>
 
+            <section class="execution-journal" *ngIf="item.status === 'in_progress' || item.status === 'completed'">
+              <div class="execution-head">
+                <div>
+                  <b>Журнал виконання</b>
+                  <span>План: {{ item.plannedQuantity }} · факт: {{ item.actualQuantity || 0 }}</span>
+                </div>
+                <button type="button" class="co-link-btn" (click)="loadExecutionRecords(item)">
+                  Оновити журнал
+                </button>
+              </div>
+
+              <form class="execution-form" *ngIf="item.status === 'in_progress'" (ngSubmit)="createExecutionDraft(item)">
+                <select [name]="'executionPurpose' + item.id" [(ngModel)]="getExecutionForm(item).purpose">
+                  <option value="barrel_warmup">Прогрів ствола</option>
+                  <option value="adjustment">Пристрілка</option>
+                  <option value="main_fire">Основний вогонь</option>
+                  <option value="additional_fire">Додатковий вогонь</option>
+                  <option value="other">Інше</option>
+                </select>
+                <input
+                  [name]="'executionQuantity' + item.id"
+                  type="number"
+                  min="1"
+                  step="1"
+                  [(ngModel)]="getExecutionForm(item).quantity"
+                  placeholder="Кількість"
+                />
+                <input
+                  [name]="'executionComment' + item.id"
+                  [(ngModel)]="getExecutionForm(item).comment"
+                  placeholder="Коментар відхилення / результату"
+                />
+                <button type="submit" class="co-btn compact" [disabled]="executionSavingByOrderId[item.id]">
+                  Чернетка
+                </button>
+              </form>
+
+              <div class="co-empty" *ngIf="executionLoadingByOrderId[item.id]">
+                <b>Завантажуємо журнал</b>
+              </div>
+
+              <div class="execution-list" *ngIf="!executionLoadingByOrderId[item.id]">
+                <article class="execution-row" *ngFor="let record of getExecutionRecords(item)">
+                  <div>
+                    <b>{{ getExecutionPurposeLabel(record.purpose) }}</b>
+                    <span>{{ getExecutionStatusLabel(record.status) }} · {{ record.quantity }} постр.</span>
+                    <small>{{ getExecutionRequirementLabel(record) }}</small>
+                  </div>
+                  <div class="execution-actions" *ngIf="record.status === 'draft' && item.status === 'in_progress'">
+                    <button type="button" class="co-btn compact" (click)="postExecutionRecord(item, record)">
+                      Провести
+                    </button>
+                    <button type="button" class="danger-menu-button compact" (click)="cancelExecutionRecord(item, record)">
+                      Скасувати
+                    </button>
+                  </div>
+                  <div class="execution-errors" *ngIf="executionValidationByRecordId[record.id]?.length">
+                    <span *ngFor="let reason of executionValidationByRecordId[record.id]">{{ reason }}</span>
+                  </div>
+                </article>
+              </div>
+            </section>
+
             <section class="co-suggestions" *ngIf="selectedOrderId === item.id">
               <div class="co-empty" *ngIf="suggestionsLoading">
                 <b>Підбираємо доступних виконавців</b>
@@ -1232,4 +1295,3 @@
     </section>
   </div>
 </div>
-

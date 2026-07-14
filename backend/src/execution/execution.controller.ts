@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import type { AuthUser } from '../auth/auth-user.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WriteAccessGuard } from '../auth/write-access.guard';
 import { CreateExecutionRecordDto } from './dto/create-execution-record.dto';
+import type { ExecutionValidationResult } from './execution-engine.service';
 import { ExecutionRecord } from './execution-record.entity';
 import { ExecutionService } from './execution.service';
 
@@ -37,5 +38,32 @@ export class ExecutionController {
     @Param('id') id: string,
   ): Promise<ExecutionRecord> {
     return this.service.post(id, user);
+  }
+
+  @Get('records/:id/validate')
+  validateRecord(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<ExecutionValidationResult> {
+    return this.service.validateRecord(id, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Patch('records/:id')
+  updateDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: CreateExecutionRecordDto,
+  ): Promise<ExecutionRecord> {
+    return this.service.updateDraft(id, body, user);
+  }
+
+  @UseGuards(WriteAccessGuard)
+  @Post('records/:id/cancel')
+  cancelDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<ExecutionRecord> {
+    return this.service.cancelDraft(id, user);
   }
 }
