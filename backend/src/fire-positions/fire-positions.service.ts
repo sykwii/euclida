@@ -32,10 +32,9 @@ import { ConfirmFirePositionReadinessDto } from './dto/confirm-fire-position-rea
 import { OperationalNotificationsService } from '../operational-notifications/operational-notifications.service';
 
 type FireReadinessReason =
-  | 'fp_not_prepared'
+  | 'fp_blocked'
   | 'fp_threat'
   | 'weapon_missing'
-  | 'weapon_moving'
   | 'weapon_not_ready'
   | 'weapon_active_maintenance';
 
@@ -847,12 +846,11 @@ private normalizePositionType(value: string | null | undefined): string {
 
   private normalizeNotReadyReason(
     value: ConfirmFirePositionReadinessDto['notReadyReason'],
-  ): 'threat' | 'damaged' | 'not_prepared' | 'occupied' | 'other' {
+  ): 'threat' | 'damaged' | 'prohibited' | 'other' {
     if (
       value === 'threat' ||
       value === 'damaged' ||
-      value === 'not_prepared' ||
-      value === 'occupied' ||
+      value === 'prohibited' ||
       value === 'other'
     ) {
       return value;
@@ -874,22 +872,15 @@ private normalizePositionType(value: string | null | undefined): string {
   ): FireReadinessReason[] {
     const reasons: FireReadinessReason[] = [];
 
-    if (firePosition.readinessStatus !== 'combat_ready') {
+    if (this.isPositionBlocked(firePosition)) {
       reasons.push(
-        firePosition.notReadyReason === 'threat' ? 'fp_threat' : 'fp_not_prepared',
+        firePosition.notReadyReason === 'threat' ? 'fp_threat' : 'fp_blocked',
       );
     }
 
     if (!assignedWeapon) {
       reasons.push('weapon_missing');
       return reasons;
-    }
-
-    if (
-      assignedWeapon.deploymentStatus !== 'at_fire_position' ||
-      assignedWeapon.currentFirePositionId !== firePosition.id
-    ) {
-      reasons.push('weapon_moving');
     }
 
     if (assignedWeapon.readinessStatus !== 'combat_ready') {
@@ -965,28 +956,30 @@ private normalizePositionType(value: string | null | undefined): string {
     return firePosition;
   }
 
-  if (!assignedWeapon) {
-    firePosition.hasSg = false;
-    if (!firePosition.readinessStatus || firePosition.readinessStatus === 'unknown') {
-      firePosition.readinessStatus = 'not_combat_ready';
-    }
-    if (!firePosition.notReadyReason || firePosition.notReadyReason === 'Відсутня СГ') {
-      firePosition.notReadyReason = 'not_prepared';
-    }
-
-    return firePosition;
+  firePosition.hasSg = !!assignedWeapon;
+  if (assignedWeapon) {
+    firePosition.unitId = assignedWeapon.unitId;
+    firePosition.unit = assignedWeapon.unit ?? firePosition.unit;
   }
-
-  firePosition.hasSg = true;
-  firePosition.unitId = assignedWeapon.unitId;
-  firePosition.unit = assignedWeapon.unit ?? firePosition.unit;
-  if (!firePosition.readinessStatus || firePosition.readinessStatus === 'unknown') {
-    firePosition.readinessStatus = 'not_combat_ready';
-    firePosition.notReadyReason = firePosition.notReadyReason ?? 'not_prepared';
-  }
+  firePosition.readinessStatus =
+    !this.isPositionBlocked(firePosition) &&
+    !!assignedWeapon &&
+    assignedWeapon.readinessStatus === 'combat_ready' &&
+    !this.hasActiveMaintenance(assignedWeapon)
+      ? 'combat_ready'
+      : 'not_combat_ready';
 
   return firePosition;
 }
+
+  private isPositionBlocked(firePosition: FirePosition): boolean {
+    return (
+      firePosition.notReadyReason === 'threat' ||
+      firePosition.notReadyReason === 'damaged' ||
+      firePosition.notReadyReason === 'prohibited' ||
+      firePosition.notReadyReason === 'other'
+    );
+  }
 
   private async applyActiveAirThreatToFirePosition(
     firePosition: FirePosition,

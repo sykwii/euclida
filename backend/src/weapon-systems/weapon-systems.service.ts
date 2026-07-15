@@ -32,7 +32,7 @@ import { WeaponSystem } from './weapon-system.entity';
 type WeaponReadinessStatus = 'combat_ready' | 'not_combat_ready';
 type WeaponNotReadyReason =
   | 'breakdown'
-  | 'threat'
+  | 'air_threat'
   | 'crew'
   | 'maintenance'
   | 'other';
@@ -584,7 +584,7 @@ export class WeaponSystemsService implements OnModuleInit {
     id: string,
     toLocationType: DeploymentLocationType,
     toLocationId: string | null | undefined,
-    force: boolean,
+    _force: boolean,
     note: string | null | undefined,
     user: AuthUser,
   ): Promise<WeaponDeploymentContext> {
@@ -599,7 +599,7 @@ export class WeaponSystemsService implements OnModuleInit {
 
       if (toLocationType === 'fire_position') {
         await this.prepareFirePositionForWeapon(manager, firePosition!, weapon, user);
-        this.ensureNonReadyAssignmentConfirmed(weapon, force);
+        this.ensureWeaponCombatReadyForAssignment(weapon);
         await this.ensureFirePositionAvailable(manager, firePosition!.id, weapon.id);
       } else {
         await this.ensureNoActiveExecution(manager, weapon.currentFirePositionId);
@@ -698,8 +698,6 @@ export class WeaponSystemsService implements OnModuleInit {
       );
       const targetId = targetFirePositionId ?? mutableDeployment?.toLocationId;
       const firePosition = await this.loadTargetFirePosition(manager, targetId);
-      const force = 'force' in body && body.force === true;
-
       if (!mutableDeployment) {
         this.ensureWeaponCanStartDeployment(weapon);
       }
@@ -728,7 +726,7 @@ export class WeaponSystemsService implements OnModuleInit {
         throw new BadRequestException('СГ вже перебуває на іншій ВП. Спочатку виведіть її в РЗ');
       }
 
-      this.ensureNonReadyAssignmentConfirmed(weapon, force);
+      this.ensureWeaponCombatReadyForAssignment(weapon);
       await this.ensureFirePositionAvailable(manager, firePosition.id, weapon.id);
 
       const deployment =
@@ -1182,7 +1180,7 @@ export class WeaponSystemsService implements OnModuleInit {
 
     if (
       value === 'breakdown' ||
-      value === 'threat' ||
+      value === 'air_threat' ||
       value === 'crew' ||
       value === 'maintenance' ||
       value === 'other'
@@ -1206,14 +1204,14 @@ export class WeaponSystemsService implements OnModuleInit {
     return 'breakdown';
   }
 
-  private ensureNonReadyAssignmentConfirmed(weapon: WeaponSystem, force: boolean): void {
+  private ensureWeaponCombatReadyForAssignment(weapon: WeaponSystem): void {
     if (this.normalizeWeaponReadiness(weapon.readinessStatus) === 'combat_ready') {
       return;
     }
 
-    if (!force) {
-      throw new BadRequestException('СГ не БГ. Потрібне явне підтвердження призначення');
-    }
+    throw new BadRequestException(
+      'СГ НЕ БГ і не може бути призначена на ВП. Спочатку явно відновіть БГ.',
+    );
   }
 
   private ensureWeaponCanStartDeployment(weapon: WeaponSystem): void {

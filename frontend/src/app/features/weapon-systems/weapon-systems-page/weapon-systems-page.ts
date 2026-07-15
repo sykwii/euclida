@@ -319,13 +319,8 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
       return;
     }
 
-    const force = this.normalizeReadiness(item.readinessStatus) !== 'combat_ready';
-    if (force && !confirm('СГ не БГ. Призначити на ВП з підтвердженням?')) {
-      return;
-    }
-
     this.movingId = item.id;
-    this.service.planMoveToFirePosition(item.id, { targetFirePositionId, force }).subscribe({
+    this.service.assignToFirePosition(item.id, targetFirePositionId).subscribe({
       next: () => this.afterAction(),
       error: (error) => this.failAction(error, 'Не вдалося призначити СГ на ВП'),
     });
@@ -337,7 +332,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     this.movingId = item.id;
-    this.service.planMoveToReserve(item.id).subscribe({
+    this.service.moveToReserve(item.id).subscribe({
       next: () => this.afterAction(),
       error: (error) => this.failAction(error, 'Не вдалося зняти СГ з ВП'),
     });
@@ -551,6 +546,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   canAssign(item: WeaponSystem): boolean {
     return (
       this.canEditWeapon(item) &&
+      this.normalizeReadiness(item.readinessStatus) === 'combat_ready' &&
       this.getDeploymentStatus(item) === 'reserve_area' &&
       !this.getActiveDeployment(item) &&
       !this.hasOpenMaintenance(item)

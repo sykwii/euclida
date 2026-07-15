@@ -223,62 +223,12 @@
           (click)="planMoveToFirePosition(item)"
           [disabled]="movingId === item.id || !deploymentTargets[item.id]"
         >
-          Призначити
+          Призначити на ВП
         </button>
       </div>
 
       <div class="card-actions" *ngIf="canEditWeapon(item)">
         <button type="button" class="ghost-button" (click)="startEdit(item)">Редагувати</button>
-
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="canStartMoveToFirePosition(item)"
-          (click)="startMove(item)"
-          [disabled]="movingId === item.id"
-        >
-          Почати рух
-        </button>
-
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="canConfirmFirePositionArrival(item)"
-          (click)="startMove(item)"
-          [disabled]="movingId === item.id"
-        >
-          Підтвердити прибуття
-        </button>
-
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="canStartMoveToReserve(item)"
-          (click)="startMove(item)"
-          [disabled]="movingId === item.id"
-        >
-          Почати рух у РЗ
-        </button>
-
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="canConfirmReserveArrival(item)"
-          (click)="startMove(item)"
-          [disabled]="movingId === item.id"
-        >
-          Підтвердити прибуття у РЗ
-        </button>
-
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="canCancelDeployment(item)"
-          (click)="cancelDeployment(item)"
-          [disabled]="movingId === item.id"
-        >
-          Скасувати переміщення
-        </button>
 
         <button
           type="button"

@@ -36,7 +36,7 @@ export class FirePositionsPage implements OnInit, OnDestroy {
 pageKind: PositionPageKind = 'fire_positions';
   collapsedForeignUnits: Record<string, boolean> = {};
   readinessActionId = '';
-  notReadyReasons: Record<string, 'threat' | 'damaged' | 'not_prepared' | 'occupied' | 'other'> = {};
+  notReadyReasons: Record<string, 'threat' | 'damaged' | 'prohibited' | 'other'> = {};
   pageSkeleton = Array.from({ length: 6 });
 
   form = this.getEmptyForm();
@@ -372,7 +372,7 @@ get isAirAssetsPage(): boolean {
     this.readinessActionId = item.id;
     this.service
       .setNotReady(item.id, {
-        notReadyReason: this.notReadyReasons[item.id] || 'not_prepared',
+        notReadyReason: this.notReadyReasons[item.id] || 'prohibited',
       })
       .subscribe({
         next: () => {

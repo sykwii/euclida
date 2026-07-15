@@ -13,7 +13,7 @@ import { StockMovement } from './stock-movements/stock-movement.entity';
 describe('OPS runtime regressions', () => {
   it('allows marking a fire position not ready without sending readinessStatus', async () => {
     const dto = new ConfirmFirePositionReadinessDto();
-    dto.notReadyReason = 'not_prepared';
+    dto.notReadyReason = 'prohibited';
 
     await expect(validate(dto)).resolves.toHaveLength(0);
   });

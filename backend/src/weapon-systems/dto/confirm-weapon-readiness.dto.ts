@@ -5,7 +5,7 @@ export class ConfirmWeaponReadinessDto {
   readinessStatus!: string;
 
   @IsOptional()
-  @IsIn(['breakdown', 'threat', 'crew', 'maintenance', 'other'])
+  @IsIn(['breakdown', 'maintenance', 'air_threat', 'crew', 'other'])
   notReadyReason?: string | null;
 
   @IsOptional()

@@ -84,9 +84,9 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
     );
   }
 
-  it('shows arrived weapon while fire position remains not combat ready', async () => {
+  it('keeps a blocked fire position not combat ready with an arrived weapon', async () => {
     const service = createService(
-      createFirePosition({ readinessStatus: 'not_combat_ready', notReadyReason: 'not_prepared' }),
+      createFirePosition({ readinessStatus: 'not_combat_ready', notReadyReason: 'damaged' }),
       createWeapon(),
     );
 
@@ -95,7 +95,7 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
     expect(item.assignedWeapon?.id).toBe('weapon-1');
     expect(item.readinessStatus).toBe('not_combat_ready');
     expect(item.aggregateReady).toBe(false);
-    expect(item.aggregateReadinessReasons).toContain('fp_not_prepared');
+    expect(item.aggregateReadinessReasons).toContain('fp_blocked');
   });
 
   it('marks aggregate ready only when fire position and weapon are ready', async () => {

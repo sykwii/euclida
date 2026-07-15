@@ -42,7 +42,7 @@ export class WeaponSystemsService {
     return this.api.post<WeaponSystem>(`/weapon-systems/${id}/move-to-reserve`, {});
   }
 
-  /** @deprecated Active UI uses the canonical planned deployment flow. */
+  /** Canonical active assignment: the weapon arrives immediately. */
   assignToFirePosition(
     id: string,
     targetFirePositionId: string | null,
@@ -158,7 +158,7 @@ export class WeaponSystemsService {
     id: string,
     body: {
       readinessStatus: 'combat_ready' | 'not_combat_ready';
-      notReadyReason?: 'breakdown' | 'threat' | 'crew' | 'maintenance' | 'other' | null;
+      notReadyReason?: 'breakdown' | 'maintenance' | 'air_threat' | 'crew' | 'other' | null;
       note?: string;
     },
   ): Observable<WeaponSystem> {

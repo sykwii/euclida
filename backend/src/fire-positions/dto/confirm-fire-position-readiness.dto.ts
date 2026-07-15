@@ -6,8 +6,8 @@ export class ConfirmFirePositionReadinessDto {
   readinessStatus?: 'combat_ready' | 'not_combat_ready';
 
   @IsOptional()
-  @IsIn(['threat', 'damaged', 'not_prepared', 'occupied', 'other'])
-  notReadyReason?: 'threat' | 'damaged' | 'not_prepared' | 'occupied' | 'other' | null;
+  @IsIn(['threat', 'damaged', 'prohibited', 'other'])
+  notReadyReason?: 'threat' | 'damaged' | 'prohibited' | 'other' | null;
 
   @IsOptional()
   @IsString()

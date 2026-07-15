@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { AirAssetPosition } from '../air-assets/air-asset-position.entity';
@@ -92,32 +92,15 @@ export class ServiceOrderSuggestionsService {
       .createQueryBuilder('position')
       .leftJoinAndSelect('position.unit', 'unit')
       .leftJoinAndSelect('position.ammoDepot', 'ammoDepot')
-      .leftJoin(
+      .innerJoin(
         'weapon_systems',
         'weapon',
-        `(
-          weapon.current_fire_position_id = position.id
-          AND weapon.deployment_status = 'at_fire_position'
-        ) OR (
-          weapon.fire_position_id = position.id
-          AND weapon.location_type = 'fire_position'
-        )`,
+        `weapon.current_fire_position_id = position.id`,
       )
-      .where('position.hasSg = :hasSg', { hasSg: true })
+      .where('position.notReadyReason IS NULL')
       .andWhere(
-        `(
-          position.readinessStatus IS NULL
-          OR position.readinessStatus IN (:...readyStatuses)
-          OR weapon.readiness_status IN (:...readyStatuses)
-        )`,
+        `weapon.readiness_status IN (:...readyStatuses)`,
         { readyStatuses },
-      )
-      .andWhere(
-        `(
-          weapon.id IS NULL
-          OR weapon.deployment_status IS NULL
-          OR weapon.deployment_status = 'at_fire_position'
-        )`,
       )
       .andWhere(
         `(
@@ -220,6 +203,12 @@ export class ServiceOrderSuggestionsService {
       });
     }
 
+    if (suggestions.length === 0) {
+      throw new BadRequestException(
+        'Немає доступних виконавців: перевірте БГ озброєння, блокування ВП, дальність комплектів і залишки БК.',
+      );
+    }
+
     return suggestions.sort((a, b) => {
       if (a.executorType !== b.executorType) {
         return a.executorType === 'fire_position' ? -1 : 1;
@@ -243,7 +232,13 @@ export class ServiceOrderSuggestionsService {
         b.payloadVariants?.[0]?.availableQuantity ??
         0;
 
-      return availableB - availableA;
+      if (availableA !== availableB) {
+        return availableB - availableA;
+      }
+
+      const idA = a.firePosition?.id ?? a.airAssetPosition?.id ?? '';
+      const idB = b.firePosition?.id ?? b.airAssetPosition?.id ?? '';
+      return idA.localeCompare(idB);
     });
   }
 
@@ -257,16 +252,10 @@ export class ServiceOrderSuggestionsService {
     rejectionReasons: string[];
   }> {
     const weaponSystems = await this.dataSource.getRepository(WeaponSystem).find({
-      where: [
-        {
-          currentFirePositionId: firePositionId,
-          deploymentStatus: 'at_fire_position',
-        },
-        {
-          firePositionId,
-          locationType: 'fire_position',
-        },
-      ],
+      where: {
+        currentFirePositionId: firePositionId,
+        readinessStatus: 'combat_ready',
+      },
     });
 
     const weaponModelIds = Array.from(

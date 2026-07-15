@@ -26,7 +26,7 @@ describe('FirePositionsService', () => {
         .method,
     ).toBe('POST');
 
-    service.setNotReady('fp-1', { notReadyReason: 'not_prepared' }).subscribe();
+    service.setNotReady('fp-1', { notReadyReason: 'prohibited' }).subscribe();
     expect(
       http.expectOne((req) => req.url.endsWith('/fire-positions/fp-1/readiness/not-ready')).request
         .method,

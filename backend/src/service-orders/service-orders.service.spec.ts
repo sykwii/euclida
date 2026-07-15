@@ -402,21 +402,15 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     expect(manager.save).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to legacy completion when no execution journal exists', async () => {
+  it('rejects completion when no execution journal exists', async () => {
     const order = createOrder();
-    const expected = createOrder({ status: 'completed' });
 
     repository.findOne.mockResolvedValue(order);
     executionRecordsRepository.find.mockResolvedValue([]);
 
-    const completeLegacySpy = jest
-      .spyOn(service as unknown as PrivateServiceOrdersApi, 'completeLegacy')
-      .mockResolvedValue(expected);
-
-    const saved = await service.complete(order.id, body, user);
-
-    expect(completeLegacySpy).toHaveBeenCalledWith(order.id, body, user);
-    expect(saved).toBe(expected);
+    await expect(service.complete(order.id, body, user)).rejects.toThrow(
+      'Завершення доступне тільки після створення, перевірки та проведення запису журналу виконання.',
+    );
   });
 
   it('marks delivery viewed exactly once', async () => {

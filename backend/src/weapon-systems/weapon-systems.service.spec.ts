@@ -75,7 +75,7 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     );
   });
 
-  it('requires explicit confirmation before assigning a not combat ready weapon', async () => {
+  it('rejects assigning a not combat ready weapon even when force is requested', async () => {
     const weapon = createWeapon({ readinessStatus: 'not_combat_ready' });
     weaponRepository.findOne.mockResolvedValueOnce(
       weapon,
@@ -85,7 +85,7 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     await expect(
       service.assignToFirePosition(
         'weapon-1',
-        { targetFirePositionId: 'fp-1', force: false },
+        { targetFirePositionId: 'fp-1', force: true },
         user,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);

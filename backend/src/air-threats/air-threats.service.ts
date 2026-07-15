@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { FirePosition } from '../fire-positions/fire-position.entity';
+import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { SettingsService } from '../settings/settings.service';
 import { AirThreat } from './air-threat.entity';
@@ -84,8 +85,10 @@ export class AirThreatsService {
     });
 
     const positions: FirePosition[] = await manager.find(FirePosition);
+    const weapons: WeaponSystem[] = await manager.find(WeaponSystem);
 
     const changedPositions: FirePosition[] = [];
+    const changedWeapons: WeaponSystem[] = [];
 
     for (const position of positions) {
       const nearestThreat = threats.find((threat) => {
@@ -100,18 +103,30 @@ export class AirThreatsService {
       });
 
       if (nearestThreat) {
-        const nextReason = `Повітряна загроза: ${nearestThreat.threatType}`;
-
         if (
-          position.readinessStatus !== 'not_ready' ||
-          position.notReadyReason !== nextReason
+          position.readinessStatus !== 'not_combat_ready' ||
+          position.notReadyReason !== 'threat'
         ) {
-          position.readinessStatus = 'not_ready';
-          position.notReadyReason = nextReason;
+          position.readinessStatus = 'not_combat_ready';
+          position.notReadyReason = 'threat';
           changedPositions.push(position);
         }
-      } else if (position.notReadyReason?.startsWith('Повітряна загроза:')) {
-        position.readinessStatus = 'ready';
+
+        const assignedWeapon = weapons.find(
+          (weapon) => weapon.currentFirePositionId === position.id,
+        );
+        if (
+          assignedWeapon &&
+          (assignedWeapon.readinessStatus !== 'not_combat_ready' ||
+            assignedWeapon.notReadyReason !== 'air_threat')
+        ) {
+          assignedWeapon.readinessStatus = 'not_combat_ready';
+          assignedWeapon.notReadyReason = 'air_threat';
+          changedWeapons.push(assignedWeapon);
+        }
+      } else if (position.notReadyReason === 'threat') {
+        // Position blocking follows the threat. Weapon readiness is restored explicitly.
+        position.readinessStatus = 'combat_ready';
         position.notReadyReason = null;
         changedPositions.push(position);
       }
@@ -119,6 +134,10 @@ export class AirThreatsService {
 
     if (changedPositions.length > 0) {
       await manager.save(FirePosition, changedPositions);
+    }
+
+    if (changedWeapons.length > 0) {
+      await manager.save(WeaponSystem, changedWeapons);
     }
   }
 

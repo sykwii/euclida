@@ -62,7 +62,7 @@ confirmReadiness(id: string): Observable<FirePosition> {
 
 setNotReady(
   id: string,
-  body: { notReadyReason: 'threat' | 'damaged' | 'not_prepared' | 'occupied' | 'other'; note?: string },
+  body: { notReadyReason: 'threat' | 'damaged' | 'prohibited' | 'other'; note?: string },
 ): Observable<FirePosition> {
   return this.api.post<FirePosition>(`/fire-positions/${id}/readiness/not-ready`, body);
 }

@@ -2226,12 +2226,31 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
 
   postExecutionRecord(order: ServiceOrder, record: ExecutionRecord): void {
     this.executionValidationByRecordId[record.id] = [];
-    this.executionRecords.post(record.id).subscribe({
-      next: () => this.loadExecutionRecords(order),
+    this.executionRecords.validate(record.id).subscribe({
+      next: (validation) => {
+        if (!validation.valid) {
+          this.executionValidationByRecordId[record.id] = validation.reasons.map(
+            (item) => item.message,
+          );
+          this.cdr.detectChanges();
+          return;
+        }
+
+        this.executionRecords.post(record.id).subscribe({
+          next: () => this.loadExecutionRecords(order),
+          error: (error) => {
+            const reasons = error?.error?.reasons as Array<{ message: string }> | undefined;
+            this.executionValidationByRecordId[record.id] = reasons?.map((item) => item.message) || [
+              error?.error?.message || 'Не вдалося провести запис',
+            ];
+            this.cdr.detectChanges();
+          },
+        });
+      },
       error: (error) => {
         const reasons = error?.error?.reasons as Array<{ message: string }> | undefined;
         this.executionValidationByRecordId[record.id] = reasons?.map((item) => item.message) || [
-          error?.error?.message || 'Не вдалося провести запис',
+          error?.error?.message || 'Не вдалося перевірити запис',
         ];
         this.cdr.detectChanges();
       },

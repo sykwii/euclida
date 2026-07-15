@@ -1020,18 +1020,13 @@ async selectAirAsset(
       },
     });
 
-    if (executionRecords.length > 0) {
-      return this.completeFromExecutionJournal(order, executionRecords, body, user);
+    if (executionRecords.length === 0) {
+      throw new BadRequestException(
+        'Завершення доступне тільки після створення, перевірки та проведення запису журналу виконання.',
+      );
     }
 
-    const shotConfigurationId =
-      body.actualShotConfigurationId ?? order.selectedShotConfigurationId;
-
-    if (shotConfigurationId) {
-      return this.completeCanonical(id, body, user);
-    }
-
-    return this.completeLegacy(id, body, user);
+    return this.completeFromExecutionJournal(order, executionRecords, body, user);
   }
 
   private async completeFromExecutionJournal(

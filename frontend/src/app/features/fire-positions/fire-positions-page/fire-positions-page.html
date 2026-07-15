@@ -348,39 +348,6 @@
 
         <button
           type="button"
-          class="ghost-button"
-          *ngIf="item.canEdit && !isFpCombatReady(item)"
-          (click)="confirmFirePositionReadiness(item, $event)"
-          [disabled]="readinessActionId === item.id"
-        >
-          Позначити ВП БГ
-        </button>
-
-        <select
-          *ngIf="item.canEdit && isFpCombatReady(item)"
-          [(ngModel)]="notReadyReasons[item.id]"
-          [name]="'fp-reason-' + item.id"
-          (click)="$event.stopPropagation()"
-        >
-          <option value="threat">Під загрозою</option>
-          <option value="damaged">Пошкоджена</option>
-          <option value="not_prepared">Не підготовлена</option>
-          <option value="occupied">Зайнята</option>
-          <option value="other">Інше</option>
-        </select>
-
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="item.canEdit && isFpCombatReady(item)"
-          (click)="setFirePositionNotReady(item, $event)"
-          [disabled]="readinessActionId === item.id"
-        >
-          Позначити ВП НЕ БГ
-        </button>
-
-        <button
-          type="button"
           class="danger-button"
           *ngIf="item.canEdit"
           (click)="$event.stopPropagation(); remove(item.id)"
