@@ -146,10 +146,10 @@ export class ServiceOrdersController {
     @Body()
     body: {
       firePositionId: string;
+      weaponSystemId: string;
       shotConfigurationId?: string;
       shellId?: string;
       chargeId?: string;
-      zoneId?: string | null;
     },
   ) {
     return this.service.selectPosition(id, body, user);

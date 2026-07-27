@@ -1,10 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { CdkConnectedOverlay, CdkOverlayOrigin, ConnectedPosition } from '@angular/cdk/overlay';
+import { ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, NavigationStart, Router } from '@angular/router';
 import { EventFeedService } from '../../../core/event-feed.service';
 import { formatKyivDateTime, isSameKyivDate, minutesSince } from '../../../core/kyiv-time.util';
-import { finalize, Subscription } from 'rxjs';
+import { filter, finalize, Subscription, switchMap } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 import { ToastService } from '../../../core/toast.service';
 import { AuthService, LoginResponse } from '../../auth/auth.service';
@@ -48,10 +49,30 @@ interface CompletionAmmoFormItem {
   chargeModulesPerShot: string;
 }
 
+export type ServiceOrderPrimaryActionType =
+  | 'choose_executor'
+  | 'choose_kit'
+  | 'send'
+  | 'accept'
+  | 'start'
+  | 'add_execution'
+  | 'continue_execution'
+  | 'complete';
+
+export interface ServiceOrderPrimaryAction {
+  type: ServiceOrderPrimaryActionType;
+  label: string;
+  visualVariant: 'cyan' | 'blue' | 'green' | 'amber';
+  disabled: boolean;
+  disabledReason: string | null;
+  loading: boolean;
+  handler: () => void;
+}
+
 @Component({
   selector: 'app-service-orders-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, CdkOverlayOrigin, CdkConnectedOverlay],
   templateUrl: './service-orders-page.html',
   styleUrl: './service-orders-page.css',
 })
@@ -68,6 +89,30 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   lastSyncLabel = '—';
   expandedSuggestionIds: Record<string, boolean> = {};
   openedActionsOrderId: string | null = null;
+  actionsMenuOrder: ServiceOrder | null = null;
+  actionsOverlayOrigin: CdkOverlayOrigin | null = null;
+  workflowActionOrderId: string | null = null;
+  readonly actionsMenuPositions: ConnectedPosition[] = [
+    {
+      originX: 'end',
+      originY: 'bottom',
+      overlayX: 'end',
+      overlayY: 'top',
+      offsetY: 6,
+      panelClass: 'service-order-menu-below',
+    },
+    {
+      originX: 'end',
+      originY: 'top',
+      overlayX: 'end',
+      overlayY: 'bottom',
+      offsetY: -6,
+      panelClass: 'service-order-menu-above',
+    },
+  ];
+  @ViewChild('actionsMenu') private actionsMenu?: ElementRef<HTMLElement>;
+  private actionsTrigger: HTMLButtonElement | null = null;
+  private actionsAnchorObserver: IntersectionObserver | null = null;
   readonly pageSkeleton = Array.from({ length: 6 });
   deliveries: ServiceOrderDelivery[] = [];
   deliveriesLoading = false;
@@ -88,6 +133,8 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   > = {};
 
   selectedDetailsOrderId: string | null = null;
+  selectedExecutorByOrderId: Record<string, ServiceOrderSuggestion> = {};
+  selectedKitByOrderId: Record<string, ServiceOrderSuggestionVariant> = {};
 
   get selectedDetailsOrder(): ServiceOrder | null {
     return (
@@ -100,6 +147,10 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   selectOrderDetails(order: ServiceOrder): void {
     this.selectedDetailsOrderId = order.id;
     this.loadExecutionRecords(order);
+  }
+
+  trackByOrderId(_index: number, order: ServiceOrder): string {
+    return order.id;
   }
 
   get activeCount(): number {
@@ -191,7 +242,9 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   completeStockLoadingByOrderId: Record<string, boolean> = {};
   executionRecordsByOrderId: Record<string, ExecutionRecord[]> = {};
   executionLoadingByOrderId: Record<string, boolean> = {};
+  executionLoadRequestByOrderId: Record<string, number> = {};
   executionSavingByOrderId: Record<string, boolean> = {};
+  executionRecordSavingById: Record<string, boolean> = {};
   executionValidationByRecordId: Record<string, string[]> = {};
   executionFormByOrderId: Record<
     string,
@@ -226,7 +279,7 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     this.loadDeliveryReferenceData();
     this.loadDeliveries();
     this.load();
-    this.route.queryParamMap.subscribe((params) => {
+    this.autoRefreshSubscription.add(this.route.queryParamMap.subscribe((params) => {
       if (params.get('create') === 'true') {
         this.openCreateModal();
 
@@ -260,24 +313,30 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
       } else {
         this.focusedOrderId = null;
       }
-    });
+    }));
 
     this.autoRefreshSubscription.add(
-      this.autoRefresh.watch(['all', 'missions', 'recon'], () => {
-        this.closeActions();
-        this.load(true);
-        this.loadPlannedPuar();
+      this.router.events.pipe(filter((event) => event instanceof NavigationStart)).subscribe(() => {
+        this.closeActions(false);
       }),
     );
 
     this.autoRefreshSubscription.add(
-      this.autoRefresh.watch(['missions', 'events'], () => {
+      this.autoRefresh.watch(['missions'], () => {
+        this.load(true);
         this.loadDeliveries(true);
+      }),
+    );
+
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['all'], (event) => {
+        if (event.reason === 'reconnect') this.load(true);
       }),
     );
   }
 
   ngOnDestroy(): void {
+    this.closeActions(false);
     this.autoRefreshSubscription.unsubscribe();
   }
 
@@ -406,9 +465,11 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
 
   respondToDelivery(delivery: ServiceOrderDelivery, status: 'accepted' | 'rejected'): void {
     const form = this.ensureDeliveryForm(delivery);
+    if (form.submitting || !this.beginWorkflowAction(delivery.serviceOrderId)) return;
 
     if (status === 'rejected' && !form.rejectionReason.trim()) {
       this.errorMessage = 'Для відхилення потрібно вказати причину';
+      this.finishWorkflowAction(delivery.serviceOrderId);
       return;
     }
 
@@ -428,7 +489,12 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
             ? form.selectedWeaponSystemId
             : undefined,
       })
-      .pipe(finalize(() => (form.submitting = false)))
+      .pipe(
+        finalize(() => {
+          form.submitting = false;
+          this.finishWorkflowAction(delivery.serviceOrderId);
+        }),
+      )
       .subscribe({
         next: (updated) => {
           this.replaceDelivery(updated);
@@ -647,6 +713,7 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   }
 
   loadSuggestions(order: ServiceOrder): void {
+    if (!this.beginWorkflowAction(order.id)) return;
     this.selectedOrderId = order.id;
     this.selectedDetailsOrderId = order.id;
     this.focusedOrderId = order.id;
@@ -655,7 +722,10 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     this.suggestionsLoading = true;
     this.errorMessage = '';
 
-    this.service.getSuggestions(order.id).subscribe({
+    this.service
+      .getSuggestions(order.id)
+      .pipe(finalize(() => this.finishWorkflowAction(order.id)))
+      .subscribe({
       next: (suggestions) => {
         this.suggestions = suggestions;
         this.suggestionsLoading = false;
@@ -669,58 +739,102 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   }
 
   canSelectSuggestion(order: ServiceOrder): boolean {
-    return order.status === 'draft' || order.status === 'proposed' || order.status === 'rejected';
+    return order.status === 'draft' || order.status === 'proposed';
   }
 
-selectSuggestion(
-  order: ServiceOrder,
-  suggestion: ServiceOrderSuggestion,
-  variant: ServiceOrderSuggestionVariant,
-): void {
-  this.errorMessage = '';
-
-  if (suggestion.executorType !== 'fire_position' || !suggestion.firePosition) {
-    this.errorMessage = 'Цей варіант не є ВП';
-    return;
+  getCompatibleKits(suggestion: ServiceOrderSuggestion): ServiceOrderSuggestionVariant[] {
+    return suggestion.compatibleKits || suggestion.variants || [];
   }
 
-  const firePosition = suggestion.firePosition;
+  selectExecutor(order: ServiceOrder, suggestion: ServiceOrderSuggestion): void {
+    if (!this.canSelectSuggestion(order) || suggestion.executorType !== 'fire_position') return;
+    const previous = this.selectedExecutorByOrderId[order.id];
+    const changed = previous?.weaponSystemId !== suggestion.weaponSystemId;
+    this.selectedExecutorByOrderId[order.id] = suggestion;
+    if (changed) delete this.selectedKitByOrderId[order.id];
 
-  this.service
-    .selectPosition(order.id, {
-      firePositionId: firePosition.id,
-      shotConfigurationId: variant.shotConfigurationId,
-      shellId: variant.shellId,
-      chargeId: variant.chargeId,
-      zoneNumber: variant.zoneNumber,
-    })
-    .subscribe({
-      next: () => {
-        this.toast.show('Варіант обрано', 'success');
-        this.eventFeed.add({
-          type: 'success',
-          title: `Для ${order.orderNumber} обрано ВП ${firePosition.name}`,
-          details: `${variant.shell.marking} + ${variant.charge.marking}, ${this.getZoneLabel(variant.zoneNumber)}, запас ${variant.rangeReserveM} м`,
-          route: '/map',
-          queryParams: this.getMapQueryParams(order),
-        });
+    const compatibleKits = this.getCompatibleKits(suggestion);
+    if (!this.selectedKitByOrderId[order.id] && compatibleKits.length === 1) {
+      this.selectedKitByOrderId[order.id] = compatibleKits[0];
+    }
 
-        this.selectedOrderId = null;
-        this.suggestions = [];
-        this.closeActions();
-        this.load();
-      },
-      error: (error) =>
-        this.fail(error, error?.error?.message || 'Не вдалося обрати варіант'),
-    });
-}
+    this.expandedSuggestionIds[this.getSuggestionKey(suggestion)] = true;
+    this.cdr.markForCheck();
+  }
+
+  selectSuggestion(
+    order: ServiceOrder,
+    suggestion: ServiceOrderSuggestion,
+    variant: ServiceOrderSuggestionVariant,
+  ): void {
+    this.selectExecutor(order, suggestion);
+    if (!this.getCompatibleKits(suggestion).some((item) => item.shotConfigurationId === variant.shotConfigurationId)) {
+      this.errorMessage = 'Немає сумісного комплекту пострілу';
+      return;
+    }
+    this.selectedKitByOrderId[order.id] = variant;
+    this.errorMessage = '';
+    this.cdr.markForCheck();
+  }
+
+  isSelectedExecutor(order: ServiceOrder, suggestion: ServiceOrderSuggestion): boolean {
+    return this.selectedExecutorByOrderId[order.id]?.weaponSystemId === suggestion.weaponSystemId;
+  }
+
+  isSelectedKit(order: ServiceOrder, variant: ServiceOrderSuggestionVariant): boolean {
+    return this.selectedKitByOrderId[order.id]?.shotConfigurationId === variant.shotConfigurationId;
+  }
+
+  private commitSelectionAndSend(order: ServiceOrder): void {
+    const suggestion = this.selectedExecutorByOrderId[order.id];
+    const variant = this.selectedKitByOrderId[order.id];
+    if (
+      !suggestion?.firePosition?.id ||
+      !suggestion.weaponSystemId ||
+      !variant
+    ) {
+      this.errorMessage = !suggestion ? 'Не вибрано виконавця' : 'Не вибрано комплект пострілу';
+      return;
+    }
+    if (!this.beginWorkflowAction(order.id)) return;
+
+    this.service
+      .selectPosition(order.id, {
+        firePositionId: suggestion.firePosition.id,
+        weaponSystemId: suggestion.weaponSystemId,
+        shotConfigurationId: variant.shotConfigurationId,
+        shellId: variant.shellId,
+        chargeId: variant.chargeId,
+        zoneNumber: variant.zoneNumber,
+      })
+      .pipe(
+        switchMap((selectedOrder) => this.service.sendToUnit(selectedOrder.id)),
+        finalize(() => this.finishWorkflowAction(order.id)),
+      )
+      .subscribe({
+        next: () => {
+          delete this.selectedExecutorByOrderId[order.id];
+          delete this.selectedKitByOrderId[order.id];
+          this.selectedOrderId = null;
+          this.suggestions = [];
+          this.toast.show('Вогневе завдання передано на ПУВБ', 'success');
+          this.load(true);
+        },
+        error: (error) =>
+          this.fail(error, error?.error?.message || 'Не вдалося передати вогневе завдання на ПУВБ'),
+      });
+  }
 
 
 
   accept(order: ServiceOrder): void {
+    if (!this.beginWorkflowAction(order.id)) return;
     this.errorMessage = '';
 
-    this.service.accept(order.id).subscribe({
+    this.service
+      .accept(order.id)
+      .pipe(finalize(() => this.finishWorkflowAction(order.id)))
+      .subscribe({
       next: () => {
         this.toast.show('Вогневе завдання прийнято', 'success');
         this.eventFeed.add({
@@ -801,9 +915,13 @@ selectSuggestion(
   }
 
   start(order: ServiceOrder): void {
+    if (!this.beginWorkflowAction(order.id)) return;
     this.errorMessage = '';
 
-    this.service.start(order.id).subscribe({
+    this.service
+      .start(order.id)
+      .pipe(finalize(() => this.finishWorkflowAction(order.id)))
+      .subscribe({
       next: () => {
         this.toast.show(
           '\u0412\u0438\u043a\u043e\u043d\u0430\u043d\u043d\u044f \u0440\u043e\u0437\u043f\u043e\u0447\u0430\u0442\u043e',
@@ -837,6 +955,10 @@ selectSuggestion(
       return;
     }
 
+    const postedExecutionRecords = this.getExecutionRecords(order).filter(
+      (record) => record.status === 'posted',
+    );
+    const executionBacked = postedExecutionRecords.length > 0;
     const actualAmmoItems = form.actualAmmoItems.map((item) => ({
       shellId: item.shellId,
       chargeId: item.chargeId,
@@ -845,20 +967,21 @@ selectSuggestion(
     }));
 
     if (
-      actualAmmoItems.length === 0 ||
-      actualAmmoItems.some(
-        (item) =>
-          !item.shellId ||
-          !item.chargeId ||
-          item.quantity <= 0 ||
-          !Number.isInteger(item.quantity),
-      )
+      (!executionBacked && actualAmmoItems.length === 0) ||
+      (!executionBacked &&
+        actualAmmoItems.some(
+          (item) =>
+            !item.shellId ||
+            !item.chargeId ||
+            item.quantity <= 0 ||
+            !Number.isInteger(item.quantity),
+        ))
     ) {
       this.errorMessage = 'Фактична витрата має бути цілим числом більше 0';
       return;
     }
 
-    for (const item of actualAmmoItems) {
+    for (const item of executionBacked ? [] : actualAmmoItems) {
       const selectedCharge = this.getCompletionChargeOption(order, item.chargeId);
 
       if (
@@ -871,7 +994,9 @@ selectSuggestion(
     }
 
     this.modalSubmitting = true;
-    const actualQuantity = actualAmmoItems.reduce((sum, item) => sum + item.quantity, 0);
+    const actualQuantity = executionBacked
+      ? postedExecutionRecords.reduce((sum, record) => sum + Number(record.quantity || 0), 0)
+      : actualAmmoItems.reduce((sum, item) => sum + item.quantity, 0);
     const firstItem = actualAmmoItems[0];
 
     this.service
@@ -879,20 +1004,24 @@ selectSuggestion(
         startedAt: new Date(form.startedAt).toISOString(),
         completedAt: new Date(form.completedAt).toISOString(),
         actualQuantity,
-        actualShotConfigurationId: order.selectedShotConfigurationId || undefined,
-        actualShellId: firstItem.shellId,
-        actualChargeId: firstItem.chargeId,
-        actualAmmoItems: actualAmmoItems.map((item) => {
-          const selectedCharge = this.getCompletionChargeOption(order, item.chargeId);
-          return {
-            shellId: item.shellId,
-            chargeId: item.chargeId,
-            quantity: item.quantity,
-            ...(selectedCharge?.chargeKind === 'modular'
-              ? { chargeModulesPerShot: item.chargeModulesPerShot }
-              : {}),
-          };
-        }),
+        ...(!executionBacked && firstItem
+          ? {
+              actualShotConfigurationId: order.selectedShotConfigurationId || undefined,
+              actualShellId: firstItem.shellId,
+              actualChargeId: firstItem.chargeId,
+              actualAmmoItems: actualAmmoItems.map((item) => {
+                const selectedCharge = this.getCompletionChargeOption(order, item.chargeId);
+                return {
+                  shellId: item.shellId,
+                  chargeId: item.chargeId,
+                  quantity: item.quantity,
+                  ...(selectedCharge?.chargeKind === 'modular'
+                    ? { chargeModulesPerShot: item.chargeModulesPerShot }
+                    : {}),
+                };
+              }),
+            }
+          : {}),
         resultType: form.resultType,
         resultComment: form.resultComment.trim() || undefined,
       })
@@ -970,77 +1099,190 @@ selectSuggestion(
     );
   }
 
-  hasPrimaryAction(order: ServiceOrder): boolean {
-    if (['draft', 'proposed', 'rejected'].includes(order.status)) {
-      return this.canControlOrder();
+  getPrimaryAction(order: ServiceOrder): ServiceOrderPrimaryAction | null {
+    if ((order.status === 'draft' || order.status === 'proposed') && this.canControlOrder()) {
+      const pendingExecutor = this.selectedExecutorByOrderId[order.id];
+      const hasExecutor = !!pendingExecutor || this.hasSelectedExecutor(order);
+      if (!hasExecutor) {
+        const noOptions =
+          this.selectedOrderId === order.id && !this.suggestionsLoading && this.suggestions.length === 0;
+        return this.createPrimaryAction(order, {
+          type: 'choose_executor',
+          label: 'Підібрати виконавця',
+          visualVariant: 'cyan',
+          disabled: noOptions,
+          disabledReason: noOptions ? 'Немає доступних комплектів' : 'Не вибрано виконавця',
+        });
+      }
+
+      const pendingKit = this.selectedKitByOrderId[order.id];
+      const hasShotKit =
+        order.executorType === 'air_asset_position' ||
+        !!pendingKit ||
+        (!!(order.selectedShotConfigurationId || order.selectedShotConfiguration?.id) &&
+          !!order.selectedShellId &&
+          !!order.selectedChargeId);
+      if (!hasShotKit) {
+        return this.createPrimaryAction(order, {
+          type: 'choose_kit',
+          label: 'Обрати комплект',
+          visualVariant: 'cyan',
+          disabled: false,
+          disabledReason:
+            pendingExecutor && this.getCompatibleKits(pendingExecutor).length === 0
+              ? 'Немає сумісного комплекту пострілу'
+              : 'Не вибрано комплект пострілу',
+        });
+      }
+
+      return this.createPrimaryAction(order, {
+        type: 'send',
+        label: 'Відправити на ПУВБ',
+        visualVariant: 'blue',
+        disabled: false,
+        disabledReason: null,
+      });
     }
 
-    if (
-      order.status === 'sent' ||
-      order.status === 'sent_to_division' ||
-      order.status === 'sent_to_battery' ||
-      order.status === 'accepted' ||
-      order.status === 'in_progress'
-    ) {
-      return this.canExecuteOrder(order);
+    if (order.status === 'sent' || order.status === 'sent_to_division' || order.status === 'sent_to_battery') {
+      const delivery = this.getPendingDelivery(order);
+      if (!delivery && !this.canExecuteOrder(order)) return null;
+      return this.createPrimaryAction(order, {
+        type: 'accept',
+        label: 'Прийняти',
+        visualVariant: 'green',
+        disabled: !!delivery && this.ensureDeliveryForm(delivery).submitting,
+        disabledReason: null,
+      });
     }
 
-    return false;
+    if (order.status === 'accepted' && this.canExecuteOrder(order)) {
+      return this.createPrimaryAction(order, {
+        type: 'start',
+        label: 'Почати виконання',
+        visualVariant: 'blue',
+        disabled: false,
+        disabledReason: null,
+      });
+    }
+
+    if (order.status === 'in_progress' && this.canExecuteOrder(order)) {
+      const records = this.getExecutionRecords(order);
+      if (records.some((record) => record.status === 'draft')) {
+        return this.createPrimaryAction(order, {
+          type: 'continue_execution',
+          label: 'Продовжити виконання',
+          visualVariant: 'amber',
+          disabled: false,
+          disabledReason: null,
+        });
+      }
+
+      if (records.some((record) => record.status === 'posted')) {
+        return this.createPrimaryAction(order, {
+          type: 'complete',
+          label: 'Завершити ВГЗ',
+          visualVariant: 'green',
+          disabled: false,
+          disabledReason: null,
+        });
+      }
+
+      return this.createPrimaryAction(order, {
+        type: 'add_execution',
+        label: 'Додати виконання',
+        visualVariant: 'cyan',
+        disabled: false,
+        disabledReason: null,
+      });
+    }
+
+    return null;
   }
 
-  getPrimaryActionLabel(order: ServiceOrder): string {
-    if (order.status === 'draft') return 'Підібрати ВП';
-    if (order.status === 'proposed') return 'Надіслати на ПУВБ';
-    if (
-      order.status === 'sent' ||
-      order.status === 'sent_to_division' ||
-      order.status === 'sent_to_battery'
-    ) {
-      return 'Прийняти завдання';
-    }
-    if (order.status === 'accepted') return 'Почати виконання';
-    if (order.status === 'rejected') return 'Підібрати іншу ВП';
-    if (order.status === 'in_progress') return 'Завершити завдання';
-
-    return '';
+  isPrimaryActionInFlight(order: ServiceOrder): boolean {
+    return (
+      this.workflowActionOrderId === order.id ||
+      !!this.executionSavingByOrderId[order.id] ||
+      !!this.executionLoadingByOrderId[order.id]
+    );
   }
 
-  runPrimaryAction(order: ServiceOrder): void {
+  runPrimaryAction(order: ServiceOrder, actionType: ServiceOrderPrimaryActionType): void {
+    const action = this.getPrimaryAction(order);
+    if (!action || action.type !== actionType || action.disabled || action.loading) return;
     this.closeActions();
 
-    if ((order.status === 'draft' || order.status === 'rejected') && this.canControlOrder()) {
-      this.loadSuggestions(order);
-      return;
-    }
-
-    if (order.status === 'proposed' && this.canControlOrder()) {
-      this.sendToUnit(order);
-      return;
-    }
-
-    if (!this.canExecuteOrder(order)) {
-      this.errorMessage =
-        '\u0421\u0442\u0430\u0440\u0448\u0456 \u043f\u0443\u043d\u043a\u0442\u0438 \u0443\u043f\u0440\u0430\u0432\u043b\u0456\u043d\u043d\u044f \u0442\u0456\u043b\u044c\u043a\u0438 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044e\u044e\u0442\u044c \u0432\u0438\u043a\u043e\u043d\u0430\u043d\u043d\u044f. \u0412\u0438\u043a\u043e\u043d\u0430\u0432\u0447\u0456 \u0434\u0456\u0457 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0456 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0443 \u0431\u0430\u0442\u0430\u0440\u0435\u0457/\u0412\u041f.';
-      return;
-    }
-
-    if (
-      order.status === 'sent' ||
-      order.status === 'sent_to_division' ||
-      order.status === 'sent_to_battery'
-    ) {
-      this.accept(order);
-      return;
-    }
-
-    if (order.status === 'accepted') {
+    if (action.type === 'choose_executor' || action.type === 'choose_kit') {
+      if (action.type === 'choose_kit' && this.selectedOrderId === order.id) {
+        this.focusCandidateSelection(order);
+      } else {
+        this.loadSuggestions(order);
+      }
+    } else if (action.type === 'send') {
+      this.selectedExecutorByOrderId[order.id]
+        ? this.commitSelectionAndSend(order)
+        : this.sendToUnit(order);
+    } else if (action.type === 'accept') {
+      const delivery = this.getPendingDelivery(order);
+      delivery ? this.respondToDelivery(delivery, 'accepted') : this.accept(order);
+    } else if (action.type === 'start') {
       this.start(order);
-      return;
-    }
-
-    if (order.status === 'in_progress') {
+    } else if (action.type === 'add_execution') {
+      this.focusExecutionControl(order, 'form');
+    } else if (action.type === 'continue_execution') {
+      this.focusExecutionControl(order, 'draft');
+    } else if (action.type === 'complete') {
       this.openCompleteModal(order);
     }
+  }
+
+  private createPrimaryAction(
+    order: ServiceOrder,
+    action: Omit<ServiceOrderPrimaryAction, 'loading' | 'handler'>,
+  ): ServiceOrderPrimaryAction {
+    return {
+      ...action,
+      loading: this.isPrimaryActionInFlight(order),
+      handler: () => this.runPrimaryAction(order, action.type),
+    };
+  }
+
+  private getPendingDelivery(order: ServiceOrder): ServiceOrderDelivery | null {
+    const unitId = this.currentUser?.unitId;
+    if (!unitId) return null;
+    return (
+      this.deliveries.find(
+        (delivery) =>
+          delivery.serviceOrderId === order.id &&
+          delivery.recipientUnitId === unitId &&
+          (delivery.status === 'new' || delivery.status === 'viewed'),
+      ) || null
+    );
+  }
+
+  hasSecondaryActions(order: ServiceOrder): boolean {
+    const sent = ['sent', 'sent_to_division', 'sent_to_battery'].includes(order.status);
+    const canCancel =
+      (this.canControlOrder() || this.canExecuteOrder(order)) &&
+      ['proposed', 'sent', 'sent_to_division', 'sent_to_battery', 'accepted', 'in_progress'].includes(
+        order.status,
+      );
+    return (this.canExecuteOrder(order) && sent) || canCancel || (this.canControlOrder() && order.status === 'draft');
+  }
+
+  private focusExecutionControl(order: ServiceOrder, target: 'form' | 'draft'): void {
+    const element = document.getElementById(
+      target === 'form' ? `execution-form-${order.id}` : `execution-draft-${order.id}`,
+    );
+    element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    window.setTimeout(() => element?.querySelector<HTMLElement>('input, select, button')?.focus(), 120);
+  }
+
+  private focusCandidateSelection(order: ServiceOrder): void {
+    const element = document.getElementById(`service-order-candidates-${order.id}`);
+    element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    window.setTimeout(() => element?.querySelector<HTMLElement>('button:not([disabled])')?.focus(), 120);
   }
 
   getCompleteForm(order: ServiceOrder) {
@@ -1549,16 +1791,74 @@ selectSuggestion(
     this.reject(this.rejectModalOrder);
   }
 
-  toggleActions(order: ServiceOrder): void {
-    this.openedActionsOrderId = this.openedActionsOrderId === order.id ? null : order.id;
+  toggleActions(order: ServiceOrder, origin: CdkOverlayOrigin, event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.openedActionsOrderId === order.id) {
+      this.closeActions();
+      return;
+    }
+
+    this.closeActions(false);
+    this.openedActionsOrderId = order.id;
+    this.actionsMenuOrder = order;
+    this.actionsOverlayOrigin = origin;
+    this.actionsTrigger = event.currentTarget as HTMLButtonElement;
+    this.observeActionsAnchor(this.actionsTrigger);
   }
 
-  closeActions(): void {
+  closeActions(restoreFocus = true): void {
+    const trigger = this.actionsTrigger;
+    this.actionsAnchorObserver?.disconnect();
+    this.actionsAnchorObserver = null;
     this.openedActionsOrderId = null;
+    this.actionsMenuOrder = null;
+    this.actionsOverlayOrigin = null;
+    this.actionsTrigger = null;
+    if (restoreFocus && trigger?.isConnected) {
+      queueMicrotask(() => trigger.focus());
+    }
+  }
+
+  onActionsMenuAttached(): void {
+    queueMicrotask(() => this.actionsMenu?.nativeElement.querySelector<HTMLElement>('button:not([disabled])')?.focus());
+  }
+
+  onActionsMenuDetached(): void {
+    if (this.openedActionsOrderId) this.closeActions(false);
+  }
+
+  onActionsKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeActions();
+  }
+
+  private observeActionsAnchor(anchor: HTMLElement): void {
+    if (typeof IntersectionObserver === 'undefined') return;
+    this.actionsAnchorObserver = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting && this.openedActionsOrderId) {
+        this.closeActions(false);
+      }
+    });
+    this.actionsAnchorObserver.observe(anchor);
   }
 
   private finishModalRequest(): void {
     this.modalSubmitting = false;
+  }
+
+  private beginWorkflowAction(orderId: string): boolean {
+    if (this.workflowActionOrderId) return false;
+    this.workflowActionOrderId = orderId;
+    return true;
+  }
+
+  private finishWorkflowAction(orderId: string): void {
+    if (this.workflowActionOrderId === orderId) {
+      this.workflowActionOrderId = null;
+      this.cdr.markForCheck();
+    }
   }
 
   private syncOpenOrderReferences(items: ServiceOrder[]): void {
@@ -1845,7 +2145,7 @@ selectSuggestion(
 }
 
 getSuggestionKey(suggestion: ServiceOrderSuggestion): string {
-  return suggestion.firePosition?.id || suggestion.airAssetPosition?.id || 'unknown';
+  return suggestion.weaponSystemId || suggestion.firePosition?.id || suggestion.airAssetPosition?.id || 'unknown';
 }
 
 getSuggestionTitle(suggestion: ServiceOrderSuggestion): string {
@@ -1857,11 +2157,13 @@ getSuggestionTitle(suggestion: ServiceOrderSuggestion): string {
     );
   }
 
-  return suggestion.firePosition?.name || 'ВП';
+  const weapon = suggestion.weapon?.callsign || suggestion.weapon?.serialNumber || 'СГ';
+  return `${weapon} · ${suggestion.weapon?.model.name || 'Модель не визначено'}`;
 }
 
 getSuggestionExecutorLabel(suggestion: ServiceOrderSuggestion): string {
-  return suggestion.executorType === 'air_asset_position' ? 'Бойовий БпЛА' : 'ВП';
+  if (suggestion.executorType === 'air_asset_position') return 'Бойовий БпЛА';
+  return suggestion.firePosition?.name || 'Без ВП';
 }
 
 getSuggestionUnitName(suggestion: ServiceOrderSuggestion): string {
@@ -1875,7 +2177,20 @@ getSuggestionUnitName(suggestion: ServiceOrderSuggestion): string {
 getSuggestionVariantCount(suggestion: ServiceOrderSuggestion): number {
   return suggestion.executorType === 'air_asset_position'
     ? suggestion.payloadVariants?.length || 0
-    : suggestion.variants.length;
+    : this.getCompatibleKits(suggestion).length;
+}
+
+getSuggestionReadinessLabel(suggestion: ServiceOrderSuggestion): string {
+  const status = suggestion.readiness?.status || suggestion.firePosition?.readinessStatus || 'unknown';
+  if (status === 'combat_ready' || status === 'ready' || status === 'ready_for_combat') {
+    return 'БГ';
+  }
+  return suggestion.readiness?.reason || 'Немає БГ СГ';
+}
+
+getSuggestionStockLabel(suggestion: ServiceOrderSuggestion): string {
+  if (suggestion.executorType === 'air_asset_position') return 'БК перевірено';
+  return suggestion.stockSufficient ? 'БК достатньо' : 'БК недостатньо';
 }
 
 getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
@@ -2116,19 +2431,77 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
     return order.selectedFirePosition?.name || '—';
   }
 
+  getExecutorPositionLabel(order: ServiceOrder): string {
+    return this.selectedExecutorByOrderId[order.id]?.firePosition?.name || order.selectedFirePosition?.name || 'Без ВП';
+  }
+
+  getSelectedWeaponLabel(order: ServiceOrder): string {
+    const pending = this.selectedExecutorByOrderId[order.id]?.weapon;
+    if (pending) {
+      return `${pending.callsign || pending.serialNumber || 'СГ'} · ${pending.model.name}`;
+    }
+    const weapon = this.weaponCandidates.find(
+      (item) =>
+        (item.currentFirePositionId === order.selectedFirePositionId ||
+          item.firePositionId === order.selectedFirePositionId) &&
+        item.weaponModelId === order.selectedShotConfiguration?.weaponModelId,
+    );
+    return weapon
+      ? `${weapon.callsign || weapon.serialNumber || 'СГ'} · ${weapon.weaponModel?.name || 'модель'}`
+      : '—';
+  }
+
+  getExecutorDistanceLabel(order: ServiceOrder): string {
+    const distance = this.selectedExecutorByOrderId[order.id]?.distanceM;
+    return Number.isFinite(distance) ? `${Math.round(Number(distance))} м` : '—';
+  }
+
+  getExecutorReadinessLabel(order: ServiceOrder): string {
+    const pending = this.selectedExecutorByOrderId[order.id];
+    if (pending) return this.getSuggestionReadinessLabel(pending);
+    const weapon = this.weaponCandidates.find(
+      (item) =>
+        item.currentFirePositionId === order.selectedFirePositionId ||
+        item.firePositionId === order.selectedFirePositionId,
+    );
+    return weapon?.readinessStatus === 'combat_ready' ? 'БГ' : weapon?.notReadyReason || '—';
+  }
+
+  getSelectedKit(order: ServiceOrder): ServiceOrderSuggestionVariant | null {
+    return this.selectedKitByOrderId[order.id] || null;
+  }
+
+  getSelectedKitCharges(order: ServiceOrder): string {
+    const pending = this.getSelectedKit(order);
+    const charges = pending?.charges || order.selectedShotConfiguration?.charges || [];
+    return charges.length
+      ? charges.map((item) => `${item.charge.marking} × ${item.quantityPerShot}`).join(' + ')
+      : '—';
+  }
+
+  getSelectedKitMaxRangeLabel(order: ServiceOrder): string {
+    const value = this.getSelectedKit(order)?.maxRangeM || order.selectedShotConfiguration?.maxRangeM;
+    return value ? `${Math.round(Number(value))} м` : '—';
+  }
+
   loadExecutionRecords(order: ServiceOrder): void {
     if (order.status !== 'in_progress' && order.status !== 'completed') {
       return;
     }
+    if (this.executionLoadingByOrderId[order.id]) return;
 
+    const requestId = (this.executionLoadRequestByOrderId[order.id] || 0) + 1;
+    this.executionLoadRequestByOrderId[order.id] = requestId;
     this.executionLoadingByOrderId[order.id] = true;
     this.executionRecords.list(order.id).subscribe({
       next: (records) => {
+        if (this.executionLoadRequestByOrderId[order.id] !== requestId) return;
         this.executionRecordsByOrderId[order.id] = records;
         this.executionLoadingByOrderId[order.id] = false;
         this.cdr.detectChanges();
       },
       error: (error) => {
+        if (this.executionLoadRequestByOrderId[order.id] !== requestId) return;
         this.executionLoadingByOrderId[order.id] = false;
         this.toast.show(error?.error?.message || 'Не вдалося завантажити журнал виконання', 'danger');
         this.cdr.detectChanges();
@@ -2153,6 +2526,7 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
   }
 
   createExecutionDraft(order: ServiceOrder): void {
+    if (this.executionSavingByOrderId[order.id]) return;
     const form = this.getExecutionForm(order);
     const quantity = Number(form.quantity);
 
@@ -2211,9 +2585,17 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
         },
       })
       .subscribe({
-        next: () => {
+        next: (record) => {
           this.executionSavingByOrderId[order.id] = false;
           form.comment = '';
+          this.executionLoadRequestByOrderId[order.id] =
+            (this.executionLoadRequestByOrderId[order.id] || 0) + 1;
+          this.executionLoadingByOrderId[order.id] = false;
+          const records = this.getExecutionRecords(order);
+          if (!records.some((item) => item.id === record.id)) {
+            this.executionRecordsByOrderId[order.id] = [record, ...records];
+          }
+          this.cdr.detectChanges();
           this.loadExecutionRecords(order);
         },
         error: (error) => {
@@ -2225,6 +2607,8 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
   }
 
   postExecutionRecord(order: ServiceOrder, record: ExecutionRecord): void {
+    if (this.executionRecordSavingById[record.id]) return;
+    this.executionRecordSavingById[record.id] = true;
     this.executionValidationByRecordId[record.id] = [];
     this.executionRecords.validate(record.id).subscribe({
       next: (validation) => {
@@ -2232,13 +2616,18 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
           this.executionValidationByRecordId[record.id] = validation.reasons.map(
             (item) => item.message,
           );
+          this.executionRecordSavingById[record.id] = false;
           this.cdr.detectChanges();
           return;
         }
 
         this.executionRecords.post(record.id).subscribe({
-          next: () => this.loadExecutionRecords(order),
+          next: () => {
+            this.executionRecordSavingById[record.id] = false;
+            this.loadExecutionRecords(order);
+          },
           error: (error) => {
+            this.executionRecordSavingById[record.id] = false;
             const reasons = error?.error?.reasons as Array<{ message: string }> | undefined;
             this.executionValidationByRecordId[record.id] = reasons?.map((item) => item.message) || [
               error?.error?.message || 'Не вдалося провести запис',
@@ -2248,6 +2637,7 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
         });
       },
       error: (error) => {
+        this.executionRecordSavingById[record.id] = false;
         const reasons = error?.error?.reasons as Array<{ message: string }> | undefined;
         this.executionValidationByRecordId[record.id] = reasons?.map((item) => item.message) || [
           error?.error?.message || 'Не вдалося перевірити запис',
@@ -2258,14 +2648,26 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
   }
 
   cancelExecutionRecord(order: ServiceOrder, record: ExecutionRecord): void {
+    if (this.executionRecordSavingById[record.id]) return;
+    this.executionRecordSavingById[record.id] = true;
     this.executionRecords.cancel(record.id).subscribe({
-      next: () => this.loadExecutionRecords(order),
-      error: (error) => this.toast.show(error?.error?.message || 'Не вдалося скасувати чернетку', 'danger'),
+      next: () => {
+        this.executionRecordSavingById[record.id] = false;
+        this.loadExecutionRecords(order);
+      },
+      error: (error) => {
+        this.executionRecordSavingById[record.id] = false;
+        this.toast.show(error?.error?.message || 'Не вдалося скасувати чернетку', 'danger');
+      },
     });
   }
 
   getExecutionRecords(order: ServiceOrder): ExecutionRecord[] {
     return this.executionRecordsByOrderId[order.id] || [];
+  }
+
+  hasPostedExecution(order: ServiceOrder): boolean {
+    return this.getExecutionRecords(order).some((record) => record.status === 'posted');
   }
 
   getExecutionPurposeLabel(value: string): string {
@@ -2464,15 +2866,18 @@ selectAirAssetSuggestion(
   suggestion: ServiceOrderSuggestion,
   payload: ServiceOrderAirPayloadVariant,
 ): void {
+  if (!this.beginWorkflowAction(order.id)) return;
   this.errorMessage = '';
 
   if (!suggestion.airAssetPosition?.id) {
     this.errorMessage = 'Повітряний розрахунок не визначено';
+    this.finishWorkflowAction(order.id);
     return;
   }
 
   if (!order.targetLat || !order.targetLng) {
     this.errorMessage = 'Для бойової задачі БпЛА потрібні координати цілі';
+    this.finishWorkflowAction(order.id);
     return;
   }
 
@@ -2482,6 +2887,7 @@ selectAirAssetSuggestion(
     droneModelId: payload.droneModelId,
     warheadTypeId: payload.warheadTypeId,
   })
+    .pipe(finalize(() => this.finishWorkflowAction(order.id)))
     .subscribe({
       next: () => {
   this.toast.show('Бойовий БпЛА обрано для ВГЗ', 'success');
@@ -2503,9 +2909,13 @@ selectAirAssetSuggestion(
 }
 
 sendToUnit(order: ServiceOrder): void {
+  if (!this.beginWorkflowAction(order.id)) return;
   this.errorMessage = '';
 
-  this.service.sendToUnit(order.id).subscribe({
+  this.service
+    .sendToUnit(order.id)
+    .pipe(finalize(() => this.finishWorkflowAction(order.id)))
+    .subscribe({
     next: () => {
       this.toast.show('Вогневе завдання передано на ПУВБ', 'success');
       this.eventFeed.add({

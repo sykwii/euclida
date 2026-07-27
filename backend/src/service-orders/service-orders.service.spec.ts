@@ -334,7 +334,27 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     ]);
 
     await expect(service.complete(order.id, body, user)).rejects.toThrow(
-      'Неможливо завершити ВГЗ, поки існують непроведені витратні записи журналу виконання',
+      'Є непроведене виконання',
+    );
+  });
+
+  it('returns an already sent order without creating duplicate deliveries', async () => {
+    const order = createOrder({ status: 'sent' });
+    repository.findOne.mockResolvedValue(order);
+    const mainUser: AuthUser = { ...user, role: 'admin', scope: 'main', unitId: null };
+
+    const result = await service.sendToUnit(order.id, {}, mainUser);
+
+    expect(result).toBe(order);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects a repeated accept with a localized state conflict', async () => {
+    const order = createOrder({ status: 'accepted' });
+    repository.findOne.mockResolvedValue(order);
+
+    await expect(service.accept(order.id, user)).rejects.toThrow(
+      'ВГЗ вже прийнято іншим оператором',
     );
   });
 

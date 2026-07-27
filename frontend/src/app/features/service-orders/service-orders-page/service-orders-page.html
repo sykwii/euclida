@@ -166,135 +166,6 @@
       <span *ngIf="errorMessage && !loading">{{ errorMessage }}</span>
     </div>
 
-    <section class="co-inbox" aria-label="Вхідні цілі" *ngIf="false">
-      <header class="co-inbox-header">
-        <div>
-          <h2>Вхідні цілі</h2>
-          <p>Доставки ВГЗ для вашого рівня управління</p>
-        </div>
-        <span class="co-inbox-badge" [class.has-items]="unreadDeliveryCount > 0">
-          Нові: {{ unreadDeliveryCount }}
-        </span>
-      </header>
-
-      <div class="co-inbox-empty" *ngIf="deliveriesLoading">Завантаження доставок...</div>
-      <div class="co-inbox-empty" *ngIf="!deliveriesLoading && deliveries.length === 0">
-        Вхідних цілей немає
-      </div>
-
-      <div class="co-inbox-sections" *ngIf="!deliveriesLoading && deliveries.length > 0">
-        <section class="co-inbox-section" *ngFor="let section of ['new', 'viewed', 'processed']">
-          <h3>
-            {{
-              section === 'new'
-                ? 'Нові'
-                : section === 'viewed'
-                  ? 'Переглянуті'
-                  : 'Опрацьовані'
-            }}
-            <b>{{ getDeliverySection(section === 'new' ? 'new' : section === 'viewed' ? 'viewed' : 'processed').length }}</b>
-          </h3>
-
-          <article
-            class="co-delivery-card"
-            [class.is-open]="selectedDeliveryId === delivery.id"
-            [class.is-new]="delivery.status === 'new'"
-            [class.is-rejected]="delivery.status === 'rejected'"
-            *ngFor="let delivery of getDeliverySection(section === 'new' ? 'new' : section === 'viewed' ? 'viewed' : 'processed')"
-          >
-            <button type="button" class="co-delivery-summary" (click)="openDelivery(delivery)">
-              <span>
-                <b>{{ delivery.serviceOrder.orderNumber }}</b>
-                <small>{{ getDeliveryLevelLabel(delivery.recipientLevel) }} · {{ delivery.recipientUnit?.name || 'Підрозділ' }}</small>
-              </span>
-              <span>{{ delivery.serviceOrder.targetSettlement || delivery.serviceOrder.targetMgrs || 'Ціль' }}</span>
-              <span class="co-status" [class]="delivery.status">
-                {{ getDeliveryStatusLabel(delivery.status) }}
-              </span>
-            </button>
-
-            <div class="co-delivery-body" *ngIf="selectedDeliveryId === delivery.id">
-              <dl>
-                <div>
-                  <dt>Координати</dt>
-                  <dd>{{ delivery.serviceOrder.targetMgrs || (delivery.serviceOrder.targetLat + ', ' + delivery.serviceOrder.targetLng) }}</dd>
-                </div>
-                <div>
-                  <dt>ВП</dt>
-                  <dd>{{ delivery.serviceOrder.selectedFirePosition?.name || 'Не визначено' }}</dd>
-                </div>
-                <div>
-                  <dt>Підрозділ</dt>
-                  <dd>{{ delivery.serviceOrder.selectedFirePosition?.unit?.name || 'Підрозділ' }}</dd>
-                </div>
-              </dl>
-
-              <div class="co-delivery-form" *ngIf="delivery.status === 'new' || delivery.status === 'viewed'">
-                <label>
-                  <span>Орієнтовна готовність</span>
-                  <input type="datetime-local" [(ngModel)]="ensureDeliveryForm(delivery).estimatedReadyAt" />
-                </label>
-
-                <label *ngIf="delivery.recipientLevel === 'battery'">
-                  <span>Фактична ВП</span>
-                  <select [(ngModel)]="ensureDeliveryForm(delivery).selectedFirePositionId">
-                    <option value="">Поточна ВП</option>
-                    <option *ngFor="let fp of getAllowedFirePositions(delivery)" [value]="fp.id">
-                      {{ fp.name }} · {{ fp.readinessStatus }}{{ fp.notReadyReason ? ' / ' + fp.notReadyReason : '' }}
-                    </option>
-                  </select>
-                </label>
-
-                <label *ngIf="delivery.recipientLevel === 'battery'">
-                  <span>Гармата</span>
-                  <select [(ngModel)]="ensureDeliveryForm(delivery).selectedWeaponSystemId">
-                    <option value="">Не обрано</option>
-                    <option *ngFor="let weapon of getAllowedWeapons(delivery)" [value]="weapon.id">
-                      {{ weapon.callsign || weapon.serialNumber || weapon.id }} · {{ weapon.readinessStatus }} · {{ weapon.deploymentStatus }}
-                    </option>
-                  </select>
-                </label>
-
-                <label>
-                  <span>Коментар</span>
-                  <textarea rows="2" [(ngModel)]="ensureDeliveryForm(delivery).comment"></textarea>
-                </label>
-
-                <label>
-                  <span>Причина відхилення</span>
-                  <textarea rows="2" [(ngModel)]="ensureDeliveryForm(delivery).rejectionReason"></textarea>
-                </label>
-
-                <div class="co-delivery-actions">
-                  <button
-                    type="button"
-                    class="co-btn primary compact"
-                    [disabled]="ensureDeliveryForm(delivery).submitting"
-                    (click)="respondToDelivery(delivery, 'accepted')"
-                  >
-                    Прийняти
-                  </button>
-                  <button
-                    type="button"
-                    class="co-btn compact danger"
-                    [disabled]="ensureDeliveryForm(delivery).submitting"
-                    (click)="respondToDelivery(delivery, 'rejected')"
-                  >
-                    Відхилити
-                  </button>
-                </div>
-              </div>
-
-              <p class="co-delivery-result" *ngIf="delivery.status === 'accepted' || delivery.status === 'rejected'">
-                Опрацьовано: {{ delivery.respondedAt ? formatKyivDateTime(delivery.respondedAt) : 'час не вказано' }}
-                <span *ngIf="delivery.rejectionReason"> · {{ delivery.rejectionReason }}</span>
-              </p>
-            </div>
-          </article>
-        </section>
-      </div>
-    </section>
-
     <section class="co-loading" *ngIf="loading && items.length === 0" aria-label="Завантаження ВГЗ">
       <div *ngFor="let item of pageSkeleton"></div>
     </section>
@@ -325,7 +196,7 @@
           [class.selected]="selectedDetailsOrderId === item.id"
           [class.is-focused]="focusedOrderId === item.id"
           [id]="'service-order-' + item.id"
-          *ngFor="let item of boardActiveItems"
+          *ngFor="let item of boardActiveItems; trackBy: trackByOrderId"
         >
           <button
             type="button"
@@ -347,116 +218,25 @@
           <div class="co-row-actions">
             <button
               type="button"
-              class="co-btn primary compact"
-              [class.send-action]="item.status === 'proposed'"
-              [attr.aria-label]="getPrimaryActionLabel(item)"
-              *ngIf="hasPrimaryAction(item)"
-              (click)="runPrimaryAction(item)"
-              title="Виконати наступний доступний крок по завданню"
-            >
-              {{ getPrimaryActionLabel(item) }}
-            </button>
-
-            <button
-              type="button"
               class="co-icon-btn"
+              *ngIf="hasSecondaryActions(item)"
               aria-label="Дії"
-              (click)="toggleActions(item)"
+              cdkOverlayOrigin
+              #actionsOrigin="cdkOverlayOrigin"
+              [attr.aria-expanded]="openedActionsOrderId === item.id"
+              aria-haspopup="menu"
+              (click)="toggleActions(item, actionsOrigin, $event)"
               title="Відкрити додаткові дії"
               data-tip-pos="left"
             >
-              ⋮
+              <span class="menu-dots" aria-hidden="true"><i></i><i></i><i></i></span>
             </button>
-
-            <div class="actions-menu" *ngIf="openedActionsOrderId === item.id">
-              <button
-                type="button"
-                *ngIf="canControlOrder() && (item.status === 'draft' || item.status === 'proposed')"
-                (click)="loadSuggestions(item); closeActions()"
-              >
-                Підібрати ВП
-              </button>
-
-              <button
-                type="button"
-                class="send-menu-button"
-                *ngIf="canControlOrder() && item.status === 'proposed'"
-                (click)="sendToUnit(item); closeActions()"
-              >
-                Надіслати на ПУВБ
-              </button>
-
-              <button
-                type="button"
-                *ngIf="canExecuteOrder(item) && item.status === 'accepted'"
-                (click)="start(item); closeActions()"
-              >
-                Почати виконання
-              </button>
-
-              <button
-                type="button"
-                *ngIf="canExecuteOrder(item) && item.status === 'in_progress'"
-                (click)="openCompleteModal(item); closeActions()"
-              >
-                Завершити
-              </button>
-
-              <button
-                type="button"
-                *ngIf="
-                  canExecuteOrder(item) &&
-                  (item.status === 'sent' ||
-                    item.status === 'sent_to_battery' ||
-                    item.status === 'sent_to_division')
-                "
-                (click)="accept(item); closeActions()"
-              >
-                Прийняти
-              </button>
-
-              <button
-                type="button"
-                class="danger-menu-button"
-                *ngIf="
-                  canExecuteOrder(item) &&
-                  (item.status === 'sent' ||
-                    item.status === 'sent_to_battery' ||
-                    item.status === 'sent_to_division')
-                "
-                (click)="openRejectModal(item); closeActions()"
-              >
-                Відхилити
-              </button>
-
-              <button
-                type="button"
-                class="danger-menu-button"
-                *ngIf="
-                  (canControlOrder() || canExecuteOrder(item)) &&
-                  (item.status === 'proposed' ||
-                    item.status === 'sent' ||
-                    item.status === 'accepted' ||
-                    item.status === 'in_progress')
-                "
-                (click)="openCancelModal(item); closeActions()"
-              >
-                Скасувати
-              </button>
-
-              <button
-                type="button"
-                class="danger-menu-button"
-                *ngIf="canControlOrder() && item.status === 'draft'"
-                (click)="remove(item.id); closeActions()"
-              >
-                Видалити
-              </button>
-            </div>
           </div>
 
           <section class="co-inline-details" *ngIf="selectedDetailsOrderId === item.id">
-            <div class="co-details-grid">
+            <div class="co-details-overview">
+              <div class="co-details-main">
+                <div class="co-details-grid">
               <div>
                 <span>Decimal</span><b>{{ getDecimalCoordinates(item) }}</b>
               </div>
@@ -464,45 +244,71 @@
                 <span>MGRS</span><b>{{ getMgrsCoordinates(item) }}</b>
               </div>
               <div>
-                <span>Снаряд</span><b>{{ item.selectedShell?.marking || '—' }}</b>
+                <span>Виконавець</span><b>{{ getExecutorPositionLabel(item) }}</b>
               </div>
               <div>
-                <span>Заряд</span><b>{{ item.selectedCharge?.marking || '—' }}</b>
+                <span>СГ</span><b>{{ getSelectedWeaponLabel(item) }}</b>
               </div>
               <div>
-                <span>Комплект</span><b>{{ item.selectedShotConfiguration?.name || '—' }}</b>
+                <span>Дистанція</span><b>{{ getExecutorDistanceLabel(item) }}</b>
               </div>
               <div>
-                <span>Зона</span><b>{{ getSelectedZoneLabel(item) }}</b>
+                <span>Готовність</span><b>{{ getExecutorReadinessLabel(item) }}</b>
               </div>
               <div>
-                <span>Підрозділ</span><b>{{ item.selectedFirePosition?.unit?.name || '—' }}</b>
+                <span>Комплект пострілу</span>
+                <b>{{ getSelectedKit(item)?.shotConfigurationName || item.selectedShotConfiguration?.name || '—' }}</b>
               </div>
-            </div>
+              <div>
+                <span>Снаряд</span><b>{{ getSelectedKit(item)?.shell?.marking || item.selectedShell?.marking || '—' }}</b>
+              </div>
+              <div>
+                <span>Заряди</span><b>{{ getSelectedKitCharges(item) }}</b>
+              </div>
+              <div>
+                <span>Підривник</span>
+                <b>{{ getSelectedKit(item)?.fuze?.marking || item.selectedShotConfiguration?.fuze?.marking || '—' }}</b>
+              </div>
+              <div>
+                <span>Праймер</span>
+                <b>{{ getSelectedKit(item)?.primer?.marking || item.selectedShotConfiguration?.primer?.marking || '—' }}</b>
+              </div>
+              <div>
+                <span>Зона</span>
+                <b>{{ getSelectedKit(item)?.zoneNumber ?? item.selectedShotConfiguration?.zoneNumber ?? '—' }}</b>
+              </div>
+              <div>
+                <span>Макс. дальність</span>
+                <b>{{ getSelectedKitMaxRangeLabel(item) }}</b>
+              </div>
+                </div>
 
-            <div class="co-inline-actions">
-              <button
-                type="button"
-                class="co-btn"
-                (click)="showOnMap(item)"
-                title="Перейти на карту з фокусом на цій цілі"
-              >
-                Показати на карті
-              </button>
-              <button
-                type="button"
-                class="co-btn"
-                *ngIf="
-                  canControlOrder() &&
-                  (item.status === 'draft' ||
-                    item.status === 'proposed' ||
-                    item.status === 'rejected')
-                "
-                (click)="loadSuggestions(item)"
-                title="Підібрати ВП або бойовий БпЛА за готовністю, дальністю і наявними ресурсами"
-              >
-                Підібрати виконавця
-              </button>
+                <div class="co-inline-actions">
+                  <button
+                    type="button"
+                    class="co-btn"
+                    (click)="showOnMap(item)"
+                    title="Перейти на карту з фокусом на цій цілі"
+                  >
+                    Показати на карті
+                  </button>
+                </div>
+              </div>
+
+              <aside class="co-primary-action-zone" *ngIf="getPrimaryAction(item) as primaryAction">
+                <button
+                  type="button"
+                  class="co-primary-action"
+                  [class]="primaryAction.visualVariant"
+                  [disabled]="primaryAction.disabled || primaryAction.loading"
+                  [attr.aria-busy]="primaryAction.loading"
+                  (click)="primaryAction.handler()"
+                >
+                  <span class="co-action-spinner" *ngIf="primaryAction.loading" aria-hidden="true"></span>
+                  <span>{{ primaryAction.label }}</span>
+                </button>
+                <small *ngIf="primaryAction.disabledReason">{{ primaryAction.disabledReason }}</small>
+              </aside>
             </div>
 
             <section class="execution-journal" *ngIf="item.status === 'in_progress' || item.status === 'completed'">
@@ -516,7 +322,12 @@
                 </button>
               </div>
 
-              <form class="execution-form" *ngIf="item.status === 'in_progress'" (ngSubmit)="createExecutionDraft(item)">
+              <form
+                class="execution-form"
+                [id]="'execution-form-' + item.id"
+                *ngIf="item.status === 'in_progress'"
+                (ngSubmit)="createExecutionDraft(item)"
+              >
                 <select [name]="'executionPurpose' + item.id" [(ngModel)]="getExecutionForm(item).purpose">
                   <option value="barrel_warmup">Прогрів ствола</option>
                   <option value="adjustment">Пристрілка</option>
@@ -547,17 +358,34 @@
               </div>
 
               <div class="execution-list" *ngIf="!executionLoadingByOrderId[item.id]">
-                <article class="execution-row" *ngFor="let record of getExecutionRecords(item)">
+                <article
+                  class="execution-row"
+                  [id]="record.status === 'draft' ? 'execution-draft-' + item.id : null"
+                  *ngFor="let record of getExecutionRecords(item)"
+                >
                   <div>
                     <b>{{ getExecutionPurposeLabel(record.purpose) }}</b>
                     <span>{{ getExecutionStatusLabel(record.status) }} · {{ record.quantity }} постр.</span>
                     <small>{{ getExecutionRequirementLabel(record) }}</small>
                   </div>
-                  <div class="execution-actions" *ngIf="record.status === 'draft' && item.status === 'in_progress'">
-                    <button type="button" class="co-btn compact" (click)="postExecutionRecord(item, record)">
+                  <div
+                    class="execution-actions"
+                    [hidden]="record.status !== 'draft' || item.status !== 'in_progress'"
+                  >
+                    <button
+                      type="button"
+                      class="co-btn compact"
+                      [disabled]="executionRecordSavingById[record.id]"
+                      (click)="postExecutionRecord(item, record)"
+                    >
                       Провести
                     </button>
-                    <button type="button" class="danger-menu-button compact" (click)="cancelExecutionRecord(item, record)">
+                    <button
+                      type="button"
+                      class="danger-menu-button compact"
+                      [disabled]="executionRecordSavingById[record.id]"
+                      (click)="cancelExecutionRecord(item, record)"
+                    >
                       Скасувати
                     </button>
                   </div>
@@ -568,7 +396,11 @@
               </div>
             </section>
 
-            <section class="co-suggestions" *ngIf="selectedOrderId === item.id">
+            <section
+              class="co-suggestions"
+              [id]="'service-order-candidates-' + item.id"
+              *ngIf="selectedOrderId === item.id"
+            >
               <div class="co-empty" *ngIf="suggestionsLoading">
                 <b>Підбираємо доступних виконавців</b>
                 <span>Перевіряємо готовність ВП, бойові БпЛА, БК, БЧ і дальність.</span>
@@ -589,6 +421,7 @@
                 <article
                   class="co-candidate"
                   [class.expanded]="isSuggestionExpanded(suggestion, pointIndex)"
+                  [class.selected-executor]="isSelectedExecutor(item, suggestion)"
                   *ngFor="let suggestion of suggestions; let pointIndex = index"
                 >
                   <div class="co-candidate-top">
@@ -613,8 +446,18 @@
 
                   <div class="co-candidate-meta">
                     <span>Дистанція {{ suggestion.distanceM | number: '1.0-0' }} м</span>
-                    <span>ВГЗ {{ suggestion.completedVgzCount }}</span>
+                    <span>{{ getSuggestionReadinessLabel(suggestion) }}</span>
+                    <span>{{ getSuggestionStockLabel(suggestion) }}</span>
                     <span>{{ getSuggestionVariantCount(suggestion) }} вар.</span>
+                    <button
+                      type="button"
+                      class="co-btn primary compact"
+                      *ngIf="suggestion.executorType === 'fire_position' && canSelectSuggestion(item)"
+                      [class.selected]="isSelectedExecutor(item, suggestion)"
+                      (click)="selectExecutor(item, suggestion)"
+                    >
+                      {{ isSelectedExecutor(item, suggestion) ? 'Виконавця обрано' : 'Обрати виконавця' }}
+                    </button>
                   </div>
 
                   <div
@@ -623,6 +466,9 @@
                   >
                     <b>Комплекти пострілу недоступні</b>
                     <span>{{ getSuggestionRejectionText(suggestion) }}</span>
+                    <button type="button" class="co-btn compact" (click)="openShotConfigurations()">
+                      Налаштувати вручну
+                    </button>
                   </div>
 
                   <ng-container
@@ -642,11 +488,12 @@
                       <button
                         type="button"
                         class="co-btn primary compact choose-variant-btn"
-                        *ngIf="canSelectSuggestion(item)"
+                        *ngIf="canSelectSuggestion(item) && isSelectedExecutor(item, suggestion)"
+                        [class.selected]="isSelectedKit(item, best)"
                         (click)="selectSuggestion(item, suggestion, best)"
                         title="Призначити цю ВП, снаряд, заряд і зону для завдання"
                       >
-                        Обрати цей варіант
+                        {{ isSelectedKit(item, best) ? 'Комплект обрано' : 'Обрати комплект' }}
                       </button>
                     </div>
                   </ng-container>
@@ -704,11 +551,12 @@
                       <button
                         type="button"
                         class="co-btn primary compact choose-variant-btn"
-                        *ngIf="canSelectSuggestion(item)"
+                        *ngIf="canSelectSuggestion(item) && isSelectedExecutor(item, suggestion)"
+                        [class.selected]="isSelectedKit(item, variant)"
                         (click)="selectSuggestion(item, suggestion, variant)"
                         title="Обрати цей фактичний варіант БК для завдання"
                       >
-                        Обрати цей варіант
+                        {{ isSelectedKit(item, variant) ? 'Комплект обрано' : 'Обрати комплект' }}
                       </button>
                     </article>
 
@@ -825,7 +673,7 @@
       </div>
 
       <ng-container *ngIf="boardHistoryItems.length > 0; else noHistoryOrders">
-        <article class="co-table-row history" *ngFor="let item of boardHistoryItems">
+        <article class="co-table-row history" *ngFor="let item of boardHistoryItems; trackBy: trackByOrderId">
           <button
             type="button"
             class="co-row-main history"
@@ -909,6 +757,68 @@
       </button>
     </section>
   </section>
+
+  <ng-template
+    cdkConnectedOverlay
+    [cdkConnectedOverlayOrigin]="$any(actionsOverlayOrigin)"
+    [cdkConnectedOverlayOpen]="!!actionsMenuOrder"
+    [cdkConnectedOverlayPositions]="actionsMenuPositions"
+    [cdkConnectedOverlayHasBackdrop]="true"
+    cdkConnectedOverlayBackdropClass="service-order-menu-backdrop"
+    cdkConnectedOverlayPanelClass="service-order-menu-panel"
+    [cdkConnectedOverlayViewportMargin]="12"
+    [cdkConnectedOverlayPush]="true"
+    [cdkConnectedOverlayFlexibleDimensions]="false"
+    (backdropClick)="closeActions()"
+    (overlayKeydown)="onActionsKeydown($event)"
+    (attach)="onActionsMenuAttached()"
+    (detach)="onActionsMenuDetached()"
+  >
+    <div class="actions-menu" #actionsMenu role="menu" *ngIf="actionsMenuOrder as item">
+      <button
+        type="button"
+        role="menuitem"
+        class="danger-menu-button"
+        *ngIf="
+          canExecuteOrder(item) &&
+          (item.status === 'sent' ||
+            item.status === 'sent_to_battery' ||
+            item.status === 'sent_to_division')
+        "
+        (click)="openRejectModal(item); closeActions(false)"
+      >
+        Відхилити
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        class="danger-menu-button"
+        *ngIf="
+          (canControlOrder() || canExecuteOrder(item)) &&
+          (item.status === 'proposed' ||
+            item.status === 'sent' ||
+            item.status === 'sent_to_division' ||
+            item.status === 'sent_to_battery' ||
+            item.status === 'accepted' ||
+            item.status === 'in_progress')
+        "
+        (click)="openCancelModal(item); closeActions(false)"
+      >
+        Скасувати
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        class="danger-menu-button"
+        *ngIf="canControlOrder() && item.status === 'draft'"
+        (click)="remove(item.id); closeActions(false)"
+      >
+        Видалити
+      </button>
+    </div>
+  </ng-template>
 
   <div class="modal-backdrop" *ngIf="createModalOpen" (click)="onModalBackdropClick()">
     <section class="modal-card" (click)="onModalCardClick($event)">
@@ -1167,7 +1077,11 @@
           />
         </label>
 
-        <section class="completion-ammo-editor wide">
+        <section class="completion-journal-summary wide" *ngIf="hasPostedExecution(completeModalOrder)">
+          Фактична витрата визначена проведеними записами журналу. Повторне списання не виконується.
+        </section>
+
+        <section class="completion-ammo-editor wide" *ngIf="!hasPostedExecution(completeModalOrder)">
           <header>
             <div>
               <strong>Фактичний розхід БК</strong>

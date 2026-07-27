@@ -91,6 +91,7 @@ export interface SendServiceOrderRequest {
 }
 
 export interface ServiceOrderSuggestionVariant {
+  weaponModelId: string;
   shotConfigurationId: string;
   shotConfigurationName: string;
   shellId: string;
@@ -171,6 +172,23 @@ export interface ServiceOrderAirPayloadVariant {
 
 export interface ServiceOrderSuggestion {
   executorType: 'fire_position' | 'air_asset_position';
+  firePositionId?: string | null;
+  weaponSystemId?: string;
+  weapon?: {
+    id: string;
+    callsign: string | null;
+    serialNumber: string | null;
+    model: {
+      id: string;
+      name: string;
+    };
+  };
+  readiness?: {
+    status: string;
+    reason: string | null;
+  };
+  stockSufficient?: boolean;
+  compatibleKits?: ServiceOrderSuggestionVariant[];
 
   firePosition?: {
     id: string;
@@ -270,10 +288,10 @@ export class ServiceOrdersService {
     id: string,
     body: {
       firePositionId: string;
+      weaponSystemId: string;
       shotConfigurationId?: string;
       shellId?: string;
       chargeId?: string;
-      zoneId?: string | null;
       zoneNumber?: number | null;
     },
   ): Observable<ServiceOrder> {

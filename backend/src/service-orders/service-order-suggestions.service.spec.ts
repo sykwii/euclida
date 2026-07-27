@@ -16,8 +16,13 @@ type PrivateSuggestionsApi = {
     distanceM: number,
     plannedQuantity: number,
   ) => Promise<{
-    variants: Array<{ shotConfigurationId: string; rejectionReasons: string[] }>;
+    variants: Array<{
+      weaponModelId: string;
+      shotConfigurationId: string;
+      rejectionReasons: string[];
+    }>;
     rejectionReasons: string[];
+    weaponSystems: WeaponSystem[];
   }>;
 };
 
@@ -30,6 +35,8 @@ describe('ServiceOrderSuggestionsService shot kit variants', () => {
           weaponModelId: 'model-1',
           currentFirePositionId: 'fp-1',
           deploymentStatus: 'at_fire_position',
+          readinessStatus: 'combat_ready',
+          weaponModel: { id: 'model-1', name: 'M777' },
         } as WeaponSystem,
       ],
       configurations: [createConfiguration({ weaponModelId: 'model-1' })],
@@ -39,7 +46,9 @@ describe('ServiceOrderSuggestionsService shot kit variants', () => {
 
     expect(result.variants).toHaveLength(1);
     expect(result.variants[0].shotConfigurationId).toBe('kit-1');
+    expect(result.variants[0].weaponModelId).toBe('model-1');
     expect(result.variants[0].rejectionReasons).toEqual([]);
+    expect(result.weaponSystems[0].id).toBe('weapon-1');
   });
 
   it('excludes wrong weapon model kits with an explicit reason', async () => {
@@ -50,6 +59,8 @@ describe('ServiceOrderSuggestionsService shot kit variants', () => {
           weaponModelId: 'model-1',
           currentFirePositionId: 'fp-1',
           deploymentStatus: 'at_fire_position',
+          readinessStatus: 'combat_ready',
+          weaponModel: { id: 'model-1', name: 'M777' },
         } as WeaponSystem,
       ],
       configurations: [createConfiguration({ id: 'kit-2', weaponModelId: 'model-2' })],

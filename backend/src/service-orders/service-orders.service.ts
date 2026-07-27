@@ -643,10 +643,10 @@ export class ServiceOrdersService {
     id: string,
     body: {
       firePositionId: string;
+      weaponSystemId: string;
       shotConfigurationId?: string;
       shellId?: string;
       chargeId?: string;
-      zoneId?: string | null;
     },
     user: AuthUser,
   ) {
@@ -692,6 +692,30 @@ export class ServiceOrdersService {
 
     if (!firePosition) {
       throw new BadRequestException('Р’РѕРіРЅРµРІСѓ РїРѕР·РёС†С–СЋ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+    }
+
+    if (!body.weaponSystemId) {
+      throw new BadRequestException('Немає БГ СГ');
+    }
+
+    const selectedWeapon = await this.dataSource.getRepository(WeaponSystem).findOne({
+      where: [
+        {
+          id: body.weaponSystemId,
+          currentFirePositionId: firePosition.id,
+        },
+        {
+          id: body.weaponSystemId,
+          firePositionId: firePosition.id,
+        },
+      ],
+    });
+
+    if (
+      !selectedWeapon ||
+      !['ready', 'combat_ready', 'ready_for_combat'].includes(selectedWeapon.readinessStatus)
+    ) {
+      throw new BadRequestException('Немає БГ СГ');
     }
 
     const selectedConfiguration = await this.dataSource.transaction((manager) =>
@@ -744,6 +768,14 @@ export class ServiceOrdersService {
       );
     }
 
+    if (
+      item.status === 'sent' ||
+      item.status === 'sent_to_division' ||
+      item.status === 'sent_to_battery'
+    ) {
+      return item;
+    }
+
     if (item.status !== 'proposed') {
       throw new BadRequestException(
         'РќР°РґС–СЃР»Р°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё Р·Р°СЏРІРєСѓ, РґР»СЏ СЏРєРѕС— РІР¶Рµ РѕР±СЂР°РЅРѕ РІРёРєРѕРЅР°РІС†СЏ',
@@ -752,18 +784,14 @@ export class ServiceOrdersService {
 
     if (item.executorType === 'air_asset_position') {
       if (!item.selectedAirAssetPositionId || !item.selectedAirAssetPosition?.unitId) {
-        throw new BadRequestException(
-          'РџРµСЂРµРґР°С‡Р° РјРѕР¶Р»РёРІР° С‚С–Р»СЊРєРё РїС–СЃР»СЏ РІРёР±РѕСЂСѓ РІРёРєРѕРЅР°РІС†СЏ. РџС–РґСЂРѕР·РґС–Р» РІРёРєРѕРЅР°РІС†СЏ РІРёР·РЅР°С‡Р°С”С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ',
-        );
+        throw new BadRequestException('Підрозділ не визначено');
       }
 
       item.assignedScope = 'battery';
       item.assignedUnitId = item.selectedAirAssetPosition.unitId;
     } else {
       if (!item.selectedFirePositionId || !item.selectedFirePosition?.unitId) {
-        throw new BadRequestException(
-          'РџРµСЂРµРґР°С‡Р° РјРѕР¶Р»РёРІР° С‚С–Р»СЊРєРё РїС–СЃР»СЏ РІРёР±РѕСЂСѓ РІРёРєРѕРЅР°РІС†СЏ. РћРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РІРёР·РЅР°С‡Р°С”С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ',
-        );
+        throw new BadRequestException('Підрозділ не визначено');
       }
 
       item.assignedScope = 'battery';
@@ -798,6 +826,10 @@ export class ServiceOrdersService {
     const order = await this.findOne(id, user);
 
     await this.ensureCanExecuteOrder(order, user);
+
+    if (order.status === 'accepted') {
+      throw new BadRequestException('ВГЗ вже прийнято іншим оператором');
+    }
 
     if (
       order.status !== 'sent_to_division' &&
@@ -1089,9 +1121,7 @@ async selectAirAsset(
     }
 
     if (draftConsumableRecords.length > 0) {
-      throw new BadRequestException(
-        'Неможливо завершити ВГЗ, поки існують непроведені витратні записи журналу виконання',
-      );
+      throw new BadRequestException('Є непроведене виконання');
     }
 
     const actualQuantity = this.roundStockQuantity(
@@ -1653,10 +1683,10 @@ async selectAirAsset(
     firePosition: FirePosition,
     order: ServiceOrder,
     body: {
+      weaponSystemId: string;
       shotConfigurationId?: string;
       shellId?: string;
       chargeId?: string;
-      zoneId?: string | null;
     },
   ): Promise<ResolvedShotConfiguration> {
     const distanceM = Math.ceil(
@@ -1672,7 +1702,7 @@ async selectAirAsset(
       shotConfigurationId: body.shotConfigurationId,
       shellId: body.shellId,
       chargeId: body.chargeId,
-      zoneId: body.zoneId,
+      weaponSystemId: body.weaponSystemId,
       distanceM,
     });
   }
@@ -1710,16 +1740,19 @@ async selectAirAsset(
       shellId?: string;
       chargeId?: string;
       zoneId?: string | null;
+      weaponSystemId?: string;
       distanceM: number;
     },
   ): Promise<ResolvedShotConfiguration> {
     const weaponSystems = await manager.find(WeaponSystem, {
       where: [
         {
+          ...(criteria.weaponSystemId ? { id: criteria.weaponSystemId } : {}),
           currentFirePositionId: firePosition.id,
           deploymentStatus: 'at_fire_position',
         },
         {
+          ...(criteria.weaponSystemId ? { id: criteria.weaponSystemId } : {}),
           firePositionId: firePosition.id,
           locationType: 'fire_position',
         },

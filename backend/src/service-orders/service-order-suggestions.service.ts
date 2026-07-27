@@ -26,6 +26,7 @@ export interface ServiceOrderSuggestionChargeComponent {
 }
 
 export interface ServiceOrderSuggestionVariant {
+  weaponModelId: string;
   shotConfigurationId: string;
   shotConfigurationName: string;
   shellId: string;
@@ -60,6 +61,23 @@ export interface ServiceOrderAirPayloadVariant {
 export interface ServiceOrderSuggestion {
   executorType: 'fire_position' | 'air_asset_position';
   firePosition?: FirePosition;
+  firePositionId?: string | null;
+  weaponSystemId?: string;
+  weapon?: {
+    id: string;
+    callsign: string | null;
+    serialNumber: string | null;
+    model: {
+      id: string;
+      name: string;
+    };
+  };
+  readiness?: {
+    status: string;
+    reason: string | null;
+  };
+  stockSufficient?: boolean;
+  compatibleKits?: ServiceOrderSuggestionVariant[];
   airAssetPosition?: AirAssetPosition;
   distanceM: number;
   completedVgzCount: number;
@@ -153,14 +171,48 @@ export class ServiceOrderSuggestionsService {
         plannedQuantity,
       );
 
-      suggestions.push({
-        executorType: 'fire_position',
-        firePosition: position,
-        distanceM,
-        completedVgzCount: position.completedVgzCount ?? 0,
-        variants: kitResult.variants.filter((item) => item.rejectionReasons.length === 0),
-        rejectionReasons: kitResult.rejectionReasons,
-      });
+      for (const weapon of kitResult.weaponSystems) {
+        const weaponVariants = kitResult.variants.filter(
+          (item) => item.weaponModelId === weapon.weaponModelId,
+        );
+        const compatibleKits = weaponVariants.filter(
+          (item) => item.rejectionReasons.length === 0,
+        );
+        const rejectionReasons = Array.from(
+          new Set([
+            ...weaponVariants.flatMap((item) => item.rejectionReasons),
+            ...(weaponVariants.length === 0 ? kitResult.rejectionReasons : []),
+          ]),
+        );
+
+        suggestions.push({
+          executorType: 'fire_position',
+          firePosition: position,
+          firePositionId: position.id,
+          weaponSystemId: weapon.id,
+          weapon: {
+            id: weapon.id,
+            callsign: weapon.callsign,
+            serialNumber: weapon.serialNumber,
+            model: {
+              id: weapon.weaponModelId,
+              name: weapon.weaponModel?.name || 'Модель не визначено',
+            },
+          },
+          readiness: {
+            status: weapon.readinessStatus,
+            reason: weapon.notReadyReason,
+          },
+          stockSufficient: compatibleKits.some(
+            (item) => item.availableQuantity >= plannedQuantity,
+          ),
+          compatibleKits,
+          distanceM,
+          completedVgzCount: position.completedVgzCount ?? 0,
+          variants: compatibleKits,
+          rejectionReasons,
+        });
+      }
     }
 
     const combatAssets = await this.dataSource
@@ -204,9 +256,7 @@ export class ServiceOrderSuggestionsService {
     }
 
     if (suggestions.length === 0) {
-      throw new BadRequestException(
-        'Немає доступних виконавців: перевірте БГ озброєння, блокування ВП, дальність комплектів і залишки БК.',
-      );
+      throw new BadRequestException('Немає БГ СГ');
     }
 
     return suggestions.sort((a, b) => {
@@ -250,11 +300,20 @@ export class ServiceOrderSuggestionsService {
   ): Promise<{
     variants: ServiceOrderSuggestionVariant[];
     rejectionReasons: string[];
+    weaponSystems: WeaponSystem[];
   }> {
     const weaponSystems = await this.dataSource.getRepository(WeaponSystem).find({
       where: {
         currentFirePositionId: firePositionId,
         readinessStatus: 'combat_ready',
+      },
+      relations: {
+        weaponModel: true,
+      },
+      order: {
+        callsign: 'ASC',
+        serialNumber: 'ASC',
+        id: 'ASC',
       },
     });
 
@@ -270,6 +329,7 @@ export class ServiceOrderSuggestionsService {
       return {
         variants: [],
         rejectionReasons: ['На ВП немає прибулої СГ з визначеною моделлю озброєння'],
+        weaponSystems: [],
       };
     }
 
@@ -297,6 +357,7 @@ export class ServiceOrderSuggestionsService {
       return {
         variants: [],
         rejectionReasons: ['Для моделі СГ немає комплектів пострілу'],
+        weaponSystems,
       };
     }
 
@@ -343,6 +404,7 @@ export class ServiceOrderSuggestionsService {
         );
 
         return {
+          weaponModelId: configuration.weaponModelId,
           shotConfigurationId: configuration.id,
           shotConfigurationName: configuration.name,
           shellId: configuration.shellId,
@@ -421,6 +483,7 @@ export class ServiceOrderSuggestionsService {
     return {
       variants: allVariants,
       rejectionReasons,
+      weaponSystems,
     };
   }
 
