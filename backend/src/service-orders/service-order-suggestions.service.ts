@@ -10,6 +10,7 @@ import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { AirAssetDroneStock } from '../drone-logistics/air-asset-drone-stock.entity';
 import { AirAssetWarheadStock } from '../drone-logistics/air-asset-warhead-stock.entity';
 import { FirePosition } from '../fire-positions/fire-position.entity';
+import { deriveFirePositionOperationalState } from '../fire-positions/fire-position-operational-state';
 import { Fuze } from '../fuzes/fuze.entity';
 import { Primer } from '../primers/primer.entity';
 import { Shell } from '../shells/shell.entity';
@@ -113,19 +114,8 @@ export class ServiceOrderSuggestionsService {
       .innerJoin(
         'weapon_systems',
         'weapon',
-        `weapon.current_fire_position_id = position.id`,
-      )
-      .where('position.notReadyReason IS NULL')
-      .andWhere(
-        `weapon.readiness_status IN (:...readyStatuses)`,
-        { readyStatuses },
-      )
-      .andWhere(
-        `(
-          weapon.id IS NULL
-          OR weapon.maintenance_status IS NULL
-          OR weapon.maintenance_status NOT IN ('opened', 'in_progress', 'pending', 'approved')
-        )`,
+        `weapon.current_fire_position_id = position.id
+          AND weapon.deployment_status = 'at_fire_position'`,
       )
       .getMany();
 
@@ -151,7 +141,9 @@ export class ServiceOrderSuggestionsService {
         continue;
       }
 
-      if (!this.isTargetInsideSector(position, order.targetLat, order.targetLng)) {
+      if (
+        !this.isTargetInsideSector(position, order.targetLat, order.targetLng)
+      ) {
         continue;
       }
 
@@ -172,14 +164,21 @@ export class ServiceOrderSuggestionsService {
       );
 
       for (const weapon of kitResult.weaponSystems) {
+        const operationalState = deriveFirePositionOperationalState(
+          position,
+          weapon,
+        );
         const weaponVariants = kitResult.variants.filter(
           (item) => item.weaponModelId === weapon.weaponModelId,
         );
-        const compatibleKits = weaponVariants.filter(
-          (item) => item.rejectionReasons.length === 0,
-        );
+        const compatibleKits = operationalState.ready
+          ? weaponVariants.filter((item) => item.rejectionReasons.length === 0)
+          : [];
         const rejectionReasons = Array.from(
           new Set([
+            ...(operationalState.reasonLabel
+              ? [operationalState.reasonLabel]
+              : []),
             ...weaponVariants.flatMap((item) => item.rejectionReasons),
             ...(weaponVariants.length === 0 ? kitResult.rejectionReasons : []),
           ]),
@@ -200,8 +199,10 @@ export class ServiceOrderSuggestionsService {
             },
           },
           readiness: {
-            status: weapon.readinessStatus,
-            reason: weapon.notReadyReason,
+            status: operationalState.ready
+              ? 'combat_ready'
+              : 'not_combat_ready',
+            reason: operationalState.reasonLabel,
           },
           stockSufficient: compatibleKits.some(
             (item) => item.availableQuantity >= plannedQuantity,
@@ -232,7 +233,12 @@ export class ServiceOrderSuggestionsService {
       }
 
       const distanceM = Math.ceil(
-        this.getDistanceM(asset.lat, asset.lng, order.targetLat, order.targetLng),
+        this.getDistanceM(
+          asset.lat,
+          asset.lng,
+          order.targetLat,
+          order.targetLng,
+        ),
       );
 
       const payloadVariants = await this.findCombatDronePayloadVariants(
@@ -302,20 +308,22 @@ export class ServiceOrderSuggestionsService {
     rejectionReasons: string[];
     weaponSystems: WeaponSystem[];
   }> {
-    const weaponSystems = await this.dataSource.getRepository(WeaponSystem).find({
-      where: {
-        currentFirePositionId: firePositionId,
-        readinessStatus: 'combat_ready',
-      },
-      relations: {
-        weaponModel: true,
-      },
-      order: {
-        callsign: 'ASC',
-        serialNumber: 'ASC',
-        id: 'ASC',
-      },
-    });
+    const weaponSystems = await this.dataSource
+      .getRepository(WeaponSystem)
+      .find({
+        where: {
+          currentFirePositionId: firePositionId,
+          deploymentStatus: 'at_fire_position',
+        },
+        relations: {
+          weaponModel: true,
+        },
+        order: {
+          callsign: 'ASC',
+          serialNumber: 'ASC',
+          id: 'ASC',
+        },
+      });
 
     const weaponModelIds = Array.from(
       new Set(
@@ -328,30 +336,34 @@ export class ServiceOrderSuggestionsService {
     if (weaponModelIds.length === 0) {
       return {
         variants: [],
-        rejectionReasons: ['На ВП немає прибулої СГ з визначеною моделлю озброєння'],
+        rejectionReasons: [
+          'На ВП немає прибулої СГ з визначеною моделлю озброєння',
+        ],
         weaponSystems: [],
       };
     }
 
-    const configurations = await this.dataSource.getRepository(ShotConfiguration).find({
-      where: weaponModelIds.map((weaponModelId) => ({
-        weaponModelId,
-      })),
-      relations: {
-        shell: true,
-        fuze: true,
-        primer: true,
-        charges: {
-          charge: true,
+    const configurations = await this.dataSource
+      .getRepository(ShotConfiguration)
+      .find({
+        where: weaponModelIds.map((weaponModelId) => ({
+          weaponModelId,
+        })),
+        relations: {
+          shell: true,
+          fuze: true,
+          primer: true,
+          charges: {
+            charge: true,
+          },
         },
-      },
-      order: {
-        maxRangeM: 'ASC',
-        charges: {
-          sortOrder: 'ASC',
+        order: {
+          maxRangeM: 'ASC',
+          charges: {
+            sortOrder: 'ASC',
+          },
         },
-      },
-    });
+      });
 
     if (configurations.length === 0) {
       return {
@@ -362,10 +374,18 @@ export class ServiceOrderSuggestionsService {
     }
 
     const [shells, charges, fuzes, primers] = await Promise.all([
-      this.dataSource.getRepository(DepotShellStock).find({ where: { depotId } }),
-      this.dataSource.getRepository(DepotChargeStock).find({ where: { depotId } }),
-      this.dataSource.getRepository(DepotFuzeStock).find({ where: { depotId } }),
-      this.dataSource.getRepository(DepotPrimerStock).find({ where: { depotId } }),
+      this.dataSource
+        .getRepository(DepotShellStock)
+        .find({ where: { depotId } }),
+      this.dataSource
+        .getRepository(DepotChargeStock)
+        .find({ where: { depotId } }),
+      this.dataSource
+        .getRepository(DepotFuzeStock)
+        .find({ where: { depotId } }),
+      this.dataSource
+        .getRepository(DepotPrimerStock)
+        .find({ where: { depotId } }),
     ]);
 
     const shellStock = new Map<string, number>(
@@ -502,7 +522,9 @@ export class ServiceOrderSuggestionsService {
     }
 
     if (configuration.primerId) {
-      totals.push(Math.floor(Number(primerStock.get(configuration.primerId) ?? 0)));
+      totals.push(
+        Math.floor(Number(primerStock.get(configuration.primerId) ?? 0)),
+      );
     }
 
     for (const component of configuration.charges) {
@@ -525,7 +547,9 @@ export class ServiceOrderSuggestionsService {
   ): string[] {
     const reasons: string[] = [];
     const requiredShots = Math.max(plannedQuantity, 1);
-    const availableShells = Math.floor(Number(shellStock.get(configuration.shellId) ?? 0));
+    const availableShells = Math.floor(
+      Number(shellStock.get(configuration.shellId) ?? 0),
+    );
 
     if (!configuration.isActive) {
       reasons.push(`Комплект "${configuration.name}" не активний`);
@@ -554,7 +578,9 @@ export class ServiceOrderSuggestionsService {
     }
 
     if (availableShells < requiredShots) {
-      reasons.push(`Недостатньо снарядів: потрібно ${requiredShots}, доступно ${availableShells}`);
+      reasons.push(
+        `Недостатньо снарядів: потрібно ${requiredShots}, доступно ${availableShells}`,
+      );
     }
 
     if (configuration.fuzeId) {
@@ -617,19 +643,25 @@ export class ServiceOrderSuggestionsService {
     distanceM: number,
     plannedQuantity: number,
   ): Promise<ServiceOrderAirPayloadVariant[]> {
-    const drones = await this.dataSource.getRepository(AirAssetDroneStock).find({
-      where: { airAssetPositionId },
-    });
+    const drones = await this.dataSource
+      .getRepository(AirAssetDroneStock)
+      .find({
+        where: { airAssetPositionId },
+      });
 
-    const warheads = await this.dataSource.getRepository(AirAssetWarheadStock).find({
-      where: { airAssetPositionId },
-    });
+    const warheads = await this.dataSource
+      .getRepository(AirAssetWarheadStock)
+      .find({
+        where: { airAssetPositionId },
+      });
 
     const availableDrones = drones.filter((row) => {
       const quantity = Number(row.quantity || 0);
       const maxRangeM = Number(row.droneModel?.maxRangeM || 0);
 
-      return quantity >= plannedQuantity && maxRangeM > 0 && distanceM <= maxRangeM;
+      return (
+        quantity >= plannedQuantity && maxRangeM > 0 && distanceM <= maxRangeM
+      );
     });
 
     const availableWarheads = warheads.filter((row) => {

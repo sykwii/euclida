@@ -45,7 +45,12 @@ type DeploymentLocationType = 'reserve_area' | 'fire_position';
 type DeploymentLifecycleStatus = 'planned' | 'moving' | 'arrived' | 'cancelled';
 type MaintenanceReason = 'breakdown' | 'scheduled' | 'inspection' | 'other';
 type MaintenanceStatus = 'opened' | 'in_progress' | 'completed' | 'cancelled';
-type WeaponEventAction = 'created' | 'updated' | 'assigned' | 'moved' | 'deleted';
+type WeaponEventAction =
+  | 'created'
+  | 'updated'
+  | 'assigned'
+  | 'moved'
+  | 'deleted';
 type MaintenanceEventAction =
   | 'opened'
   | 'started'
@@ -122,7 +127,10 @@ export class WeaponSystemsService implements OnModuleInit {
     return item;
   }
 
-  async create(data: CreateWeaponSystemDto, user: AuthUser): Promise<WeaponSystem> {
+  async create(
+    data: CreateWeaponSystemDto,
+    user: AuthUser,
+  ): Promise<WeaponSystem> {
     const unitId = data.unitId ?? user.unitId;
 
     if (!unitId) {
@@ -165,7 +173,9 @@ export class WeaponSystemsService implements OnModuleInit {
     this.rejectDirectLocationMutation(data, item);
 
     if (data.readinessStatus !== undefined) {
-      item.readinessStatus = this.normalizeWeaponReadiness(data.readinessStatus);
+      item.readinessStatus = this.normalizeWeaponReadiness(
+        data.readinessStatus,
+      );
       item.notReadyReason = this.normalizeWeaponReason(
         data.notReadyReason ?? item.notReadyReason,
         item.readinessStatus as WeaponReadinessStatus,
@@ -189,7 +199,7 @@ export class WeaponSystemsService implements OnModuleInit {
     Object.assign(item, assignable);
     const saved = await this.repository.save(item);
     await this.writeWeaponEvent(saved, user, 'updated');
-    this.emitWeaponChanged('updated', saved.id);
+    this.emitWeaponChanged('updated', saved.id, [saved.currentFirePositionId]);
     await this.operationalNotifications?.notifyWeaponReadinessTransition(
       previousReadinessStatus,
       saved.id,
@@ -203,11 +213,27 @@ export class WeaponSystemsService implements OnModuleInit {
     data: AssignWeaponToFirePositionDto,
     user: AuthUser,
   ): Promise<WeaponSystem> {
-    const targetFirePositionId = data.targetFirePositionId ?? data.firePositionId;
-    const result = await this.arriveAtFirePosition(id, targetFirePositionId, true, user, data);
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
+    const targetFirePositionId =
+      data.targetFirePositionId ?? data.firePositionId;
+    const result = await this.arriveAtFirePosition(
+      id,
+      targetFirePositionId,
+      true,
+      user,
+      data,
+    );
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'arrived',
+    );
     await this.writeWeaponEvent(result.weapon, user, 'assigned');
-    this.emitWeaponChanged('moved', result.weapon.id);
+    this.emitWeaponChanged(
+      'moved',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
@@ -216,7 +242,8 @@ export class WeaponSystemsService implements OnModuleInit {
     body: CreateWeaponDeploymentDto,
     user: AuthUser,
   ): Promise<WeaponSystem> {
-    const targetFirePositionId = body.targetFirePositionId ?? body.firePositionId;
+    const targetFirePositionId =
+      body.targetFirePositionId ?? body.firePositionId;
     const result = await this.planDeployment(
       id,
       'fire_position',
@@ -225,8 +252,17 @@ export class WeaponSystemsService implements OnModuleInit {
       body.note,
       user,
     );
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'planned');
-    this.emitWeaponChanged('updated', result.weapon.id);
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'planned',
+    );
+    this.emitWeaponChanged(
+      'updated',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
@@ -236,8 +272,17 @@ export class WeaponSystemsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<WeaponSystem> {
     const result = await this.startDeployment(id, 'fire_position', body, user);
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'started');
-    this.emitWeaponChanged('moved', result.weapon.id);
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'started',
+    );
+    this.emitWeaponChanged(
+      'moved',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
@@ -246,18 +291,43 @@ export class WeaponSystemsService implements OnModuleInit {
     body: CreateWeaponDeploymentDto,
     user: AuthUser,
   ): Promise<WeaponSystem> {
-    const targetFirePositionId = body.targetFirePositionId ?? body.firePositionId;
-    const result = await this.arriveAtFirePosition(id, targetFirePositionId, false, user, body);
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
-    this.emitWeaponChanged('moved', result.weapon.id);
+    const targetFirePositionId =
+      body.targetFirePositionId ?? body.firePositionId;
+    const result = await this.arriveAtFirePosition(
+      id,
+      targetFirePositionId,
+      false,
+      user,
+      body,
+    );
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'arrived',
+    );
+    this.emitWeaponChanged(
+      'moved',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
   async moveToReserve(id: string, user: AuthUser): Promise<WeaponSystem> {
     const result = await this.arriveAtReserve(id, true, user, {});
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'arrived',
+    );
     await this.writeWeaponEvent(result.weapon, user, 'moved');
-    this.emitWeaponChanged('moved', result.weapon.id);
+    this.emitWeaponChanged(
+      'moved',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
@@ -266,9 +336,25 @@ export class WeaponSystemsService implements OnModuleInit {
     body: UpdateWeaponDeploymentDto,
     user: AuthUser,
   ): Promise<WeaponSystem> {
-    const result = await this.planDeployment(id, 'reserve_area', null, true, body.note, user);
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'planned');
-    this.emitWeaponChanged('updated', result.weapon.id);
+    const result = await this.planDeployment(
+      id,
+      'reserve_area',
+      null,
+      true,
+      body.note,
+      user,
+    );
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'planned',
+    );
+    this.emitWeaponChanged(
+      'updated',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
@@ -278,8 +364,17 @@ export class WeaponSystemsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<WeaponSystem> {
     const result = await this.startDeployment(id, 'reserve_area', body, user);
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'started');
-    this.emitWeaponChanged('moved', result.weapon.id);
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'started',
+    );
+    this.emitWeaponChanged(
+      'moved',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
@@ -289,14 +384,27 @@ export class WeaponSystemsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<WeaponSystem> {
     const result = await this.arriveAtReserve(id, false, user, body);
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'arrived');
-    this.emitWeaponChanged('moved', result.weapon.id);
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'arrived',
+    );
+    this.emitWeaponChanged(
+      'moved',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
   async cancelDeployment(id: string, user: AuthUser): Promise<WeaponSystem> {
     const result = await this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       const deployment = await this.findMutableDeployment(
         manager.getRepository(WeaponDeployment),
         weapon.id,
@@ -304,7 +412,9 @@ export class WeaponSystemsService implements OnModuleInit {
       );
 
       if (!deployment) {
-        throw new BadRequestException('Немає активного переміщення для скасування');
+        throw new BadRequestException(
+          'Немає активного переміщення для скасування',
+        );
       }
 
       const previousStatus = deployment.status;
@@ -316,13 +426,28 @@ export class WeaponSystemsService implements OnModuleInit {
       this.restoreWeaponLocationAfterCancel(weapon, deployment);
       await manager.save(WeaponDeployment, deployment);
       await manager.save(WeaponSystem, weapon);
-      await this.syncFirePositionWeaponStateWithManager(manager, deployment.fromLocationId);
-      await this.syncFirePositionWeaponStateWithManager(manager, deployment.toLocationId);
+      await this.syncFirePositionWeaponStateWithManager(
+        manager,
+        deployment.fromLocationId,
+      );
+      await this.syncFirePositionWeaponStateWithManager(
+        manager,
+        deployment.toLocationId,
+      );
       return { weapon, firePosition: null, deployment };
     });
 
-    await this.writeDeploymentEvent(result.weapon, result.deployment, user, 'cancelled');
-    this.emitWeaponChanged('moved', result.weapon.id);
+    await this.writeDeploymentEvent(
+      result.weapon,
+      result.deployment,
+      user,
+      'cancelled',
+    );
+    this.emitWeaponChanged(
+      'moved',
+      result.weapon.id,
+      this.firePositionIds(result.weapon, result.deployment),
+    );
     return this.findOne(result.weapon.id, user);
   }
 
@@ -350,9 +475,16 @@ export class WeaponSystemsService implements OnModuleInit {
   ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const result = await this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       const previousReadinessStatus = weapon.readinessStatus;
-      await this.ensureNoOpenMaintenance(manager.getRepository(WeaponMaintenance), weapon.id);
+      await this.ensureNoOpenMaintenance(
+        manager.getRepository(WeaponMaintenance),
+        weapon.id,
+      );
 
       const reason = this.normalizeMaintenanceReason(body.reason);
       const startedAt = this.parseDate(body.startedAt);
@@ -376,7 +508,8 @@ export class WeaponSystemsService implements OnModuleInit {
       });
 
       weapon.readinessStatus = 'not_combat_ready';
-      weapon.notReadyReason = reason === 'breakdown' ? 'breakdown' : 'maintenance';
+      weapon.notReadyReason =
+        reason === 'breakdown' ? 'breakdown' : 'maintenance';
       weapon.maintenanceStatus = 'opened';
       weapon.maintenanceRequestedStartAt = startedAt;
       weapon.maintenancePlannedEndAt = expectedCompletedAt;
@@ -391,7 +524,9 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result.weapon, user, 'opened');
-    this.emitWeaponChanged('updated', result.weapon.id);
+    this.emitWeaponChanged('updated', result.weapon.id, [
+      result.weapon.currentFirePositionId,
+    ]);
     await this.operationalNotifications?.notifyWeaponReadinessTransition(
       result.previousReadinessStatus,
       result.weapon.id,
@@ -407,7 +542,11 @@ export class WeaponSystemsService implements OnModuleInit {
   async startMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const result = await this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       const maintenance = await this.findOpenMaintenance(
         manager.getRepository(WeaponMaintenance),
         weapon.id,
@@ -422,7 +561,9 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'started');
-    this.emitWeaponChanged('updated', result.id);
+    this.emitWeaponChanged('updated', result.id, [
+      result.currentFirePositionId,
+    ]);
     return this.findOne(result.id, user);
   }
 
@@ -433,7 +574,11 @@ export class WeaponSystemsService implements OnModuleInit {
   async cancelMaintenance(id: string, user: AuthUser): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const result = await this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       const maintenance = await this.findOpenMaintenance(
         manager.getRepository(WeaponMaintenance),
         weapon.id,
@@ -449,7 +594,9 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'cancelled');
-    this.emitWeaponChanged('updated', result.id);
+    this.emitWeaponChanged('updated', result.id, [
+      result.currentFirePositionId,
+    ]);
     return this.findOne(result.id, user);
   }
 
@@ -459,7 +606,11 @@ export class WeaponSystemsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<WeaponSystem> {
     const result = await this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       const maintenance = await this.findOpenMaintenance(
         manager.getRepository(WeaponMaintenance),
         weapon.id,
@@ -475,9 +626,13 @@ export class WeaponSystemsService implements OnModuleInit {
       }
 
       const baseEnd = maintenance.expectedCompletedAt ?? new Date();
-      maintenance.expectedCompletedAt = new Date(baseEnd.getTime() + extraMinutes * 60_000);
+      maintenance.expectedCompletedAt = new Date(
+        baseEnd.getTime() + extraMinutes * 60_000,
+      );
       maintenance.description =
-        [maintenance.description, body.note?.trim()].filter(Boolean).join('\n') || null;
+        [maintenance.description, body.note?.trim()]
+          .filter(Boolean)
+          .join('\n') || null;
       weapon.maintenancePlannedEndAt = maintenance.expectedCompletedAt;
       weapon.maintenanceNote = maintenance.description;
       await manager.save(WeaponMaintenance, maintenance);
@@ -486,7 +641,9 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'extended');
-    this.emitWeaponChanged('updated', result.id);
+    this.emitWeaponChanged('updated', result.id, [
+      result.currentFirePositionId,
+    ]);
     return this.findOne(result.id, user);
   }
 
@@ -501,7 +658,11 @@ export class WeaponSystemsService implements OnModuleInit {
   ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const result = await this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       const maintenance = await this.findOpenMaintenance(
         manager.getRepository(WeaponMaintenance),
         weapon.id,
@@ -526,7 +687,9 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'completed');
-    this.emitWeaponChanged('updated', result.id);
+    this.emitWeaponChanged('updated', result.id, [
+      result.currentFirePositionId,
+    ]);
     return this.findOne(result.id, user);
   }
 
@@ -545,7 +708,7 @@ export class WeaponSystemsService implements OnModuleInit {
     );
     const saved = await this.repository.save(item);
     await this.writeWeaponEvent(saved, user, 'updated');
-    this.emitWeaponChanged('updated', saved.id);
+    this.emitWeaponChanged('updated', saved.id, [saved.currentFirePositionId]);
     await this.operationalNotifications?.notifyWeaponReadinessTransition(
       previousReadinessStatus,
       saved.id,
@@ -554,7 +717,9 @@ export class WeaponSystemsService implements OnModuleInit {
     return this.findOne(saved.id, user);
   }
 
-  async syncAllFirePositionStates(user: AuthUser): Promise<{ updated: number }> {
+  async syncAllFirePositionStates(
+    user: AuthUser,
+  ): Promise<{ updated: number }> {
     const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
     const firePositionRepository = this.dataSource.getRepository(FirePosition);
 
@@ -567,17 +732,22 @@ export class WeaponSystemsService implements OnModuleInit {
       await this.syncFirePositionWeaponState(firePosition.id);
     }
 
-    this.emitWeaponChanged('synced');
+    this.emitWeaponChanged(
+      'synced',
+      undefined,
+      firePositions.map((position) => position.id),
+    );
     return { updated: firePositions.length };
   }
 
   async remove(id: string, user: AuthUser): Promise<void> {
     const item = await this.findOne(id, user);
-    const previousFirePositionId = item.currentFirePositionId ?? item.firePositionId;
+    const previousFirePositionId =
+      item.currentFirePositionId ?? item.firePositionId;
     await this.repository.remove(item);
     await this.syncFirePositionWeaponState(previousFirePositionId);
     await this.writeWeaponEvent(item, user, 'deleted');
-    this.emitWeaponChanged('deleted', item.id);
+    this.emitWeaponChanged('deleted', item.id, [previousFirePositionId]);
   }
 
   private async planDeployment(
@@ -589,7 +759,11 @@ export class WeaponSystemsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<WeaponDeploymentContext> {
     return this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       this.ensureWeaponCanStartDeployment(weapon);
 
       const firePosition =
@@ -598,14 +772,29 @@ export class WeaponSystemsService implements OnModuleInit {
           : null;
 
       if (toLocationType === 'fire_position') {
-        await this.prepareFirePositionForWeapon(manager, firePosition!, weapon, user);
+        await this.prepareFirePositionForWeapon(
+          manager,
+          firePosition!,
+          weapon,
+          user,
+        );
         this.ensureWeaponCombatReadyForAssignment(weapon);
-        await this.ensureFirePositionAvailable(manager, firePosition!.id, weapon.id);
+        await this.ensureFirePositionAvailable(
+          manager,
+          firePosition!.id,
+          weapon.id,
+        );
       } else {
-        await this.ensureNoActiveExecution(manager, weapon.currentFirePositionId);
+        await this.ensureNoActiveExecution(
+          manager,
+          weapon.currentFirePositionId,
+        );
       }
 
-      await this.ensureNoMutableDeployment(manager.getRepository(WeaponDeployment), weapon.id);
+      await this.ensureNoMutableDeployment(
+        manager.getRepository(WeaponDeployment),
+        weapon.id,
+      );
 
       const deployment = manager.create(WeaponDeployment, {
         weaponSystemId: weapon.id,
@@ -631,7 +820,11 @@ export class WeaponSystemsService implements OnModuleInit {
     user: AuthUser,
   ): Promise<WeaponDeploymentContext> {
     return this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       this.ensureWeaponCanStartDeployment(weapon);
       const deployment =
         (await this.findMutableDeployment(
@@ -643,7 +836,9 @@ export class WeaponSystemsService implements OnModuleInit {
           await this.planDeployment(
             id,
             toLocationType,
-            'targetFirePositionId' in body ? body.targetFirePositionId ?? body.firePositionId : null,
+            'targetFirePositionId' in body
+              ? (body.targetFirePositionId ?? body.firePositionId)
+              : null,
             'force' in body && body.force === true,
             body.note,
             user,
@@ -651,7 +846,9 @@ export class WeaponSystemsService implements OnModuleInit {
         ).deployment;
 
       if (deployment.status !== 'planned') {
-        throw new BadRequestException('Переміщення вже розпочато або завершено');
+        throw new BadRequestException(
+          'Переміщення вже розпочато або завершено',
+        );
       }
 
       const firePosition =
@@ -660,10 +857,22 @@ export class WeaponSystemsService implements OnModuleInit {
           : null;
 
       if (deployment.toLocationType === 'fire_position') {
-        await this.prepareFirePositionForWeapon(manager, firePosition!, weapon, user);
-        await this.ensureFirePositionAvailable(manager, firePosition!.id, weapon.id);
+        await this.prepareFirePositionForWeapon(
+          manager,
+          firePosition!,
+          weapon,
+          user,
+        );
+        await this.ensureFirePositionAvailable(
+          manager,
+          firePosition!.id,
+          weapon.id,
+        );
       } else {
-        await this.ensureNoActiveExecution(manager, weapon.currentFirePositionId);
+        await this.ensureNoActiveExecution(
+          manager,
+          weapon.currentFirePositionId,
+        );
       }
 
       deployment.status = 'moving';
@@ -676,7 +885,10 @@ export class WeaponSystemsService implements OnModuleInit {
 
       const savedDeployment = await manager.save(WeaponDeployment, deployment);
       await manager.save(WeaponSystem, weapon);
-      await this.syncFirePositionWeaponStateWithManager(manager, deployment.fromLocationId);
+      await this.syncFirePositionWeaponStateWithManager(
+        manager,
+        deployment.fromLocationId,
+      );
       return { weapon, firePosition, deployment: savedDeployment };
     });
   }
@@ -689,7 +901,11 @@ export class WeaponSystemsService implements OnModuleInit {
     body: CreateWeaponDeploymentDto | AssignWeaponToFirePositionDto,
   ): Promise<WeaponDeploymentContext> {
     return this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
       const deploymentRepository = manager.getRepository(WeaponDeployment);
       const mutableDeployment = await this.findMutableDeployment(
         deploymentRepository,
@@ -702,7 +918,12 @@ export class WeaponSystemsService implements OnModuleInit {
         this.ensureWeaponCanStartDeployment(weapon);
       }
 
-      await this.prepareFirePositionForWeapon(manager, firePosition, weapon, user);
+      await this.prepareFirePositionForWeapon(
+        manager,
+        firePosition,
+        weapon,
+        user,
+      );
 
       if (
         weapon.deploymentStatus === 'at_fire_position' &&
@@ -723,11 +944,17 @@ export class WeaponSystemsService implements OnModuleInit {
         weapon.currentFirePositionId &&
         weapon.currentFirePositionId !== firePosition.id
       ) {
-        throw new BadRequestException('СГ вже перебуває на іншій ВП. Спочатку виведіть її в РЗ');
+        throw new BadRequestException(
+          'СГ вже перебуває на іншій ВП. Спочатку виведіть її в РЗ',
+        );
       }
 
       this.ensureWeaponCombatReadyForAssignment(weapon);
-      await this.ensureFirePositionAvailable(manager, firePosition.id, weapon.id);
+      await this.ensureFirePositionAvailable(
+        manager,
+        firePosition.id,
+        weapon.id,
+      );
 
       const deployment =
         mutableDeployment ??
@@ -745,7 +972,9 @@ export class WeaponSystemsService implements OnModuleInit {
         });
 
       if (!allowImmediate && deployment.status !== 'moving') {
-        throw new BadRequestException('Спочатку потрібно розпочати переміщення до ВП');
+        throw new BadRequestException(
+          'Спочатку потрібно розпочати переміщення до ВП',
+        );
       }
 
       deployment.status = 'arrived';
@@ -760,8 +989,14 @@ export class WeaponSystemsService implements OnModuleInit {
       const savedDeployment = await manager.save(WeaponDeployment, deployment);
       await manager.save(FirePosition, firePosition);
       await manager.save(WeaponSystem, weapon);
-      await this.syncFirePositionWeaponStateWithManager(manager, firePosition.id);
-      await this.syncFirePositionWeaponStateWithManager(manager, deployment.fromLocationId);
+      await this.syncFirePositionWeaponStateWithManager(
+        manager,
+        firePosition.id,
+      );
+      await this.syncFirePositionWeaponStateWithManager(
+        manager,
+        deployment.fromLocationId,
+      );
       return { weapon, firePosition, deployment: savedDeployment };
     });
   }
@@ -773,8 +1008,13 @@ export class WeaponSystemsService implements OnModuleInit {
     body: UpdateWeaponDeploymentDto,
   ): Promise<WeaponDeploymentContext> {
     return this.dataSource.transaction(async (manager) => {
-      const weapon = await this.lockWeapon(manager.getRepository(WeaponSystem), id, user);
-      const previousFirePositionId = weapon.currentFirePositionId ?? weapon.firePositionId;
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
+      const previousFirePositionId =
+        weapon.currentFirePositionId ?? weapon.firePositionId;
       await this.ensureNoActiveExecution(manager, previousFirePositionId);
 
       const deploymentRepository = manager.getRepository(WeaponDeployment);
@@ -800,7 +1040,9 @@ export class WeaponSystemsService implements OnModuleInit {
         });
 
       if (!allowImmediate && deployment.status !== 'moving') {
-        throw new BadRequestException('Спочатку потрібно розпочати переміщення до РЗ');
+        throw new BadRequestException(
+          'Спочатку потрібно розпочати переміщення до РЗ',
+        );
       }
 
       deployment.status = 'arrived';
@@ -811,7 +1053,10 @@ export class WeaponSystemsService implements OnModuleInit {
 
       const savedDeployment = await manager.save(WeaponDeployment, deployment);
       await manager.save(WeaponSystem, weapon);
-      await this.syncFirePositionWeaponStateWithManager(manager, previousFirePositionId);
+      await this.syncFirePositionWeaponStateWithManager(
+        manager,
+        previousFirePositionId,
+      );
       return { weapon, firePosition: null, deployment: savedDeployment };
     });
   }
@@ -880,7 +1125,9 @@ export class WeaponSystemsService implements OnModuleInit {
     }
 
     if (!weapon.unitId) {
-      throw new BadRequestException('ВП не має підрозділу, а СГ не прив’язана до підрозділу');
+      throw new BadRequestException(
+        'ВП не має підрозділу, а СГ не прив’язана до підрозділу',
+      );
     }
 
     await this.ensureCanUseUnit(user, weapon.unitId);
@@ -945,7 +1192,9 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     if (activeOrder) {
-      throw new BadRequestException('Неможливо вивести СГ під час активного виконання');
+      throw new BadRequestException(
+        'Неможливо вивести СГ під час активного виконання',
+      );
     }
   }
 
@@ -1055,8 +1304,13 @@ export class WeaponSystemsService implements OnModuleInit {
     );
   }
 
-  private async syncFirePositionWeaponState(firePositionId: string | null): Promise<void> {
-    await this.syncFirePositionWeaponStateWithManager(this.dataSource.manager, firePositionId);
+  private async syncFirePositionWeaponState(
+    firePositionId: string | null,
+  ): Promise<void> {
+    await this.syncFirePositionWeaponStateWithManager(
+      this.dataSource.manager,
+      firePositionId,
+    );
   }
 
   private async syncFirePositionWeaponStateWithManager(
@@ -1085,7 +1339,10 @@ export class WeaponSystemsService implements OnModuleInit {
     weapon: WeaponSystem,
     deployment: WeaponDeployment,
   ): void {
-    if (deployment.fromLocationType === 'fire_position' && deployment.fromLocationId) {
+    if (
+      deployment.fromLocationType === 'fire_position' &&
+      deployment.fromLocationId
+    ) {
       weapon.deploymentStatus = 'at_fire_position';
       weapon.currentFirePositionId = deployment.fromLocationId;
       return;
@@ -1099,7 +1356,8 @@ export class WeaponSystemsService implements OnModuleInit {
     data: Partial<CreateWeaponSystemDto & UpdateWeaponSystemDto>,
     current: WeaponSystem | null,
   ): void {
-    const requestedFirePositionId = data.currentFirePositionId ?? data.firePositionId ?? null;
+    const requestedFirePositionId =
+      data.currentFirePositionId ?? data.firePositionId ?? null;
     const requestedDeployment = this.normalizeDeploymentInput(
       data.deploymentStatus,
       data.locationType,
@@ -1108,12 +1366,15 @@ export class WeaponSystemsService implements OnModuleInit {
 
     if (!current) {
       if (requestedFirePositionId || requestedDeployment !== 'reserve_area') {
-        throw new BadRequestException('Переміщення СГ виконується окремою дією');
+        throw new BadRequestException(
+          'Переміщення СГ виконується окремою дією',
+        );
       }
       return;
     }
 
-    const currentFirePositionId = current.currentFirePositionId ?? current.firePositionId ?? null;
+    const currentFirePositionId =
+      current.currentFirePositionId ?? current.firePositionId ?? null;
     const currentDeployment = this.normalizeDeploymentInput(
       current.deploymentStatus,
       current.locationType,
@@ -1136,8 +1397,11 @@ export class WeaponSystemsService implements OnModuleInit {
 
     if (
       data.locationType !== undefined &&
-      this.normalizeDeploymentInput(undefined, data.locationType, requestedFirePositionId) !==
-        currentDeployment
+      this.normalizeDeploymentInput(
+        undefined,
+        data.locationType,
+        requestedFirePositionId,
+      ) !== currentDeployment
     ) {
       throw new BadRequestException('Переміщення СГ виконується окремою дією');
     }
@@ -1164,8 +1428,12 @@ export class WeaponSystemsService implements OnModuleInit {
     return 'reserve_area';
   }
 
-  private normalizeWeaponReadiness(value: string | null | undefined): WeaponReadinessStatus {
-    return value === 'ready' || value === 'combat_ready' || value === 'ready_for_combat'
+  private normalizeWeaponReadiness(
+    value: string | null | undefined,
+  ): WeaponReadinessStatus {
+    return value === 'ready' ||
+      value === 'combat_ready' ||
+      value === 'ready_for_combat'
       ? 'combat_ready'
       : 'not_combat_ready';
   }
@@ -1191,7 +1459,9 @@ export class WeaponSystemsService implements OnModuleInit {
     return 'other';
   }
 
-  private normalizeMaintenanceReason(value: string | null | undefined): MaintenanceReason {
+  private normalizeMaintenanceReason(
+    value: string | null | undefined,
+  ): MaintenanceReason {
     if (
       value === 'breakdown' ||
       value === 'scheduled' ||
@@ -1205,7 +1475,9 @@ export class WeaponSystemsService implements OnModuleInit {
   }
 
   private ensureWeaponCombatReadyForAssignment(weapon: WeaponSystem): void {
-    if (this.normalizeWeaponReadiness(weapon.readinessStatus) === 'combat_ready') {
+    if (
+      this.normalizeWeaponReadiness(weapon.readinessStatus) === 'combat_ready'
+    ) {
       return;
     }
 
@@ -1216,7 +1488,9 @@ export class WeaponSystemsService implements OnModuleInit {
 
   private ensureWeaponCanStartDeployment(weapon: WeaponSystem): void {
     if (this.hasActiveMaintenance(weapon)) {
-      throw new BadRequestException('Неможливо переміщувати СГ під час активного ТО або ремонту');
+      throw new BadRequestException(
+        'Неможливо переміщувати СГ під час активного ТО або ремонту',
+      );
     }
 
     if (
@@ -1238,14 +1512,15 @@ export class WeaponSystemsService implements OnModuleInit {
     }
 
     return (
-      weapon.maintenances?.some((item) =>
-        item.status === 'opened' || item.status === 'in_progress',
+      weapon.maintenances?.some(
+        (item) => item.status === 'opened' || item.status === 'in_progress',
       ) ?? false
     );
   }
 
   private getCurrentLocationType(weapon: WeaponSystem): DeploymentLocationType {
-    return weapon.currentFirePositionId || weapon.locationType === 'fire_position'
+    return weapon.currentFirePositionId ||
+      weapon.locationType === 'fire_position'
       ? 'fire_position'
       : 'reserve_area';
   }
@@ -1259,7 +1534,10 @@ export class WeaponSystemsService implements OnModuleInit {
   }
 
   private getDeploymentNote(
-    body: CreateWeaponDeploymentDto | AssignWeaponToFirePositionDto | UpdateWeaponDeploymentDto,
+    body:
+      | CreateWeaponDeploymentDto
+      | AssignWeaponToFirePositionDto
+      | UpdateWeaponDeploymentDto,
   ): string | null {
     return 'note' in body ? body.note?.trim() || null : null;
   }
@@ -1275,7 +1553,10 @@ export class WeaponSystemsService implements OnModuleInit {
     };
   }
 
-  private async ensureCanUseUnit(user: AuthUser, unitId: string | null): Promise<void> {
+  private async ensureCanUseUnit(
+    user: AuthUser,
+    unitId: string | null,
+  ): Promise<void> {
     if (!unitId) {
       throw new ForbiddenException('Потрібно обрати підрозділ');
     }
@@ -1295,7 +1576,9 @@ export class WeaponSystemsService implements OnModuleInit {
       return;
     }
 
-    throw new ForbiddenException('Підтвердити ТО може тільки головний оператор');
+    throw new ForbiddenException(
+      'Підтвердити ТО може тільки головний оператор',
+    );
   }
 
   private ensureMaintenanceFieldOperator(user: AuthUser): void {
@@ -1305,22 +1588,56 @@ export class WeaponSystemsService implements OnModuleInit {
 
     if (
       user.role === 'operator' &&
-      (user.scope === 'battery' || user.scope === 'division' || user.scope === 'main')
+      (user.scope === 'battery' ||
+        user.scope === 'division' ||
+        user.scope === 'main')
     ) {
       return;
     }
 
-    throw new ForbiddenException('Операції з ТО може виконувати тільки оператор');
+    throw new ForbiddenException(
+      'Операції з ТО може виконувати тільки оператор',
+    );
   }
 
   private emitWeaponChanged(
     action: 'created' | 'updated' | 'deleted' | 'moved' | 'synced' = 'moved',
     id?: string,
+    firePositionIds: Array<string | null | undefined> = [],
   ): void {
-    this.realtimeEvents.emitMany(['weapons', 'map', 'analytics', 'events'], action, {
-      entity: 'weapon_system',
-      id,
-    });
+    this.realtimeEvents.emitMany(
+      ['weapons', 'map', 'analytics', 'events'],
+      action,
+      {
+        entity: 'weapon_system',
+        id,
+      },
+    );
+    const uniqueFirePositionIds = new Set(
+      firePositionIds.filter((value): value is string => !!value),
+    );
+    for (const firePositionId of uniqueFirePositionIds) {
+      this.realtimeEvents.emit('map', action, {
+        entity: 'fire_position',
+        id: firePositionId,
+        reason: 'weapon_state_changed',
+      });
+    }
+  }
+
+  private firePositionIds(
+    weapon: WeaponSystem,
+    deployment: WeaponDeployment,
+  ): Array<string | null | undefined> {
+    return [
+      weapon.currentFirePositionId,
+      deployment.fromLocationType === 'fire_position'
+        ? deployment.fromLocationId
+        : null,
+      deployment.toLocationType === 'fire_position'
+        ? deployment.toLocationId
+        : null,
+    ];
   }
 
   private async writeWeaponEvent(

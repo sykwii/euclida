@@ -4,6 +4,7 @@ import { AccessScopeService } from '../access-scope/access-scope.service';
 import { AirThreatsService } from '../air-threats/air-threats.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { ServiceOrdersService } from '../service-orders/service-orders.service';
+import { FirePositionsService } from '../fire-positions/fire-positions.service';
 import {
   AmmoRecipientAnalyticsRow,
   AnalyticsDashboard,
@@ -35,6 +36,7 @@ export class AnalyticsService {
     private readonly serviceOrders: ServiceOrdersService,
     private readonly airThreats: AirThreatsService,
     private readonly accessScope: AccessScopeService,
+    private readonly firePositions: FirePositionsService,
   ) {}
 
   async getOperatorCounters(user: AuthUser) {
@@ -49,16 +51,30 @@ export class AnalyticsService {
     };
   }
 
-
-  async getOperationalAnalytics(daysRaw: string | undefined, user: AuthUser): Promise<OperationalAnalyticsV2> {
+  async getOperationalAnalytics(
+    daysRaw: string | undefined,
+    user: AuthUser,
+  ): Promise<OperationalAnalyticsV2> {
     const days = this.parseDays(daysRaw, [7, 10, 20, 30], 7);
     const period = this.getKyivPeriod(days);
 
     const weaponScope = await this.getUnitScope(user, 1, 'ws.unit_id');
     const firePositionScope = await this.getUnitScope(user, 1, 'fp.unit_id');
-    const firePositionPeriodScope = await this.getUnitScope(user, 3, 'fp.unit_id');
-    const serviceOrderScope = await this.getUnitScope(user, 3, 'COALESCE(fp.unit_id, so.assigned_unit_id)');
-    const stockScope = await this.getUnitScope(user, 3, 'COALESCE(fp.unit_id, d.unit_id)');
+    const firePositionPeriodScope = await this.getUnitScope(
+      user,
+      3,
+      'fp.unit_id',
+    );
+    const serviceOrderScope = await this.getUnitScope(
+      user,
+      3,
+      'COALESCE(fp.unit_id, so.assigned_unit_id)',
+    );
+    const stockScope = await this.getUnitScope(
+      user,
+      3,
+      'COALESCE(fp.unit_id, d.unit_id)',
+    );
 
     const [
       readiness,
@@ -73,7 +89,7 @@ export class AnalyticsService {
       serviceOrderSummary,
       shooting,
     ] = await Promise.all([
-      this.getOperationalReadiness(weaponScope, firePositionScope),
+      this.getOperationalReadiness(weaponScope, user),
       this.getDeliveriesTop(period, stockScope),
       this.getCompletedTasksTop(period, serviceOrderScope),
       this.getLowAmmoFirePositions(firePositionScope),
@@ -94,7 +110,11 @@ export class AnalyticsService {
       readiness,
       serviceOrders: serviceOrderSummary,
       shooting,
-      logistics: this.buildOperationalLogisticsSummary(deliveriesTop, lowAmmoFirePositions, ammoForecast),
+      logistics: this.buildOperationalLogisticsSummary(
+        deliveriesTop,
+        lowAmmoFirePositions,
+        ammoForecast,
+      ),
       deliveriesTop,
       tasksTopByFirePosition,
       lowAmmoFirePositions,
@@ -106,13 +126,21 @@ export class AnalyticsService {
         top: weaponEfficiencyRows.slice(0, 10),
         bottom: weaponEfficiencyRows.slice(-10).reverse(),
       },
-      attention: this.buildOperationalAttention(lowAmmoFirePositions, rotation, ammoForecast, readiness),
+      attention: this.buildOperationalAttention(
+        lowAmmoFirePositions,
+        rotation,
+        ammoForecast,
+        readiness,
+      ),
     };
   }
 
-
-  private async getServiceOrderOperationalSummary(period: { start: string; end: string }, unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getServiceOrderOperationalSummary(
+    period: { start: string; end: string },
+    unitScope: UnitScope,
+  ) {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         so.status AS status,
         COUNT(*)::int AS total,
@@ -124,19 +152,30 @@ export class AnalyticsService {
         ${unitScope.clause}
       GROUP BY so.status
       ORDER BY total DESC, status ASC
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
-    const statusValue = (status: string) => rows
-      .filter((row) => String(row.status) === status)
-      .reduce((sum, row) => sum + this.num(row.total), 0);
-    const actualQuantityTotal = rows.reduce((sum, row) => sum + this.num(row.actual_quantity), 0);
+    const statusValue = (status: string) =>
+      rows
+        .filter((row) => String(row.status) === status)
+        .reduce((sum, row) => sum + this.num(row.total), 0);
+    const actualQuantityTotal = rows.reduce(
+      (sum, row) => sum + this.num(row.actual_quantity),
+      0,
+    );
     const total = rows.reduce((sum, row) => sum + this.num(row.total), 0);
     const completed = statusValue('completed');
 
     return {
       total,
       active: rows
-        .filter((row) => !['completed', 'cancelled', 'rejected'].includes(String(row.status)))
+        .filter(
+          (row) =>
+            !['completed', 'cancelled', 'rejected'].includes(
+              String(row.status),
+            ),
+        )
         .reduce((sum, row) => sum + this.num(row.total), 0),
       sent: statusValue('sent'),
       accepted: statusValue('accepted'),
@@ -145,7 +184,10 @@ export class AnalyticsService {
       rejected: statusValue('rejected'),
       cancelled: statusValue('cancelled'),
       completionRate: this.percent(completed, total),
-      averageActualQuantity: completed > 0 ? Number((actualQuantityTotal / completed).toFixed(1)) : 0,
+      averageActualQuantity:
+        completed > 0
+          ? Number((actualQuantityTotal / completed).toFixed(1))
+          : 0,
       statuses: rows.map((row) => ({
         status: String(row.status ?? 'unknown'),
         total: this.num(row.total),
@@ -154,25 +196,52 @@ export class AnalyticsService {
   }
 
   private buildOperationalLogisticsSummary(
-    deliveriesTop: Array<{ deliveries: number; totalQuantity: number; shells: number; charges: number; fuzes: number; primers: number }>,
+    deliveriesTop: Array<{
+      deliveries: number;
+      totalQuantity: number;
+      shells: number;
+      charges: number;
+      fuzes: number;
+      primers: number;
+    }>,
     lowAmmoFirePositions: Array<unknown>,
     ammoForecast: Array<{ level: string }>,
   ) {
     return {
-      deliveries: deliveriesTop.reduce((sum, row) => sum + this.num(row.deliveries), 0),
-      totalQuantity: deliveriesTop.reduce((sum, row) => sum + this.num(row.totalQuantity), 0),
+      deliveries: deliveriesTop.reduce(
+        (sum, row) => sum + this.num(row.deliveries),
+        0,
+      ),
+      totalQuantity: deliveriesTop.reduce(
+        (sum, row) => sum + this.num(row.totalQuantity),
+        0,
+      ),
       shells: deliveriesTop.reduce((sum, row) => sum + this.num(row.shells), 0),
-      charges: deliveriesTop.reduce((sum, row) => sum + this.num(row.charges), 0),
+      charges: deliveriesTop.reduce(
+        (sum, row) => sum + this.num(row.charges),
+        0,
+      ),
       fuzes: deliveriesTop.reduce((sum, row) => sum + this.num(row.fuzes), 0),
-      primers: deliveriesTop.reduce((sum, row) => sum + this.num(row.primers), 0),
+      primers: deliveriesTop.reduce(
+        (sum, row) => sum + this.num(row.primers),
+        0,
+      ),
       lowAmmoCount: lowAmmoFirePositions.length,
-      criticalForecastCount: ammoForecast.filter((row) => row.level === 'critical').length,
-      warningForecastCount: ammoForecast.filter((row) => row.level === 'warning').length,
+      criticalForecastCount: ammoForecast.filter(
+        (row) => row.level === 'critical',
+      ).length,
+      warningForecastCount: ammoForecast.filter(
+        (row) => row.level === 'warning',
+      ).length,
     };
   }
 
-  private async getOperationalReadiness(weaponScope: UnitScope, firePositionScope: UnitScope) {
-    const weaponTotalsRows = await this.dataSource.query<RawRow[]>(`
+  private async getOperationalReadiness(
+    weaponScope: UnitScope,
+    user: AuthUser,
+  ) {
+    const weaponTotalsRows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE ws.readiness_status IN ('ready', 'combat_ready', 'ready_for_combat', 'боєготов'))::int AS ready,
@@ -181,9 +250,12 @@ export class AnalyticsService {
       FROM weapon_systems ws
       WHERE 1 = 1
         ${weaponScope.clause}
-    `, weaponScope.params);
+    `,
+      weaponScope.params,
+    );
 
-    const weaponReasonRows = await this.dataSource.query<RawRow[]>(`
+    const weaponReasonRows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COALESCE(NULLIF(TRIM(ws.not_ready_reason), ''), 'Причину не вказано') AS reason,
         COUNT(*)::int AS total
@@ -193,49 +265,39 @@ export class AnalyticsService {
       GROUP BY COALESCE(NULLIF(TRIM(ws.not_ready_reason), ''), 'Причину не вказано')
       ORDER BY total DESC, reason ASC
       LIMIT 20
-    `, weaponScope.params);
+    `,
+      weaponScope.params,
+    );
 
-    const fpTotalsRows = await this.dataSource.query<RawRow[]>(`
-      SELECT
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE fp.readiness_status IN ('ready', 'combat_ready', 'ready_for_combat', 'боєготов'))::int AS ready,
-        COUNT(*) FILTER (WHERE fp.readiness_status IN ('not_ready', 'unready', 'неготов'))::int AS not_ready,
-        COUNT(*) FILTER (WHERE fp.readiness_status IS NULL OR fp.readiness_status = 'unknown')::int AS unknown
-      FROM fire_positions fp
-      WHERE 1 = 1
-        ${firePositionScope.clause}
-    `, firePositionScope.params);
-
-    const fpReasonRows = await this.dataSource.query<RawRow[]>(`
-      SELECT
-        COALESCE(NULLIF(TRIM(fp.not_ready_reason), ''), 'Причину не вказано') AS reason,
-        COUNT(*)::int AS total
-      FROM fire_positions fp
-      WHERE fp.readiness_status NOT IN ('ready', 'combat_ready', 'ready_for_combat', 'боєготов')
-        ${firePositionScope.clause}
-      GROUP BY COALESCE(NULLIF(TRIM(fp.not_ready_reason), ''), 'Причину не вказано')
-      ORDER BY total DESC, reason ASC
-      LIMIT 20
-    `, firePositionScope.params);
-
-    const threatRows = await this.dataSource.query<RawRow[]>(`
-      SELECT
-        COALESCE(NULLIF(TRIM(fp.not_ready_reason), ''), COALESCE(NULLIF(TRIM(fp.air_situation_status), ''), 'Повітряна загроза')) AS reason,
-        COUNT(*)::int AS total
-      FROM fire_positions fp
-      WHERE (
-          LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%загроз%'
-          OR LOWER(COALESCE(fp.not_ready_reason, '')) LIKE '%повітр%'
-          OR LOWER(COALESCE(fp.air_situation_status, '')) NOT IN ('', 'unknown', 'clear', 'normal', 'немає', 'відсутня')
-        )
-        ${firePositionScope.clause}
-      GROUP BY COALESCE(NULLIF(TRIM(fp.not_ready_reason), ''), COALESCE(NULLIF(TRIM(fp.air_situation_status), ''), 'Повітряна загроза'))
-      ORDER BY total DESC, reason ASC
-      LIMIT 20
-    `, firePositionScope.params);
+    const scopedFirePositions = (await this.firePositions.findAll(user)).filter(
+      (position) => position.isOwnScope,
+    );
+    const fpReasonCounts = new Map<string, number>();
+    for (const position of scopedFirePositions) {
+      const reason = position.operationalState.reasonLabel;
+      if (reason) {
+        fpReasonCounts.set(reason, (fpReasonCounts.get(reason) ?? 0) + 1);
+      }
+    }
+    const fpReasonRows = Array.from(fpReasonCounts, ([reason, total]) => ({
+      reason,
+      total,
+    })).sort((a, b) => b.total - a.total || a.reason.localeCompare(b.reason));
+    const threatRows = fpReasonRows.filter(
+      (row) => row.reason === 'Повітряна загроза',
+    );
 
     const weaponTotals = this.counter(weaponTotalsRows[0]);
-    const fpTotals = this.counter(fpTotalsRows[0]);
+    const fpTotals = {
+      total: scopedFirePositions.length,
+      ready: scopedFirePositions.filter(
+        (position) => position.operationalState.ready,
+      ).length,
+      notReady: scopedFirePositions.filter(
+        (position) => !position.operationalState.ready,
+      ).length,
+      unknown: 0,
+    };
 
     return {
       weapons: {
@@ -265,8 +327,12 @@ export class AnalyticsService {
     };
   }
 
-  private async getDeliveriesTop(period: { start: string; end: string }, unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getDeliveriesTop(
+    period: { start: string; end: string },
+    unitScope: UnitScope,
+  ) {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       WITH incoming AS (
         SELECT
           sm.to_depot_id AS depot_id,
@@ -306,7 +372,9 @@ export class AnalyticsService {
         ${unitScope.clause}
       ORDER BY i.deliveries DESC, i.total_quantity DESC, fp.name ASC
       LIMIT 20
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
     return rows.map((row) => ({
       firePositionId: this.strOrNull(row.fire_position_id),
@@ -321,12 +389,18 @@ export class AnalyticsService {
       charges: this.num(row.charges),
       fuzes: this.num(row.fuzes),
       primers: this.num(row.primers),
-      lastDeliveryAt: row.last_delivery_at ? new Date(String(row.last_delivery_at)).toISOString() : null,
+      lastDeliveryAt: row.last_delivery_at
+        ? new Date(String(row.last_delivery_at)).toISOString()
+        : null,
     }));
   }
 
-  private async getCompletedTasksTop(period: { start: string; end: string }, unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getCompletedTasksTop(
+    period: { start: string; end: string },
+    unitScope: UnitScope,
+  ) {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         fp.id AS fire_position_id,
         COALESCE(fp.name, 'Без ВП') AS fire_position_name,
@@ -346,7 +420,9 @@ export class AnalyticsService {
       GROUP BY fp.id, fp.name, COALESCE(fp.unit_id, so.assigned_unit_id), u.name
       ORDER BY completed_tasks DESC, actual_quantity DESC, fire_position_name ASC
       LIMIT 20
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
     return rows.map((row) => ({
       firePositionId: this.strOrNull(row.fire_position_id),
@@ -359,7 +435,8 @@ export class AnalyticsService {
   }
 
   private async getLowAmmoFirePositions(unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         fp.id AS fire_position_id,
         fp.name AS fire_position_name,
@@ -376,7 +453,9 @@ export class AnalyticsService {
       HAVING COALESCE(SUM(dss.quantity)::numeric, 0) <= 50
       ORDER BY shell_balance ASC, fp.name ASC
       LIMIT 50
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     return rows.map((row) => ({
       firePositionId: String(row.fire_position_id),
@@ -388,8 +467,11 @@ export class AnalyticsService {
     }));
   }
 
-  private async getRotationStatus(unitScope: UnitScope): Promise<AnalyticsV2RotationRow[]> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getRotationStatus(
+    unitScope: UnitScope,
+  ): Promise<AnalyticsV2RotationRow[]> {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         fp.id AS fire_position_id,
         fp.name AS fire_position_name,
@@ -406,31 +488,49 @@ export class AnalyticsService {
         ${unitScope.clause}
       ORDER BY fp.personnel_rotation_date ASC NULLS FIRST, fp.name ASC
       LIMIT 50
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
-    return rows.map((row) => {
-      const daysSince = row.days_since_rotation === null || row.days_since_rotation === undefined
-        ? null
-        : this.num(row.days_since_rotation);
-      const daysLeft = daysSince === null ? null : 18 - daysSince;
-      const level: AnalyticsV2RotationRow['level'] =
-        daysSince === null ? 'unknown' : daysSince >= 18 ? 'overdue' : daysSince >= 14 ? 'soon' : 'ok';
+    return rows
+      .map((row) => {
+        const daysSince =
+          row.days_since_rotation === null ||
+          row.days_since_rotation === undefined
+            ? null
+            : this.num(row.days_since_rotation);
+        const daysLeft = daysSince === null ? null : 18 - daysSince;
+        const level: AnalyticsV2RotationRow['level'] =
+          daysSince === null
+            ? 'unknown'
+            : daysSince >= 18
+              ? 'overdue'
+              : daysSince >= 14
+                ? 'soon'
+                : 'ok';
 
-      return {
-        firePositionId: String(row.fire_position_id),
-        firePositionName: String(row.fire_position_name ?? 'Без ВП'),
-        unitId: this.strOrNull(row.unit_id),
-        unitName: this.strOrNull(row.unit_name),
-        personnelRotationDate: row.personnel_rotation_date ? String(row.personnel_rotation_date).slice(0, 10) : null,
-        daysSinceRotation: daysSince,
-        daysLeft,
-        level,
-      };
-    }).filter((row) => row.level !== 'ok');
+        return {
+          firePositionId: String(row.fire_position_id),
+          firePositionName: String(row.fire_position_name ?? 'Без ВП'),
+          unitId: this.strOrNull(row.unit_id),
+          unitName: this.strOrNull(row.unit_name),
+          personnelRotationDate: row.personnel_rotation_date
+            ? String(row.personnel_rotation_date).slice(0, 10)
+            : null,
+          daysSinceRotation: daysSince,
+          daysLeft,
+          level,
+        };
+      })
+      .filter((row) => row.level !== 'ok');
   }
 
-  private async getAmmoForecast(period: { start: string; end: string }, unitScope: UnitScope): Promise<AnalyticsV2AmmoForecastRow[]> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getAmmoForecast(
+    period: { start: string; end: string },
+    unitScope: UnitScope,
+  ): Promise<AnalyticsV2AmmoForecastRow[]> {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       WITH spent AS (
         SELECT
           fp.id AS fire_position_id,
@@ -465,35 +565,55 @@ export class AnalyticsService {
         ${unitScope.clause.replaceAll('COALESCE(fp.unit_id, so.assigned_unit_id)', 'fp.unit_id')}
       ORDER BY shell_balance ASC, fp.name ASC
       LIMIT 50
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
-    const days = Math.max(1, Math.round((new Date(period.end).getTime() - new Date(period.start).getTime()) / 86400000));
+    const days = Math.max(
+      1,
+      Math.round(
+        (new Date(period.end).getTime() - new Date(period.start).getTime()) /
+          86400000,
+      ),
+    );
 
-    return rows.map((row) => {
-      const shellBalance = this.num(row.shell_balance);
-      const averageDailyConsumption = Number((this.num(row.spent) / days).toFixed(2));
-      const estimatedDaysLeft = averageDailyConsumption > 0
-        ? Number((shellBalance / averageDailyConsumption).toFixed(1))
-        : null;
-      const level: AnalyticsV2AmmoForecastRow['level'] =
-        estimatedDaysLeft === null ? 'unknown' : estimatedDaysLeft <= 2 ? 'critical' : estimatedDaysLeft <= 5 ? 'warning' : 'ok';
+    return rows
+      .map((row) => {
+        const shellBalance = this.num(row.shell_balance);
+        const averageDailyConsumption = Number(
+          (this.num(row.spent) / days).toFixed(2),
+        );
+        const estimatedDaysLeft =
+          averageDailyConsumption > 0
+            ? Number((shellBalance / averageDailyConsumption).toFixed(1))
+            : null;
+        const level: AnalyticsV2AmmoForecastRow['level'] =
+          estimatedDaysLeft === null
+            ? 'unknown'
+            : estimatedDaysLeft <= 2
+              ? 'critical'
+              : estimatedDaysLeft <= 5
+                ? 'warning'
+                : 'ok';
 
-      return {
-        firePositionId: String(row.fire_position_id),
-        firePositionName: String(row.fire_position_name ?? 'Без ВП'),
-        unitId: this.strOrNull(row.unit_id),
-        unitName: this.strOrNull(row.unit_name),
-        depotId: this.strOrNull(row.depot_id),
-        shellBalance,
-        averageDailyConsumption,
-        estimatedDaysLeft,
-        level,
-      };
-    }).filter((row) => row.level !== 'ok' || row.shellBalance <= 50);
+        return {
+          firePositionId: String(row.fire_position_id),
+          firePositionName: String(row.fire_position_name ?? 'Без ВП'),
+          unitId: this.strOrNull(row.unit_id),
+          unitName: this.strOrNull(row.unit_name),
+          depotId: this.strOrNull(row.depot_id),
+          shellBalance,
+          averageDailyConsumption,
+          estimatedDaysLeft,
+          level,
+        };
+      })
+      .filter((row) => row.level !== 'ok' || row.shellBalance <= 50);
   }
 
   private async getThreatBlockedFirePositions(unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COALESCE(NULLIF(TRIM(fp.not_ready_reason), ''), COALESCE(NULLIF(TRIM(fp.air_situation_status), ''), 'Повітряна загроза')) AS reason,
         COUNT(*)::int AS total
@@ -506,7 +626,9 @@ export class AnalyticsService {
         ${unitScope.clause}
       GROUP BY COALESCE(NULLIF(TRIM(fp.not_ready_reason), ''), COALESCE(NULLIF(TRIM(fp.air_situation_status), ''), 'Повітряна загроза'))
       ORDER BY total DESC, reason ASC
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     return rows.map((row) => ({
       reason: String(row.reason),
@@ -518,7 +640,8 @@ export class AnalyticsService {
     period: { start: string; end: string },
     unitScope: UnitScope,
   ): Promise<AnalyticsV2ProblemFirePositionRow[]> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       WITH shell_balance AS (
         SELECT depot_id, COALESCE(SUM(quantity)::numeric, 0) AS shell_balance
         FROM depot_shell_stock
@@ -578,7 +701,9 @@ export class AnalyticsService {
         c.completed_tasks DESC,
         fp.name ASC
       LIMIT 40
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
     return rows.map((row) => ({
       firePositionId: String(row.fire_position_id),
@@ -593,8 +718,12 @@ export class AnalyticsService {
     }));
   }
 
-  private async getWeaponEfficiency(period: { start: string; end: string }, unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getWeaponEfficiency(
+    period: { start: string; end: string },
+    unitScope: UnitScope,
+  ) {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       WITH coefficients AS (
         SELECT * FROM (VALUES
           ('destroyed', 1.2::numeric),
@@ -633,7 +762,9 @@ export class AnalyticsService {
       HAVING COUNT(so.id) > 0
       ORDER BY (COALESCE(SUM(COALESCE(c.coefficient, 0)), 0) / NULLIF(COUNT(so.id), 0)) DESC, completed_tasks DESC
       LIMIT 50
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
     return rows.map((row) => {
       const possibleScore = this.num(row.possible_score);
@@ -649,20 +780,34 @@ export class AnalyticsService {
         completedTasks: this.num(row.completed_tasks),
         possibleScore,
         actualScore,
-        efficiencyPercent: possibleScore > 0 ? Number(((actualScore / possibleScore) * 100).toFixed(1)) : 0,
+        efficiencyPercent:
+          possibleScore > 0
+            ? Number(((actualScore / possibleScore) * 100).toFixed(1))
+            : 0,
       };
     });
   }
 
   private buildOperationalAttention(
-    lowAmmo: Array<{ firePositionName: string; shellBalance: number; firePositionId?: string | null }>,
+    lowAmmo: Array<{
+      firePositionName: string;
+      shellBalance: number;
+      firePositionId?: string | null;
+    }>,
     rotation: AnalyticsV2RotationRow[],
     forecast: AnalyticsV2AmmoForecastRow[],
-    readiness: { firePositions: { notReady: number; notReadyReasons: Array<{ reason: string; total: number }> } },
+    readiness: {
+      firePositions: {
+        notReady: number;
+        notReadyReasons: Array<{ reason: string; total: number }>;
+      };
+    },
   ): AnalyticsV2AttentionItem[] {
     const items: AnalyticsV2AttentionItem[] = [];
 
-    for (const row of forecast.filter((item) => item.level === 'critical').slice(0, 8)) {
+    for (const row of forecast
+      .filter((item) => item.level === 'critical')
+      .slice(0, 8)) {
       items.push({
         level: 'critical',
         title: `${row.firePositionName}: БК орієнтовно на ${row.estimatedDaysLeft} діб`,
@@ -680,13 +825,16 @@ export class AnalyticsService {
       });
     }
 
-    for (const row of rotation.filter((item) => item.level === 'overdue').slice(0, 8)) {
+    for (const row of rotation
+      .filter((item) => item.level === 'overdue')
+      .slice(0, 8)) {
       items.push({
         level: 'warning',
         title: `${row.firePositionName}: ротація прострочена`,
-        details: row.daysSinceRotation === null
-          ? 'Дата останньої ротації не вказана.'
-          : `Минуло ${row.daysSinceRotation} діб. Норма — не рідше разу на 18 діб.`,
+        details:
+          row.daysSinceRotation === null
+            ? 'Дата останньої ротації не вказана.'
+            : `Минуло ${row.daysSinceRotation} діб. Норма — не рідше разу на 18 діб.`,
         entityId: row.firePositionId,
       });
     }
@@ -705,13 +853,20 @@ export class AnalyticsService {
     return items.slice(0, 20);
   }
 
-
   async getDashboard(user: AuthUser): Promise<AnalyticsDashboard> {
     const weaponScope = await this.getUnitScope(user, 1, 'unit_id');
     const firePositionScope = await this.getUnitScope(user, 1, 'unit_id');
     const depotScope = await this.getUnitScope(user, 1, 'd.unit_id');
-    const serviceOrderScope = await this.getUnitScope(user, 1, 'assigned_unit_id');
-    const fireMissionScope = await this.getUnitScope(user, 1, 'executing_unit_id');
+    const serviceOrderScope = await this.getUnitScope(
+      user,
+      1,
+      'assigned_unit_id',
+    );
+    const fireMissionScope = await this.getUnitScope(
+      user,
+      1,
+      'executing_unit_id',
+    );
     const [
       weapons,
       firePositions,
@@ -736,10 +891,17 @@ export class AnalyticsService {
       this.getLoadByFirePosition(serviceOrderScope),
     ]);
 
-    const serviceOrderCompletionRate = this.percent(serviceOrderTotals.completed, serviceOrderTotals.total);
+    const serviceOrderCompletionRate = this.percent(
+      serviceOrderTotals.completed,
+      serviceOrderTotals.total,
+    );
     const weaponReadinessRate = this.percent(weapons.ready ?? 0, weapons.total);
-    const firePositionReadinessRate = this.percent(firePositions.ready ?? 0, firePositions.total);
-    const ammoTotalUnits = ammo.shells + ammo.charges + ammo.fuzes + ammo.primers;
+    const firePositionReadinessRate = this.percent(
+      firePositions.ready ?? 0,
+      firePositions.total,
+    );
+    const ammoTotalUnits =
+      ammo.shells + ammo.charges + ammo.fuzes + ammo.primers;
 
     return {
       timezone: KYIV_TIMEZONE,
@@ -766,21 +928,28 @@ export class AnalyticsService {
         firePositionReadinessRate,
         ammoTotalUnits,
       },
-      warnings: this.buildWarnings(weapons, firePositions, ammo, serviceOrderTotals.active),
+      warnings: this.buildWarnings(
+        weapons,
+        firePositions,
+        ammo,
+        serviceOrderTotals.active,
+      ),
       depotStocks,
     };
   }
 
-
-
-  async getLogisticsFlow(daysRaw?: string, user?: AuthUser): Promise<LogisticsFlowRow[]> {
+  async getLogisticsFlow(
+    daysRaw?: string,
+    user?: AuthUser,
+  ): Promise<LogisticsFlowRow[]> {
     const days = this.parseDays(daysRaw, [7, 10, 20, 30], 7);
     const period = this.getKyivPeriod(days);
     const unitScope = user
       ? await this.getUnitScope(user, 3, 'fp.unit_id')
       : { clause: '', params: [] };
 
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       WITH fp_depots AS (
         SELECT fp.id AS fire_position_id, fp.name AS fire_position_name, fp.ammo_depot_id AS depot_id, d.name AS depot_name
         FROM fire_positions fp
@@ -828,7 +997,9 @@ export class AnalyticsService {
       LEFT JOIN spent s ON s.depot_id = f.depot_id
       LEFT JOIN balance b ON b.depot_id = f.depot_id
       ORDER BY spent DESC, received DESC, f.fire_position_name ASC
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
     return rows.map((row) => {
       const spent = this.num(row.spent);
@@ -836,27 +1007,39 @@ export class AnalyticsService {
       const dailySpent = spent > 0 ? spent / days : 0;
 
       return {
-        firePositionId: row.fire_position_id ? String(row.fire_position_id) : null,
-        firePositionName: String(row.fire_position_name ?? '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438'),
+        firePositionId: row.fire_position_id
+          ? String(row.fire_position_id)
+          : null,
+        firePositionName: String(
+          row.fire_position_name ??
+            '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438',
+        ),
         depotId: row.depot_id ? String(row.depot_id) : null,
-        depotName: String(row.depot_name ?? '\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u0438\u0439 \u0411\u041a'),
+        depotName: String(
+          row.depot_name ??
+            '\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u0438\u0439 \u0411\u041a',
+        ),
         received: this.num(row.received),
         spent,
         balance,
-        estimatedDaysLeft: dailySpent > 0 ? Number((balance / dailySpent).toFixed(1)) : null,
+        estimatedDaysLeft:
+          dailySpent > 0 ? Number((balance / dailySpent).toFixed(1)) : null,
       };
     });
   }
 
-
-  async getAmmoRecipients(daysRaw?: string, user?: AuthUser): Promise<AmmoRecipientAnalyticsRow[]> {
+  async getAmmoRecipients(
+    daysRaw?: string,
+    user?: AuthUser,
+  ): Promise<AmmoRecipientAnalyticsRow[]> {
     const days = this.parseDays(daysRaw, [7, 10, 20, 30], 10);
     const period = this.getKyivPeriod(days);
     const unitScope = user
       ? await this.getUnitScope(user, 3, 'COALESCE(fp.unit_id, d.unit_id)')
       : { clause: '', params: [] };
 
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       WITH incoming AS (
         SELECT
           sm.to_depot_id AS depot_id,
@@ -905,11 +1088,15 @@ export class AnalyticsService {
         ${unitScope.clause}
       ORDER BY i.total_quantity DESC, i.deliveries DESC, depot_name ASC
       LIMIT 50
-    `, [period.start, period.end, ...unitScope.params]);
+    `,
+      [period.start, period.end, ...unitScope.params],
+    );
 
     return rows.map((row) => ({
       depotId: this.strOrNull(row.depot_id),
-      depotName: String(row.depot_name ?? '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438'),
+      depotName: String(
+        row.depot_name ?? '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438',
+      ),
       firePositionId: this.strOrNull(row.fire_position_id),
       firePositionName: this.strOrNull(row.fire_position_name),
       unitId: this.strOrNull(row.unit_id),
@@ -920,15 +1107,24 @@ export class AnalyticsService {
       charges: this.num(row.charges),
       fuzes: this.num(row.fuzes),
       primers: this.num(row.primers),
-      lastDeliveryAt: row.last_delivery_at ? new Date(String(row.last_delivery_at)).toISOString() : null,
+      lastDeliveryAt: row.last_delivery_at
+        ? new Date(String(row.last_delivery_at)).toISOString()
+        : null,
     }));
   }
 
-  async getShootingAnalytics(daysRaw?: string, user?: AuthUser): Promise<ShootingAnalytics> {
+  async getShootingAnalytics(
+    daysRaw?: string,
+    user?: AuthUser,
+  ): Promise<ShootingAnalytics> {
     const days = this.parseDays(daysRaw, [7, 10, 20, 30], 7);
     const period = this.getKyivPeriod(days);
     const unitScope = user
-      ? await this.getUnitScope(user, 3, 'COALESCE(fp.unit_id, so.assigned_unit_id)')
+      ? await this.getUnitScope(
+          user,
+          3,
+          'COALESCE(fp.unit_id, so.assigned_unit_id)',
+        )
       : { clause: '', params: [] };
     const params = [period.start, period.end, ...unitScope.params];
     const periodPredicate = `
@@ -937,7 +1133,8 @@ export class AnalyticsService {
           AND (so.completed_at AT TIME ZONE '${KYIV_TIMEZONE}')::date < $2::date
     `;
 
-    const totalsRows = await this.dataSource.query<RawRow[]>(`
+    const totalsRows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COUNT(*)::int AS total_missions,
         COALESCE(SUM(so.actual_quantity)::numeric, 0) AS total_actual_quantity,
@@ -947,9 +1144,12 @@ export class AnalyticsService {
       WHERE so.status = 'completed'
         ${periodPredicate}
         ${unitScope.clause}
-    `, params);
+    `,
+      params,
+    );
 
-    const dailyRows = await this.dataSource.query<RawRow[]>(`
+    const dailyRows = await this.dataSource.query<RawRow[]>(
+      `
       WITH days AS (
         SELECT generate_series($1::date, ($2::date - INTERVAL '1 day')::date, INTERVAL '1 day')::date AS day
       ), completed AS (
@@ -971,7 +1171,9 @@ export class AnalyticsService {
       FROM days
       LEFT JOIN completed ON completed.day = days.day
       ORDER BY days.day ASC
-    `, params);
+    `,
+      params,
+    );
 
     const byUnit = await this.getShootingBreakdown(
       `
@@ -1094,12 +1296,16 @@ export class AnalyticsService {
       days,
       totalMissions: this.num(totals.total_missions),
       totalActualQuantity: this.num(totals.total_actual_quantity),
-      averageActualQuantity: Number(this.num(totals.average_actual_quantity).toFixed(1)),
-      daily: dailyRows.map((row): ShootingDailyRow => ({
-        day: String(row.day),
-        missions: this.num(row.missions),
-        actualQuantity: this.num(row.actual_quantity),
-      })),
+      averageActualQuantity: Number(
+        this.num(totals.average_actual_quantity).toFixed(1),
+      ),
+      daily: dailyRows.map(
+        (row): ShootingDailyRow => ({
+          day: String(row.day),
+          missions: this.num(row.missions),
+          actualQuantity: this.num(row.actual_quantity),
+        }),
+      ),
       byUnit,
       byFirePosition,
       byResultType: byResultType.map((row) => ({
@@ -1115,9 +1321,11 @@ export class AnalyticsService {
     };
   }
 
-
-  private async getWeaponReadiness(unitScope: UnitScope): Promise<AnalyticsCounter> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getWeaponReadiness(
+    unitScope: UnitScope,
+  ): Promise<AnalyticsCounter> {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE readiness_status IN ('ready', 'combat_ready', '\u0431\u043e\u0454\u0433\u043e\u0442\u043e\u0432', 'ready_for_combat'))::int AS ready,
@@ -1126,13 +1334,18 @@ export class AnalyticsService {
       FROM weapon_systems
       WHERE 1 = 1
         ${unitScope.clause}
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     return this.counter(rows[0]);
   }
 
-  private async getFirePositionReadiness(unitScope: UnitScope): Promise<AnalyticsCounter & { withSg: number; withoutSg: number }> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getFirePositionReadiness(
+    unitScope: UnitScope,
+  ): Promise<AnalyticsCounter & { withSg: number; withoutSg: number }> {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE readiness_status IN ('ready', 'combat_ready', '\u0431\u043e\u0454\u0433\u043e\u0442\u043e\u0432', 'ready_for_combat'))::int AS ready,
@@ -1143,7 +1356,9 @@ export class AnalyticsService {
       FROM fire_positions
       WHERE 1 = 1
         ${unitScope.clause}
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     const row = rows[0] ?? {};
     return {
@@ -1153,8 +1368,11 @@ export class AnalyticsService {
     };
   }
 
-  private async getAmmoSummary(unitScope: UnitScope): Promise<AmmoStockSummary> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getAmmoSummary(
+    unitScope: UnitScope,
+  ): Promise<AmmoStockSummary> {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       WITH scoped_depots AS (
         SELECT d.id
         FROM depots d
@@ -1166,7 +1384,9 @@ export class AnalyticsService {
         COALESCE((SELECT SUM(quantity)::numeric FROM depot_charge_stock WHERE depot_id IN (SELECT id FROM scoped_depots)), 0) AS charges,
         COALESCE((SELECT SUM(quantity)::numeric FROM depot_fuze_stock WHERE depot_id IN (SELECT id FROM scoped_depots)), 0) AS fuzes,
         COALESCE((SELECT SUM(quantity)::numeric FROM depot_primer_stock WHERE depot_id IN (SELECT id FROM scoped_depots)), 0) AS primers
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     const row = rows[0] ?? {};
     return {
@@ -1177,8 +1397,11 @@ export class AnalyticsService {
     };
   }
 
-  private async getDepotStocks(unitScope: UnitScope): Promise<DepotStockSummary[]> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getDepotStocks(
+    unitScope: UnitScope,
+  ): Promise<DepotStockSummary[]> {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         d.id AS depot_id,
         d.name AS depot_name,
@@ -1211,7 +1434,9 @@ export class AnalyticsService {
       WHERE d.is_archived = false
         ${unitScope.clause}
       ORDER BY d.name ASC
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     return rows.map((row) => {
       const shells = this.num(row.shells);
@@ -1221,8 +1446,13 @@ export class AnalyticsService {
 
       return {
         depotId: String(row.depot_id),
-        depotName: String(row.depot_name ?? '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438'),
-        depotType: row.depot_type === null || row.depot_type === undefined ? null : String(row.depot_type),
+        depotName: String(
+          row.depot_name ?? '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438',
+        ),
+        depotType:
+          row.depot_type === null || row.depot_type === undefined
+            ? null
+            : String(row.depot_type),
         shells,
         charges,
         fuzes,
@@ -1236,14 +1466,17 @@ export class AnalyticsService {
     tableName: 'service_orders' | 'fire_missions',
     unitScope: UnitScope,
   ): Promise<StatusCount[]> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT COALESCE(status, 'unknown') AS status, COUNT(*)::int AS total
       FROM ${tableName}
       WHERE 1 = 1
         ${unitScope.clause}
       GROUP BY COALESCE(status, 'unknown')
       ORDER BY total DESC, status ASC
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     return rows.map((row) => ({
       status: String(row.status),
@@ -1252,7 +1485,8 @@ export class AnalyticsService {
   }
 
   private async getServiceOrderTotals(unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE status IN ('draft', 'proposed', 'sent', 'accepted', 'in_progress'))::int AS active,
@@ -1274,7 +1508,9 @@ export class AnalyticsService {
       FROM service_orders
       WHERE 1 = 1
         ${unitScope.clause}
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     const row = rows[0] ?? {};
     return {
@@ -1285,14 +1521,17 @@ export class AnalyticsService {
       rejected: this.num(row.rejected),
       completedToday: this.num(row.completed_today),
       completedLast7Days: this.num(row.completed_last_7_days),
-      averageCompletionHours: row.average_completion_hours === null || row.average_completion_hours === undefined
-        ? null
-        : Number(Number(row.average_completion_hours).toFixed(2)),
+      averageCompletionHours:
+        row.average_completion_hours === null ||
+        row.average_completion_hours === undefined
+          ? null
+          : Number(Number(row.average_completion_hours).toFixed(2)),
     };
   }
 
   private async getFireMissionTotals(unitScope: UnitScope) {
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE status IN ('completed', 'done'))::int AS completed,
@@ -1309,7 +1548,9 @@ export class AnalyticsService {
       FROM fire_missions
       WHERE 1 = 1
         ${unitScope.clause}
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     const row = rows[0] ?? {};
     return {
@@ -1322,7 +1563,8 @@ export class AnalyticsService {
   }
 
   private async getLoadByUnit(unitScope: UnitScope): Promise<NamedCount[]> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         u.id,
         COALESCE(u.name, '\u0411\u0435\u0437 \u043f\u0456\u0434\u0440\u043e\u0437\u0434\u0456\u043b\u0443') AS name,
@@ -1334,17 +1576,25 @@ export class AnalyticsService {
       GROUP BY u.id, u.name
       ORDER BY total DESC, name ASC
       LIMIT 20
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     return rows.map((row) => ({
       id: row.id === null || row.id === undefined ? null : String(row.id),
-      name: String(row.name ?? '\u0411\u0435\u0437 \u043f\u0456\u0434\u0440\u043e\u0437\u0434\u0456\u043b\u0443'),
+      name: String(
+        row.name ??
+          '\u0411\u0435\u0437 \u043f\u0456\u0434\u0440\u043e\u0437\u0434\u0456\u043b\u0443',
+      ),
       total: this.num(row.total),
     }));
   }
 
-  private async getLoadByFirePosition(unitScope: UnitScope): Promise<NamedCount[]> {
-    const rows = await this.dataSource.query<RawRow[]>(`
+  private async getLoadByFirePosition(
+    unitScope: UnitScope,
+  ): Promise<NamedCount[]> {
+    const rows = await this.dataSource.query<RawRow[]>(
+      `
       SELECT
         fp.id,
         COALESCE(fp.name, '\u0411\u0435\u0437 \u0412\u041f') AS name,
@@ -1356,7 +1606,9 @@ export class AnalyticsService {
       GROUP BY fp.id, fp.name
       ORDER BY total DESC, name ASC
       LIMIT 20
-    `, unitScope.params);
+    `,
+      unitScope.params,
+    );
 
     return rows.map((row) => ({
       id: row.id === null || row.id === undefined ? null : String(row.id),
@@ -1374,41 +1626,60 @@ export class AnalyticsService {
     const warnings: string[] = [];
 
     if (weapons.total > 0 && (weapons.ready ?? 0) === 0) {
-      warnings.push('\u041d\u0435\u043c\u0430\u0454 \u0436\u043e\u0434\u043d\u043e\u0457 \u0433\u043e\u0442\u043e\u0432\u043e\u0457 \u0421\u0413. \u041f\u0435\u0440\u0435\u0432\u0456\u0440\u0438\u0442\u0438 \u0441\u0442\u0430\u043d \u043e\u0437\u0431\u0440\u043e\u0454\u043d\u043d\u044f.');
+      warnings.push(
+        '\u041d\u0435\u043c\u0430\u0454 \u0436\u043e\u0434\u043d\u043e\u0457 \u0433\u043e\u0442\u043e\u0432\u043e\u0457 \u0421\u0413. \u041f\u0435\u0440\u0435\u0432\u0456\u0440\u0438\u0442\u0438 \u0441\u0442\u0430\u043d \u043e\u0437\u0431\u0440\u043e\u0454\u043d\u043d\u044f.',
+      );
     }
 
     if (firePositions.total > 0 && firePositions.withoutSg > 0) {
-      warnings.push(`\u0412\u041f \u0431\u0435\u0437 \u0421\u0413: ${firePositions.withoutSg}. \u041f\u0435\u0440\u0435\u0432\u0456\u0440\u0438\u0442\u0438 \u0440\u043e\u0437\u043f\u043e\u0434\u0456\u043b \u0421\u0413.`);
+      warnings.push(
+        `\u0412\u041f \u0431\u0435\u0437 \u0421\u0413: ${firePositions.withoutSg}. \u041f\u0435\u0440\u0435\u0432\u0456\u0440\u0438\u0442\u0438 \u0440\u043e\u0437\u043f\u043e\u0434\u0456\u043b \u0421\u0413.`,
+      );
     }
 
     if (ammo.shells <= 0) {
-      warnings.push('\u0421\u043d\u0430\u0440\u044f\u0434\u0438 \u0432\u0456\u0434\u0441\u0443\u0442\u043d\u0456 \u043d\u0430 \u0441\u043a\u043b\u0430\u0434\u0430\u0445 \u0430\u0431\u043e \u0437\u0430\u043b\u0438\u0448\u043a\u0438 \u043d\u0435 \u0432\u043d\u0435\u0441\u0435\u043d\u0456.');
+      warnings.push(
+        '\u0421\u043d\u0430\u0440\u044f\u0434\u0438 \u0432\u0456\u0434\u0441\u0443\u0442\u043d\u0456 \u043d\u0430 \u0441\u043a\u043b\u0430\u0434\u0430\u0445 \u0430\u0431\u043e \u0437\u0430\u043b\u0438\u0448\u043a\u0438 \u043d\u0435 \u0432\u043d\u0435\u0441\u0435\u043d\u0456.',
+      );
     }
 
     if (activeServiceOrders > 0 && firePositions.withSg === 0) {
-      warnings.push('\u0404 \u0430\u043a\u0442\u0438\u0432\u043d\u0456 \u0437\u0430\u044f\u0432\u043a\u0438, \u0430\u043b\u0435 \u043d\u0435\u043c\u0430\u0454 \u0412\u041f \u0437 \u043f\u0440\u0438\u0437\u043d\u0430\u0447\u0435\u043d\u043e\u044e \u0421\u0413.');
+      warnings.push(
+        '\u0404 \u0430\u043a\u0442\u0438\u0432\u043d\u0456 \u0437\u0430\u044f\u0432\u043a\u0438, \u0430\u043b\u0435 \u043d\u0435\u043c\u0430\u0454 \u0412\u041f \u0437 \u043f\u0440\u0438\u0437\u043d\u0430\u0447\u0435\u043d\u043e\u044e \u0421\u0413.',
+      );
     }
 
     return warnings;
   }
 
   private getResultTypeLabel(type: string | null): string {
-    if (type === 'mining') return '\u041c\u0456\u043d\u0443\u0432\u0430\u043d\u043d\u044f';
-    if (type === 'area_denial') return '\u0417\u0430\u043a\u0440\u0438\u0442\u0442\u044f \u0437\u043e\u043d\u0438';
-    if (type === 'hit') return '\u0423\u0440\u0430\u0436\u0435\u043d\u043d\u044f';
-    if (type === 'destroyed') return '\u0417\u043d\u0438\u0449\u0435\u043d\u043e';
-    if (type === 'suppression') return '\u041f\u0440\u0438\u0434\u0443\u0448\u0435\u043d\u043d\u044f';
-    if (type === 'smoke') return '\u0414\u0438\u043c\u043e\u0432\u0430 \u0437\u0430\u0432\u0456\u0441\u0430';
+    if (type === 'mining')
+      return '\u041c\u0456\u043d\u0443\u0432\u0430\u043d\u043d\u044f';
+    if (type === 'area_denial')
+      return '\u0417\u0430\u043a\u0440\u0438\u0442\u0442\u044f \u0437\u043e\u043d\u0438';
+    if (type === 'hit')
+      return '\u0423\u0440\u0430\u0436\u0435\u043d\u043d\u044f';
+    if (type === 'destroyed')
+      return '\u0417\u043d\u0438\u0449\u0435\u043d\u043e';
+    if (type === 'suppression')
+      return '\u041f\u0440\u0438\u0434\u0443\u0448\u0435\u043d\u043d\u044f';
+    if (type === 'smoke')
+      return '\u0414\u0438\u043c\u043e\u0432\u0430 \u0437\u0430\u0432\u0456\u0441\u0430';
     if (type === 'fire') return '\u041f\u043e\u0436\u0435\u0436\u0430';
-    if (type === 'illumination') return '\u041e\u0441\u0432\u0456\u0442\u043b\u0435\u043d\u043d\u044f';
+    if (type === 'illumination')
+      return '\u041e\u0441\u0432\u0456\u0442\u043b\u0435\u043d\u043d\u044f';
     return '\u0411\u0435\u0437 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0443';
   }
 
   private getTaskTypeLabel(type: string | null): string {
-    if (type === 'service') return '\u0411\u043e\u0439\u043e\u0432\u0435 \u043e\u0431\u0441\u043b\u0443\u0433\u043e\u0432\u0443\u0432\u0430\u043d\u043d\u044f';
-    if (type === 'training') return '\u0422\u0440\u0435\u043d\u0443\u0432\u0430\u043d\u043d\u044f';
-    if (type === 'smoke') return '\u0414\u0438\u043c\u043e\u0432\u0430 \u0437\u0430\u0432\u0456\u0441\u0430';
-    if (type === 'illumination') return '\u041e\u0441\u0432\u0456\u0442\u043b\u0435\u043d\u043d\u044f';
+    if (type === 'service')
+      return '\u0411\u043e\u0439\u043e\u0432\u0435 \u043e\u0431\u0441\u043b\u0443\u0433\u043e\u0432\u0443\u0432\u0430\u043d\u043d\u044f';
+    if (type === 'training')
+      return '\u0422\u0440\u0435\u043d\u0443\u0432\u0430\u043d\u043d\u044f';
+    if (type === 'smoke')
+      return '\u0414\u0438\u043c\u043e\u0432\u0430 \u0437\u0430\u0432\u0456\u0441\u0430';
+    if (type === 'illumination')
+      return '\u041e\u0441\u0432\u0456\u0442\u043b\u0435\u043d\u043d\u044f';
     if (type === 'other') return '\u0406\u043d\u0448\u0435';
     return '\u0411\u0435\u0437 \u0442\u0438\u043f\u0443';
   }
@@ -1453,7 +1724,11 @@ export class AnalyticsService {
     };
   }
 
-  private getKyivDateParts(date: Date): { year: number; month: number; day: number } {
+  private getKyivDateParts(date: Date): {
+    year: number;
+    month: number;
+    day: number;
+  } {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: KYIV_TIMEZONE,
       year: 'numeric',
@@ -1461,7 +1736,8 @@ export class AnalyticsService {
       day: '2-digit',
     }).formatToParts(date);
 
-    const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+    const value = (type: string) =>
+      Number(parts.find((part) => part.type === type)?.value);
 
     return {
       year: value('year'),
@@ -1474,7 +1750,11 @@ export class AnalyticsService {
     return date.toISOString().slice(0, 10);
   }
 
-  private parseDays(raw: string | undefined, allowed: number[], fallback: number): number {
+  private parseDays(
+    raw: string | undefined,
+    allowed: number[],
+    fallback: number,
+  ): number {
     const value = Number(raw ?? fallback);
     return allowed.includes(value) ? value : fallback;
   }
@@ -1487,10 +1767,17 @@ export class AnalyticsService {
     return String(value);
   }
 
-  private problemCategory(value: unknown): AnalyticsV2ProblemFirePositionRow['category'] {
+  private problemCategory(
+    value: unknown,
+  ): AnalyticsV2ProblemFirePositionRow['category'] {
     const category = String(value ?? 'other');
 
-    if (category === 'air' || category === 'technical' || category === 'ammo' || category === 'weapon') {
+    if (
+      category === 'air' ||
+      category === 'technical' ||
+      category === 'ammo' ||
+      category === 'weapon'
+    ) {
       return category;
     }
 
@@ -1526,7 +1813,9 @@ export class AnalyticsService {
 
     return rows.map((row) => ({
       id: this.strOrNull(row.id),
-      name: String(row.name ?? '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438'),
+      name: String(
+        row.name ?? '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0438',
+      ),
       missions: this.num(row.missions),
       actualQuantity: this.num(row.actual_quantity),
     }));

@@ -47,21 +47,26 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       ],
     }).compileComponents();
 
-    const fixture: ComponentFixture<FirePositionsPage> =
-      TestBed.createComponent(FirePositionsPage);
+    const fixture: ComponentFixture<FirePositionsPage> = TestBed.createComponent(FirePositionsPage);
     component = fixture.componentInstance;
   });
 
   it('marks fire not ready when FP is not ready and weapon is ready', () => {
+    const assignedWeapon = createWeapon();
     const item = createFirePosition({
       readinessStatus: 'not_combat_ready',
-      notReadyReason: 'not_prepared',
-      aggregateReady: true,
-      assignedWeapon: createWeapon(),
+      notReadyReason: 'ВП пошкоджена',
+      assignedWeapon,
+      operationalState: {
+        ready: false,
+        reasonCode: 'fp_damaged',
+        reasonLabel: 'ВП пошкоджена',
+        assignedWeapon,
+      },
     });
 
     expect(component.getAggregateReadinessLabel(item)).toBe('Не готова до вогню');
-    expect(component.getAggregateReasonLabels(item)).toContain('ВП не підготовлена');
+    expect(component.getAggregateReasonLabels(item)).toEqual(['ВП пошкоджена']);
   });
 
   it('marks fire ready when FP and weapon are ready', () => {
@@ -69,6 +74,12 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       readinessStatus: 'combat_ready',
       notReadyReason: null,
       assignedWeapon: createWeapon(),
+      operationalState: {
+        ready: true,
+        reasonCode: null,
+        reasonLabel: null,
+        assignedWeapon: createWeapon(),
+      },
     });
 
     expect(component.getAggregateReadinessLabel(item)).toBe('Готова до вогню');
@@ -80,21 +91,38 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       readinessStatus: 'combat_ready',
       notReadyReason: null,
       assignedWeapon: null,
+      operationalState: {
+        ready: false,
+        reasonCode: 'weapon_missing',
+        reasonLabel: 'СГ не призначена',
+        assignedWeapon: null,
+      },
     });
 
     expect(component.getAggregateReadinessLabel(item)).toBe('Не готова до вогню');
     expect(component.getAggregateReasonLabels(item)).toContain('СГ не призначена');
   });
 
-  it('marks fire not ready when weapon has active maintenance', () => {
+  it('shows the exact localized reason from the canonical view model', () => {
+    const assignedWeapon = createWeapon({
+      readinessStatus: 'not_combat_ready',
+      notReadyReason: 'breakdown',
+      maintenanceStatus: 'in_progress',
+    });
     const item = createFirePosition({
-      readinessStatus: 'combat_ready',
-      notReadyReason: null,
-      assignedWeapon: createWeapon({ maintenanceStatus: 'in_progress' }),
+      readinessStatus: 'not_combat_ready',
+      notReadyReason: 'СГ НЕ БГ: Поломка',
+      assignedWeapon,
+      operationalState: {
+        ready: false,
+        reasonCode: 'weapon_not_ready',
+        reasonLabel: 'СГ НЕ БГ: Поломка',
+        assignedWeapon,
+      },
     });
 
     expect(component.getAggregateReadinessLabel(item)).toBe('Не готова до вогню');
-    expect(component.getAggregateReasonLabels(item)).toContain('активний ремонт');
+    expect(component.getAggregateReasonLabels(item)).toEqual(['СГ НЕ БГ: Поломка']);
   });
 
   function createFirePosition(overrides: Partial<FirePosition> = {}): FirePosition {
@@ -116,6 +144,12 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       hasSg: true,
       readinessStatus: 'combat_ready',
       notReadyReason: null,
+      operationalState: {
+        ready: true,
+        reasonCode: null,
+        reasonLabel: null,
+        assignedWeapon: createWeapon(),
+      },
       completedVgzCount: 0,
       personnelRotationStatus: null,
       airSituationStatus: null,

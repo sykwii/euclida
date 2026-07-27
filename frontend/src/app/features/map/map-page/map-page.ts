@@ -35,6 +35,7 @@ import { WeaponSystemsService } from '../../weapon-systems/weapon-systems.servic
 import { WeaponSystem } from '../../weapon-systems/weapon-system.model';
 import { catchError, forkJoin, of, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
+import { RealtimeEventPayload, RealtimeService } from '../../../core/realtime.service';
 import ms from 'milsymbol';
 
 @Component({
@@ -66,6 +67,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
   private readonly markerAnimationMs = 5200;
   private readonly previousPositionSignatures = new Map<string, string>();
   private readonly previousThreatSignatures = new Map<string, string>();
+  private readonly firePositionMarkers = new Map<string, import('leaflet').Marker>();
   private readonly liveMarkerKeys = new Set<string>();
   private readonly activeFirePositionIds = new Set<string>();
 
@@ -145,6 +147,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
     private readonly plannedTripsService: PlannedTripsService,
     private readonly eventFeed: EventFeedService,
     private readonly autoRefresh: AutoRefreshService,
+    private readonly realtime: RealtimeService,
     private readonly auth: AuthService,
     private readonly weaponSystemsService: WeaponSystemsService,
   ) {}
@@ -155,7 +158,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
     }
 
     const leafletModule = await import('leaflet');
-    this.L = ((leafletModule as unknown as { default?: LeafletModule }).default || leafletModule) as LeafletModule;
+    this.L = ((leafletModule as unknown as { default?: LeafletModule }).default ||
+      leafletModule) as LeafletModule;
     this.restoreMapFilters();
 
     this.initMap();
@@ -175,10 +179,15 @@ export class MapPage implements AfterViewInit, OnDestroy {
       }),
     );
     this.autoRefreshSubscription.add(
-      this.autoRefresh.watch(['all', 'map', 'missions', 'threats', 'weapons'], () => {
+      this.autoRefresh.watch(['all', 'missions', 'threats'], () => {
         this.loadMapObjects();
         this.loadMapResults();
         this.loadActiveOrders();
+      }),
+    );
+    this.autoRefreshSubscription.add(
+      this.realtime.watch('map').subscribe((event) => {
+        this.handleMapRealtimeEvent(event);
       }),
     );
     this.scheduledRefreshTimer = setInterval(() => {
@@ -259,7 +268,10 @@ export class MapPage implements AfterViewInit, OnDestroy {
         tile.innerHTML = `<span>${coords.z}/${coords.x}/${coords.y}</span>`;
         return tile;
       },
-    }) as unknown as new (options: { tileSize: number; opacity: number }) => import('leaflet').GridLayer;
+    }) as unknown as new (options: {
+      tileSize: number;
+      opacity: number;
+    }) => import('leaflet').GridLayer;
 
     const fallbackGrid = new FallbackGridLayer({ tileSize: 256, opacity: 1 });
 
@@ -323,6 +335,87 @@ export class MapPage implements AfterViewInit, OnDestroy {
     }, 1000);
   }
 
+  private handleMapRealtimeEvent(event: RealtimeEventPayload): void {
+    if (event.entity === 'weapon_system') {
+      return;
+    }
+
+    if (event.entity === 'fire_position' && event.id) {
+      if (event.action === 'deleted') {
+        this.removeFirePositionFromMap(event.id);
+      } else {
+        this.refreshFirePosition(event.id);
+      }
+      return;
+    }
+
+    this.loadMapObjects();
+  }
+
+  private refreshFirePosition(id: string): void {
+    this.firePositionsService.getOne(id).subscribe({
+      next: (position) => {
+        const existingIndex = this.mapPositions.findIndex((item) => item.id === id);
+        if (existingIndex >= 0) {
+          this.mapPositions[existingIndex] = position;
+        } else {
+          this.mapPositions.push(position);
+        }
+
+        const previousMarker = this.firePositionMarkers.get(id);
+        if (previousMarker) {
+          this.positionsLayer.removeLayer(previousMarker);
+          this.firePositionMarkers.delete(id);
+        }
+
+        if (
+          !this.readinessFilter ||
+          this.normalizeReadinessStatus(position.readinessStatus) === this.readinessFilter
+        ) {
+          this.addFirePositionMarker(position);
+        }
+
+        if (this.selectedPosition?.id === id) {
+          this.selectedPosition = position;
+          this.loadPositionCard(id);
+          if (!this.showSectors) {
+            this.sectorsLayer.clearLayers();
+            this.addSector(position);
+          }
+        }
+
+        this.updateFirePositionReadinessCounters();
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private removeFirePositionFromMap(id: string): void {
+    const marker = this.firePositionMarkers.get(id);
+    if (marker) {
+      this.positionsLayer.removeLayer(marker);
+      this.firePositionMarkers.delete(id);
+    }
+    this.mapPositions = this.mapPositions.filter((position) => position.id !== id);
+    if (this.selectedPosition?.id === id) {
+      this.closePositionPanel();
+    }
+    this.updateFirePositionReadinessCounters();
+    this.cdr.detectChanges();
+  }
+
+  private updateFirePositionReadinessCounters(): void {
+    this.readyCount = this.mapPositions.filter(
+      (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'ready',
+    ).length;
+    this.inProgressCount = this.mapPositions.filter(
+      (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'in_progress',
+    ).length;
+    this.notReadyCount = this.mapPositions.filter(
+      (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'not_ready',
+    ).length;
+  }
+
   private loadMapObjects(): void {
     this.mapObjectsRequest?.unsubscribe();
     this.errorMessage = '';
@@ -340,6 +433,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       next: ({ positions, ewPositions, airAssets, threats, plannedRoutes }) => {
         this.sectorsLayer.clearLayers();
         this.positionsLayer.clearLayers();
+        this.firePositionMarkers.clear();
         this.threatsLayer.clearLayers();
         this.mapPositions = positions;
         this.plannedRoutes = plannedRoutes;
@@ -347,14 +441,22 @@ export class MapPage implements AfterViewInit, OnDestroy {
 
         const friendlyObjects = [...positions, ...ewPositions, ...airAssets];
         this.positionsCount = friendlyObjects.length;
-        this.readyCount = friendlyObjects.filter((x) => x.readinessStatus === 'ready').length;
-        this.inProgressCount = positions.filter((x) => x.readinessStatus === 'in_progress').length;
-        this.notReadyCount = friendlyObjects.filter((x) => x.readinessStatus === 'not_ready').length;
+        this.readyCount = friendlyObjects.filter(
+          (x) => this.normalizeReadinessStatus(x.readinessStatus) === 'ready',
+        ).length;
+        this.inProgressCount = positions.filter(
+          (x) => this.normalizeReadinessStatus(x.readinessStatus) === 'in_progress',
+        ).length;
+        this.notReadyCount = friendlyObjects.filter(
+          (x) => this.normalizeReadinessStatus(x.readinessStatus) === 'not_ready',
+        ).length;
 
         this.markUpdatedPositions(positions);
 
         const visiblePositions = positions.filter(
-          (position) => !this.readinessFilter || position.readinessStatus === this.readinessFilter,
+          (position) =>
+            !this.readinessFilter ||
+            this.normalizeReadinessStatus(position.readinessStatus) === this.readinessFilter,
         );
         const visibleEwPositions = ewPositions.filter(
           (position) => !this.readinessFilter || position.readinessStatus === this.readinessFilter,
@@ -372,7 +474,12 @@ export class MapPage implements AfterViewInit, OnDestroy {
 
         this.markUpdatedThreats(activeThreats);
         activeThreats.forEach((threat) => this.addThreatMarker(threat));
-        this.fitMapToVisibleObjects(visiblePositions, activeThreats, visibleEwPositions, visibleAirAssets);
+        this.fitMapToVisibleObjects(
+          visiblePositions,
+          activeThreats,
+          visibleEwPositions,
+          visibleAirAssets,
+        );
 
         this.hasMapLoaded = true;
         this.isMapLoading = false;
@@ -429,6 +536,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
     });
 
     marker.addTo(this.positionsLayer);
+    this.firePositionMarkers.set(position.id, marker);
     if (this.showSectors) {
       this.addSector(position);
     }
@@ -507,9 +615,10 @@ export class MapPage implements AfterViewInit, OnDestroy {
   }
 
   private getReadinessColor(status: string): string {
-    if (status === 'ready') return '#00ff88';
-    if (status === 'in_progress') return '#ffd400';
-    if (status === 'not_ready') return '#ff4040';
+    const normalized = this.normalizeReadinessStatus(status);
+    if (normalized === 'ready') return '#00ff88';
+    if (normalized === 'in_progress') return '#ffd400';
+    if (normalized === 'not_ready') return '#ff4040';
 
     return '#6b7280';
   }
@@ -673,8 +782,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       ...positions
         .filter((position) => position.lat !== null && position.lng !== null)
         .map(
-          (position) =>
-            [position.lat as number, position.lng as number] as LeafletLatLngExpression,
+          (position) => [position.lat as number, position.lng as number] as LeafletLatLngExpression,
         ),
       ...ewPositions
         .filter((position) => position.lat !== null && position.lng !== null)
@@ -1130,7 +1238,11 @@ export class MapPage implements AfterViewInit, OnDestroy {
     const glyph = kind === 'ew' ? 'EW' : kind === 'air-recon' ? 'AIR' : 'FPV';
     const safeLabel = this.escapeHtml(label || '-');
     const typeClass =
-      kind === 'ew' ? 'type-ew-station' : kind === 'air-recon' ? 'type-aerial-recon' : 'type-air-asset';
+      kind === 'ew'
+        ? 'type-ew-station'
+        : kind === 'air-recon'
+          ? 'type-aerial-recon'
+          : 'type-air-asset';
 
     return this.L.divIcon({
       className: 'custom-special-asset-marker',
@@ -1150,8 +1262,6 @@ export class MapPage implements AfterViewInit, OnDestroy {
     });
   }
 
-
-
   private buildEwPopup(position: EwPosition): string {
     const ranges = (position.frequencyRanges || [])
       .map((range) => {
@@ -1170,11 +1280,11 @@ export class MapPage implements AfterViewInit, OnDestroy {
     `;
   }
 
-
   private buildAirAssetPopup(position: AirAssetPosition): string {
-    const typeLabel = position.assetGroup === 'recon'
-      ? this.getAirReconTypeLabel(position.reconType || '')
-      : this.getAirCombatTypeLabel(position.combatType || '');
+    const typeLabel =
+      position.assetGroup === 'recon'
+        ? this.getAirReconTypeLabel(position.reconType || '')
+        : this.getAirCombatTypeLabel(position.combatType || '');
 
     return `
       <strong>${this.escapeHtml(this.getAirAssetGroupLabel(position))} ${this.escapeHtml(position.callsign)}</strong><br />
@@ -1227,8 +1337,6 @@ export class MapPage implements AfterViewInit, OnDestroy {
     }
   }
 
-
-
   private addAirReconArea(position: AirAssetPosition): void {
     const areas = position.reconAreas || [];
 
@@ -1275,7 +1383,9 @@ export class MapPage implements AfterViewInit, OnDestroy {
       position.lng,
       position.sectorLeftDegrees,
       position.sectorRightDegrees,
-      position.maxSectorDistanceM && position.maxSectorDistanceM > 0 ? position.maxSectorDistanceM : 5000,
+      position.maxSectorDistanceM && position.maxSectorDistanceM > 0
+        ? position.maxSectorDistanceM
+        : 5000,
     );
 
     this.L.polygon(points, {
@@ -1298,24 +1408,48 @@ export class MapPage implements AfterViewInit, OnDestroy {
     return [...areas].sort((a, b) => b.activeDate.localeCompare(a.activeDate))[0];
   }
 
-
   private getReconAreaStyle(status?: string): LeafletPolylineOptions {
     if (status === 'active') {
-      return { color: '#2ee6d6', weight: 2, opacity: 0.72, fillColor: '#14b8a6', fillOpacity: 0.09 };
+      return {
+        color: '#2ee6d6',
+        weight: 2,
+        opacity: 0.72,
+        fillColor: '#14b8a6',
+        fillOpacity: 0.09,
+      };
     }
 
     if (status === 'completed') {
-      return { color: '#94a3b8', weight: 1, opacity: 0.42, fillColor: '#64748b', fillOpacity: 0.04, dashArray: '5 7' };
+      return {
+        color: '#94a3b8',
+        weight: 1,
+        opacity: 0.42,
+        fillColor: '#64748b',
+        fillOpacity: 0.04,
+        dashArray: '5 7',
+      };
     }
 
     if (status === 'cancelled') {
-      return { color: '#f87171', weight: 1, opacity: 0.38, fillColor: '#7f1d1d', fillOpacity: 0.04, dashArray: '3 8' };
+      return {
+        color: '#f87171',
+        weight: 1,
+        opacity: 0.38,
+        fillColor: '#7f1d1d',
+        fillOpacity: 0.04,
+        dashArray: '3 8',
+      };
     }
 
-    return { color: '#38bdf8', weight: 1, opacity: 0.56, fillColor: '#0ea5e9', fillOpacity: 0.055, dashArray: '7 8' };
+    return {
+      color: '#38bdf8',
+      weight: 1,
+      opacity: 0.56,
+      fillColor: '#0ea5e9',
+      fillOpacity: 0.055,
+      dashArray: '7 8',
+    };
   }
-
-
 
   private getReconAreaStatusLabel(status?: string): string {
     if (status === 'active') return 'Активний';
@@ -1324,18 +1458,15 @@ export class MapPage implements AfterViewInit, OnDestroy {
     return 'План';
   }
 
-
   private getAirAssetGroupLabel(position: AirAssetPosition): string {
     return position.assetGroup === 'recon' ? 'Розвідка' : 'Ударний розрахунок';
   }
-
 
   private getAirReconTypeLabel(type: string): string {
     if (type === 'copter') return 'Коптер';
     if (type === 'fixed_wing') return 'БпЛА крило';
     return '-';
   }
-
 
   private getAirCombatTypeLabel(type: string): string {
     if (type === 'fpv_radio') return 'FPV радіокерування';
@@ -1379,46 +1510,46 @@ export class MapPage implements AfterViewInit, OnDestroy {
   }
 
   private getPositionSignGlyph(position: FirePosition): string {
-  const color = this.getReadinessColor(position.readinessStatus);
-  const symbol = this.getPositionMilsymbolSvg(position, color);
+    const color = this.getReadinessColor(position.readinessStatus);
+    const symbol = this.getPositionMilsymbolSvg(position, color);
 
-  if (this.isPositionMaintenanceActive(position)) {
-    return '<span class="maintenance-map-glyph active">&#128295;</span>';
-  }
+    if (this.isPositionMaintenanceActive(position)) {
+      return '<span class="maintenance-map-glyph active">&#128295;</span>';
+    }
 
-  if (this.isPositionMaintenancePending(position)) {
-    return `
+    if (this.isPositionMaintenancePending(position)) {
+      return `
       <span class="maintenance-pending-stack">
         <span class="maintenance-normal-sign">${symbol}</span>
         <span class="maintenance-map-glyph pending">&#128295;</span>
       </span>
     `;
+    }
+
+    return symbol;
   }
 
-  return symbol;
-}
-
-private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
-  return new ms.Symbol(this.getPositionSidc(position), {
-    size: 40,
-    standard: 'APP6',
-    frame: true,
-    fill: true,
-    icon: true,
-    uniqueDesignation: '',
-    higherFormation: '',
-    additionalInformation: '',
-    staffComments: '',
-    direction: undefined,
-  })
-    .asSVG()
-    .replace(/fill="rgb\(128,224,255\)"/g, 'fill="rgba(128,224,255,0.10)"')
-    .replace(/fill="#80E0FF"/gi, 'fill="rgba(128,224,255,0.10)"')
-    .replace(/fill="black"/gi, `fill="${color}"`)
-    .replace(/stroke="black"/gi, `stroke="${color}"`)
-    .replace(/stroke="#000000"/gi, `stroke="${color}"`)
-    .replace(/fill="#000000"/gi, `fill="${color}"`);
-}
+  private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
+    return new ms.Symbol(this.getPositionSidc(position), {
+      size: 40,
+      standard: 'APP6',
+      frame: true,
+      fill: true,
+      icon: true,
+      uniqueDesignation: '',
+      higherFormation: '',
+      additionalInformation: '',
+      staffComments: '',
+      direction: undefined,
+    })
+      .asSVG()
+      .replace(/fill="rgb\(128,224,255\)"/g, 'fill="rgba(128,224,255,0.10)"')
+      .replace(/fill="#80E0FF"/gi, 'fill="rgba(128,224,255,0.10)"')
+      .replace(/fill="black"/gi, `fill="${color}"`)
+      .replace(/stroke="black"/gi, `stroke="${color}"`)
+      .replace(/stroke="#000000"/gi, `stroke="${color}"`)
+      .replace(/fill="#000000"/gi, `fill="${color}"`);
+  }
 
   private isPositionMaintenancePending(position: FirePosition): boolean {
     return position.assignedWeapon?.maintenanceStatus === 'pending';
@@ -1507,7 +1638,7 @@ private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
     this.cdr.detectChanges();
   }
   getReadinessLabel(status: string): string {
-    switch (status) {
+    switch (this.normalizeReadinessStatus(status)) {
       case 'ready':
         return 'Боєготова';
 
@@ -1520,6 +1651,12 @@ private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
       default:
         return status;
     }
+  }
+
+  private normalizeReadinessStatus(status: string): string {
+    if (status === 'combat_ready') return 'ready';
+    if (status === 'not_combat_ready') return 'not_ready';
+    return status;
   }
   openSettings(): void {
     void this.router.navigate(['/settings']);
@@ -1698,7 +1835,9 @@ private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
     this.plannedRoutesLayer.clearLayers();
     if (!this.showPlannedRoutes) return;
 
-    const routes = this.plannedRoutes.filter((route) => !this.plannedRouteFilter || route.id === this.plannedRouteFilter);
+    const routes = this.plannedRoutes.filter(
+      (route) => !this.plannedRouteFilter || route.id === this.plannedRouteFilter,
+    );
 
     routes.forEach((route, routeIndex) => {
       const points = (route.points || [])
@@ -1987,7 +2126,9 @@ private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
 
   private renderReconDraft(): void {
     this.reconDraftLayer.clearLayers();
-    const points = this.reconDraftPoints.map((point) => [point.lat, point.lng] as LeafletLatLngExpression);
+    const points = this.reconDraftPoints.map(
+      (point) => [point.lat, point.lng] as LeafletLatLngExpression,
+    );
 
     points.forEach((point, index) => {
       this.L.circleMarker(point, {
@@ -2002,7 +2143,9 @@ private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
     });
 
     if (points.length >= 2) {
-      this.L.polyline(points, { color: '#2ee6d6', weight: 2, dashArray: '6 8' }).addTo(this.reconDraftLayer);
+      this.L.polyline(points, { color: '#2ee6d6', weight: 2, dashArray: '6 8' }).addTo(
+        this.reconDraftLayer,
+      );
     }
 
     if (points.length >= 3) {
@@ -2169,59 +2312,58 @@ private getPositionMilsymbolSvg(position: FirePosition, color: string): string {
     return `${zone}${band} · приблизний MGRS без квадратів`;
   }
 
-private getPositionSidc(position: FirePosition): string {
-  return this.toMilsymbolSidc(this.getFirePositionArtillerySidc(position));
-}
-
-private getFirePositionArtillerySidc(position: FirePosition): string {
-  const weapon = position.assignedWeapon;
-  const modelName = weapon?.weaponModel?.name?.toLowerCase() || '';
-  const systemType = weapon?.weaponModel?.systemType?.toLowerCase() || '';
-
-  if (!weapon || !position.hasSg) {
-    return 'SFGPUCFHE-*****';
+  private getPositionSidc(position: FirePosition): string {
+    return this.toMilsymbolSidc(this.getFirePositionArtillerySidc(position));
   }
 
-  if (
-    systemType.includes('reactive') ||
-    systemType.includes('rocket') ||
-    systemType.includes('mlrs') ||
-    modelName.includes('рсзв') ||
-    modelName.includes('град') ||
-    modelName.includes('ураган') ||
-    modelName.includes('смерч') ||
-    modelName.includes('himars')
-  ) {
-    return 'SFGPUCFRMS*****';
+  private getFirePositionArtillerySidc(position: FirePosition): string {
+    const weapon = position.assignedWeapon;
+    const modelName = weapon?.weaponModel?.name?.toLowerCase() || '';
+    const systemType = weapon?.weaponModel?.systemType?.toLowerCase() || '';
+
+    if (!weapon || !position.hasSg) {
+      return 'SFGPUCFHE-*****';
+    }
+
+    if (
+      systemType.includes('reactive') ||
+      systemType.includes('rocket') ||
+      systemType.includes('mlrs') ||
+      modelName.includes('рсзв') ||
+      modelName.includes('град') ||
+      modelName.includes('ураган') ||
+      modelName.includes('смерч') ||
+      modelName.includes('himars')
+    ) {
+      return 'SFGPUCFRMS*****';
+    }
+
+    if (
+      modelName.includes('міномет') ||
+      modelName.includes('миномет') ||
+      modelName.includes('mortar')
+    ) {
+      return 'SFGPUCFM--*****';
+    }
+
+    if (
+      modelName.includes('сау') ||
+      modelName.includes('2с') ||
+      modelName.includes('2s') ||
+      modelName.includes('m109') ||
+      modelName.includes('krab') ||
+      modelName.includes('caesar') ||
+      modelName.includes('богдана') ||
+      modelName.includes('pzh') ||
+      modelName.includes('archer')
+    ) {
+      return 'SFGPUCFHE-*****';
+    }
+
+    return 'SFGPUCFH--*****';
   }
 
-  if (
-    modelName.includes('міномет') ||
-    modelName.includes('миномет') ||
-    modelName.includes('mortar')
-  ) {
-    return 'SFGPUCFM--*****';
+  private toMilsymbolSidc(sidc: string): string {
+    return sidc.replace(/\*/g, '-');
   }
-
-  if (
-    modelName.includes('сау') ||
-    modelName.includes('2с') ||
-    modelName.includes('2s') ||
-    modelName.includes('m109') ||
-    modelName.includes('krab') ||
-    modelName.includes('caesar') ||
-    modelName.includes('богдана') ||
-    modelName.includes('pzh') ||
-    modelName.includes('archer')
-  ) {
-    return 'SFGPUCFHE-*****';
-  }
-
-  return 'SFGPUCFH--*****';
 }
-
-private toMilsymbolSidc(sidc: string): string {
-  return sidc.replace(/\*/g, '-');
-}
-}
-

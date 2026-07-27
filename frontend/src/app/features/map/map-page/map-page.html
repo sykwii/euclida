@@ -11,21 +11,58 @@
 
     <div class="map-toolbar" aria-label="Керування картою">
       <div class="tool-group modes">
-        <button type="button" [class.active]="mapPreset === 'ops'" (click)="applyLayerPreset('ops')">Опер.</button>
-        <button type="button" [class.active]="mapPreset === 'planning'" (click)="applyLayerPreset('planning')">План</button>
-        <button type="button" [class.active]="mapPreset === 'logistics'" (click)="applyLayerPreset('logistics')">Лог.</button>
-        <button type="button" [class.active]="mapPreset === 'analysis'" (click)="applyLayerPreset('analysis')">Аналіз</button>
+        <button
+          type="button"
+          [class.active]="mapPreset === 'ops'"
+          (click)="applyLayerPreset('ops')"
+        >
+          Опер.
+        </button>
+        <button
+          type="button"
+          [class.active]="mapPreset === 'planning'"
+          (click)="applyLayerPreset('planning')"
+        >
+          План
+        </button>
+        <button
+          type="button"
+          [class.active]="mapPreset === 'logistics'"
+          (click)="applyLayerPreset('logistics')"
+        >
+          Лог.
+        </button>
+        <button
+          type="button"
+          [class.active]="mapPreset === 'analysis'"
+          (click)="applyLayerPreset('analysis')"
+        >
+          Аналіз
+        </button>
       </div>
 
       <div class="tool-group actions">
-        <button type="button" [class.active]="filtersPanelOpen" (click)="toggleFiltersPanel()">Фільтри</button>
+        <button type="button" [class.active]="filtersPanelOpen" (click)="toggleFiltersPanel()">
+          Фільтри
+        </button>
         <span class="map-sync-chip" [class.refreshing]="isMapRefreshing">
           {{ isMapRefreshing ? 'Оновлення' : lastSyncLabel }}
         </span>
         <button type="button" class="icon-round" title="Оновити" (click)="refreshMap()">↻</button>
-        <button type="button" class="icon-round" title="Додати ВГЗ" (click)="goToCreateOrder()">＋</button>
-        <button type="button" class="icon-round" title="Налаштування загроз" (click)="openSettings()">⚙</button>
-        <button type="button" class="icon-round" title="Закрити панелі" (click)="closeAllPanels()">×</button>
+        <button type="button" class="icon-round" title="Додати ВГЗ" (click)="goToCreateOrder()">
+          ＋
+        </button>
+        <button
+          type="button"
+          class="icon-round"
+          title="Налаштування загроз"
+          (click)="openSettings()"
+        >
+          ⚙
+        </button>
+        <button type="button" class="icon-round" title="Закрити панелі" (click)="closeAllPanels()">
+          ×
+        </button>
       </div>
     </div>
 
@@ -37,17 +74,33 @@
 
       <div class="filter-button-grid">
         <button type="button" [class.active]="showPositions" (click)="togglePositions()">ВП</button>
-        <button type="button" [class.active]="showThreats" (click)="toggleThreats()">Загрози</button>
-        <button type="button" [class.active]="showSectors" (click)="toggleSectors()">Сектори</button>
-        <button type="button" [class.active]="showReconAreas" (click)="toggleReconAreas()">Райони</button>
-        <button type="button" [class.active]="showPlannedRoutes" (click)="togglePlannedRoutes()">Маршрути</button>
-        <button type="button" [class.active]="showResults" (click)="toggleResults()">Історія</button>
-        <button type="button" [class.active]="measureMode" (click)="toggleMeasureMode()">Відстань</button>
+        <button type="button" [class.active]="showThreats" (click)="toggleThreats()">
+          Загрози
+        </button>
+        <button type="button" [class.active]="showSectors" (click)="toggleSectors()">
+          Сектори
+        </button>
+        <button type="button" [class.active]="showReconAreas" (click)="toggleReconAreas()">
+          Райони
+        </button>
+        <button type="button" [class.active]="showPlannedRoutes" (click)="togglePlannedRoutes()">
+          Маршрути
+        </button>
+        <button type="button" [class.active]="showResults" (click)="toggleResults()">
+          Історія
+        </button>
+        <button type="button" [class.active]="measureMode" (click)="toggleMeasureMode()">
+          Відстань
+        </button>
       </div>
 
       <label>
         <span>Готовність</span>
-        <select name="readinessFilter" [(ngModel)]="readinessFilter" (ngModelChange)="applyMapFilters()">
+        <select
+          name="readinessFilter"
+          [(ngModel)]="readinessFilter"
+          (ngModelChange)="applyMapFilters()"
+        >
           <option value="">Усі ВП</option>
           <option value="ready">БГ</option>
           <option value="in_progress">У роботі</option>
@@ -58,7 +111,11 @@
 
       <label>
         <span>Маршрут</span>
-        <select name="plannedRouteFilter" [(ngModel)]="plannedRouteFilter" (ngModelChange)="applyMapFilters()">
+        <select
+          name="plannedRouteFilter"
+          [(ngModel)]="plannedRouteFilter"
+          (ngModelChange)="applyMapFilters()"
+        >
           <option value="">Усі маршрути</option>
           <option *ngFor="let route of plannedRoutes" [value]="route.id">{{ route.name }}</option>
         </select>
@@ -66,7 +123,11 @@
 
       <label>
         <span>Період історії</span>
-        <select name="resultHistoryRange" [(ngModel)]="resultHistoryRange" (ngModelChange)="setResultHistoryRange($event)">
+        <select
+          name="resultHistoryRange"
+          [(ngModel)]="resultHistoryRange"
+          (ngModelChange)="setResultHistoryRange($event)"
+        >
           <option value="today">Сьогодні</option>
           <option value="7">7 днів</option>
           <option value="all">Усе</option>
@@ -75,7 +136,11 @@
 
       <label>
         <span>Результати</span>
-        <select name="resultTypeFilter" [(ngModel)]="resultTypeFilter" (ngModelChange)="applyMapFilters()">
+        <select
+          name="resultTypeFilter"
+          [(ngModel)]="resultTypeFilter"
+          (ngModelChange)="applyMapFilters()"
+        >
           <option value="">Усі результати</option>
           <option value="mining">Мінування</option>
           <option value="area_denial">Закриття зони</option>
@@ -91,11 +156,26 @@
   </header>
 
   <div class="map-stats">
-    <div><strong>{{ positionsCount }}</strong><span>ВП</span></div>
-    <div><strong>{{ readyCount }}</strong><span>БГ</span></div>
-    <div><strong>{{ inProgressCount }}</strong><span>У роботі</span></div>
-    <div><strong>{{ notReadyCount }}</strong><span>Не БГ</span></div>
-    <div><strong>{{ threatsCount }}</strong><span>Загрози</span></div>
+    <div>
+      <strong>{{ positionsCount }}</strong
+      ><span>ВП</span>
+    </div>
+    <div>
+      <strong>{{ readyCount }}</strong
+      ><span>БГ</span>
+    </div>
+    <div>
+      <strong>{{ inProgressCount }}</strong
+      ><span>У роботі</span>
+    </div>
+    <div>
+      <strong>{{ notReadyCount }}</strong
+      ><span>Не БГ</span>
+    </div>
+    <div>
+      <strong>{{ threatsCount }}</strong
+      ><span>Загрози</span>
+    </div>
   </div>
 
   <aside class="active-orders-panel">
@@ -110,17 +190,23 @@
     <button
       type="button"
       class="active-order"
-      *ngFor="let order of activeOrders | slice:0:6"
+      *ngFor="let order of activeOrders | slice: 0 : 6"
       [class.focused]="focusedOrderNumber === order.orderNumber"
       (click)="openOrderOnMap(order)"
     >
       <span>{{ getOrderStatusLabel(order.status) }}</span>
       <strong>{{ order.orderNumber }}</strong>
-      <small>{{ order.targetSettlement || '-' }} · {{ order.selectedFirePosition?.name || 'без ВП' }}</small>
+      <small
+        >{{ order.targetSettlement || '-' }} ·
+        {{ order.selectedFirePosition?.name || 'без ВП' }}</small
+      >
     </button>
   </aside>
 
-  <aside class="maintenance-requests-panel" *ngIf="canMainApproveMaintenance && pendingMaintenanceRequests.length > 0">
+  <aside
+    class="maintenance-requests-panel"
+    *ngIf="canMainApproveMaintenance && pendingMaintenanceRequests.length > 0"
+  >
     <header>
       <div>
         <span>Погодження ТО</span>
@@ -131,10 +217,12 @@
     <button
       type="button"
       class="maintenance-request-row"
-      *ngFor="let item of pendingMaintenanceRequests | slice:0:5"
+      *ngFor="let item of pendingMaintenanceRequests | slice: 0 : 5"
       (click)="selectMaintenanceRequest(item)"
     >
-      <strong>{{ item.assignedWeapon?.callsign || item.assignedWeapon?.serialNumber || 'СГ' }}</strong>
+      <strong>{{
+        item.assignedWeapon?.callsign || item.assignedWeapon?.serialNumber || 'СГ'
+      }}</strong>
       <span>{{ item.name }} · {{ item.unit?.name || '-' }}</span>
       <small>
         {{ item.assignedWeapon?.maintenanceRequestedStartAt | date: 'dd.MM HH:mm' }}
@@ -146,20 +234,45 @@
 
   <div class="measure-card" *ngIf="measureMode">
     <strong>Вимірювання відстані</strong>
-    <p>Точка 1: {{ measureStart ? (measureStart.lat + ', '+ measureStart.lng) : 'натисніть на карту' }}</p>
-    <p>Точка 2: {{ measureEnd ? (measureEnd.lat + ', '+ measureEnd.lng) : 'натисніть другу точку' }}</p>
-    <p *ngIf="measureDistanceM !== null">Відстань: <b>{{ measureDistanceM }}</b> м</p>
+    <p>
+      Точка 1:
+      {{ measureStart ? measureStart.lat + ', ' + measureStart.lng : 'натисніть на карту' }}
+    </p>
+    <p>
+      Точка 2: {{ measureEnd ? measureEnd.lat + ', ' + measureEnd.lng : 'натисніть другу точку' }}
+    </p>
+    <p *ngIf="measureDistanceM !== null">
+      Відстань: <b>{{ measureDistanceM }}</b> м
+    </p>
     <button type="button" (click)="clearMeasure()">Очистити</button>
   </div>
 
   <div class="measure-card draft-card" *ngIf="reconAreaMode || airTaskMode || plannedRouteMode">
     <strong>{{ plannedRouteMode ? 'Маршрут' : 'Район' }}</strong>
     <p>Точок: {{ reconDraftPoints.length }}</p>
-    <p>{{ plannedRouteMode ? 'Натискайте точки маршруту по порядку.' : 'Натискайте вершини району по порядку.' }}</p>
+    <p>
+      {{
+        plannedRouteMode
+          ? 'Натискайте точки маршруту по порядку.'
+          : 'Натискайте вершини району по порядку.'
+      }}
+    </p>
     <div class="draft-actions">
       <button type="button" (click)="clearReconDraft()">Заново</button>
-      <button type="button" (click)="removeLastReconDraftPoint()" [disabled]="reconDraftPoints.length === 0">Видалити</button>
-      <button type="button" (click)="finishReconDraft()" [disabled]="reconDraftPoints.length < (plannedRouteMode ? 2 : 3)">Зберегти</button>
+      <button
+        type="button"
+        (click)="removeLastReconDraftPoint()"
+        [disabled]="reconDraftPoints.length === 0"
+      >
+        Видалити
+      </button>
+      <button
+        type="button"
+        (click)="finishReconDraft()"
+        [disabled]="reconDraftPoints.length < (plannedRouteMode ? 2 : 3)"
+      >
+        Зберегти
+      </button>
     </div>
     <button type="button" (click)="cancelReconDraft()">Скасувати</button>
   </div>
@@ -206,7 +319,9 @@
       <h3>Створено</h3>
       <p>{{ threat.createdAt | date: 'dd.MM.yyyy HH:mm' }}</p>
     </section>
-    <button type="button" class="danger-button" (click)="removeSelectedThreat()">Видалити мітку</button>
+    <button type="button" class="danger-button" (click)="removeSelectedThreat()">
+      Видалити мітку
+    </button>
   </aside>
 
   <aside class="side-card" *ngIf="selectedPosition as position">
@@ -218,7 +333,12 @@
       <button type="button" class="icon-round small" (click)="closePositionPanel()">×</button>
     </div>
 
-    <div class="status-badge" [class.ready]="position.readinessStatus === 'ready'" [class.progress]="position.readinessStatus === 'in_progress'" [class.danger]="position.readinessStatus === 'not_ready'">
+    <div
+      class="status-badge"
+      [class.ready]="position.readinessStatus === 'ready'"
+      [class.progress]="position.readinessStatus === 'in_progress'"
+      [class.danger]="position.readinessStatus === 'not_ready'"
+    >
       {{ getReadinessLabel(position.readinessStatus) }}
     </div>
 
@@ -232,15 +352,27 @@
 
     <section>
       <h3>Сектор стрільби</h3>
-      <p>ОН: {{ position.mainDirectionUnits || '-' }} / {{ position.mainDirectionDegrees || '-' }}°</p>
-      <p>Ліворуч: {{ position.traverseLeftUnits || '-' }} / {{ position.traverseLeftDegrees || '-' }}°</p>
-      <p>Праворуч: {{ position.traverseRightUnits || '-' }} / {{ position.traverseRightDegrees || '-' }}°</p>
-      <p>Межі: {{ position.sectorLeftDegrees || '-' }}° → {{ position.sectorRightDegrees || '-' }}°</p>
+      <p>
+        ОН: {{ position.mainDirectionUnits || '-' }} / {{ position.mainDirectionDegrees || '-' }}°
+      </p>
+      <p>
+        Ліворуч: {{ position.traverseLeftUnits || '-' }} /
+        {{ position.traverseLeftDegrees || '-' }}°
+      </p>
+      <p>
+        Праворуч: {{ position.traverseRightUnits || '-' }} /
+        {{ position.traverseRightDegrees || '-' }}°
+      </p>
+      <p>
+        Межі: {{ position.sectorLeftDegrees || '-' }}° → {{ position.sectorRightDegrees || '-' }}°
+      </p>
     </section>
 
     <section>
       <h3>Готовність</h3>
-      <p *ngIf="position.notReadyReason; else noReason">{{ position.notReadyReason }}</p>
+      <p *ngIf="position.operationalState.reasonLabel; else noReason">
+        {{ position.operationalState.reasonLabel }}
+      </p>
       <ng-template #noReason>
         <span class="ready-text">Обмеження відсутні</span>
       </ng-template>
@@ -256,23 +388,45 @@
         <div class="maintenance-panel">
           <div class="maintenance-head">
             <h4>ТО СГ</h4>
-            <span [class.pending]="weapon.maintenanceStatus === 'pending'" [class.approved]="weapon.maintenanceStatus === 'approved'">
+            <span
+              [class.pending]="weapon.maintenanceStatus === 'pending'"
+              [class.approved]="weapon.maintenanceStatus === 'approved'"
+            >
               {{ getMaintenanceStatusLabel(weapon.maintenanceStatus) }}
             </span>
           </div>
 
-          <div class="maintenance-process" *ngIf="isMaintenanceOpen(weapon.maintenanceStatus) || weapon.maintenanceStatus === 'completed' || weapon.maintenanceStatus === 'cancelled'">
+          <div
+            class="maintenance-process"
+            *ngIf="
+              isMaintenanceOpen(weapon.maintenanceStatus) ||
+              weapon.maintenanceStatus === 'completed' ||
+              weapon.maintenanceStatus === 'cancelled'
+            "
+          >
             <div>
               <span>Запит</span>
-              <strong>{{ weapon.maintenanceRequestedStartAt ? (weapon.maintenanceRequestedStartAt | date: 'dd.MM HH:mm') : '-' }}</strong>
+              <strong>{{
+                weapon.maintenanceRequestedStartAt
+                  ? (weapon.maintenanceRequestedStartAt | date: 'dd.MM HH:mm')
+                  : '-'
+              }}</strong>
             </div>
             <div>
               <span>План</span>
-              <strong>{{ weapon.maintenancePlannedEndAt ? (weapon.maintenancePlannedEndAt | date: 'HH:mm') : '-' }}</strong>
+              <strong>{{
+                weapon.maintenancePlannedEndAt
+                  ? (weapon.maintenancePlannedEndAt | date: 'HH:mm')
+                  : '-'
+              }}</strong>
             </div>
             <div>
               <span>Факт</span>
-              <strong>{{ weapon.maintenanceActualEndAt ? (weapon.maintenanceActualEndAt | date: 'HH:mm') : '-' }}</strong>
+              <strong>{{
+                weapon.maintenanceActualEndAt
+                  ? (weapon.maintenanceActualEndAt | date: 'HH:mm')
+                  : '-'
+              }}</strong>
             </div>
           </div>
 
@@ -281,10 +435,16 @@
             Очікує рішення головного оператора. До погодження СГ залишається у звичайному стані.
           </p>
           <p *ngIf="weapon.maintenanceStatus === 'approved'" class="maintenance-info">
-            У планове вікно СГ не бере участі у підборі ВГЗ. Завершити або продовжити може батарея/дивізіон.
+            У планове вікно СГ не бере участі у підборі ВГЗ. Завершити або продовжити може
+            батарея/дивізіон.
           </p>
 
-          <div class="maintenance-form maintenance-execution-form" *ngIf="canOperateSelectedWeaponMaintenance && !isMaintenanceOpen(weapon.maintenanceStatus)">
+          <div
+            class="maintenance-form maintenance-execution-form"
+            *ngIf="
+              canOperateSelectedWeaponMaintenance && !isMaintenanceOpen(weapon.maintenanceStatus)
+            "
+          >
             <label>
               <span>Початок</span>
               <input type="datetime-local" [(ngModel)]="maintenanceStartAt" />
@@ -297,21 +457,37 @@
               <span>Примітка</span>
               <input type="text" [(ngModel)]="maintenanceNote" placeholder="Причина / деталі" />
             </label>
-            <button type="button" class="edit-button" (click)="requestSelectedWeaponMaintenance()">Запросити ТО</button>
+            <button type="button" class="edit-button" (click)="requestSelectedWeaponMaintenance()">
+              Запросити ТО
+            </button>
           </div>
 
-          <div class="maintenance-actions maintenance-approval-form" *ngIf="weapon.maintenanceStatus === 'pending' && canMainApproveMaintenance">
-            <button type="button" class="edit-button" (click)="approveSelectedWeaponMaintenance()">Підтвердити ТО</button>
-            <button type="button" class="danger-button" (click)="rejectSelectedWeaponMaintenance()">Відхилити</button>
+          <div
+            class="maintenance-actions maintenance-approval-form"
+            *ngIf="weapon.maintenanceStatus === 'pending' && canMainApproveMaintenance"
+          >
+            <button type="button" class="edit-button" (click)="approveSelectedWeaponMaintenance()">
+              Підтвердити ТО
+            </button>
+            <button type="button" class="danger-button" (click)="rejectSelectedWeaponMaintenance()">
+              Відхилити
+            </button>
           </div>
 
-          <div class="maintenance-form maintenance-execution-form" *ngIf="weapon.maintenanceStatus === 'approved' && canOperateSelectedWeaponMaintenance">
+          <div
+            class="maintenance-form maintenance-execution-form"
+            *ngIf="weapon.maintenanceStatus === 'approved' && canOperateSelectedWeaponMaintenance"
+          >
             <label>
               <span>Продовжити, хв</span>
               <input type="number" min="1" step="5" [(ngModel)]="maintenanceExtraMinutes" />
             </label>
-            <button type="button" class="edit-button" (click)="extendSelectedWeaponMaintenance()">Продовжити ТО</button>
-            <button type="button" class="edit-button" (click)="finishSelectedWeaponMaintenance()">Закінчити достроково</button>
+            <button type="button" class="edit-button" (click)="extendSelectedWeaponMaintenance()">
+              Продовжити ТО
+            </button>
+            <button type="button" class="edit-button" (click)="finishSelectedWeaponMaintenance()">
+              Закінчити достроково
+            </button>
           </div>
         </div>
       </ng-container>
@@ -322,17 +498,16 @@
 
     <section>
       <h3>Виконані ВГЗ</h3>
-      <p>Виконано: {{ selectedPositionCard?.completedRequestsCount || position.completedVgzCount || 0 }}</p>
+      <p>
+        Виконано:
+        {{ selectedPositionCard?.completedRequestsCount || position.completedVgzCount || 0 }}
+      </p>
     </section>
 
     <section>
       <h3>Локальний БК</h3>
       <p class="stock-title">
-        {{
-          selectedPositionCard?.firePosition?.ammoDepot?.name ||
-          position.ammoDepot?.name ||
-          '-'
-        }}
+        {{ selectedPositionCard?.firePosition?.ammoDepot?.name || position.ammoDepot?.name || '-' }}
       </p>
       <p class="muted">
         Остання поставка:
@@ -387,7 +562,10 @@
 
   <div class="cursor-coordinates">
     <strong>Координати</strong>
-    <span>Decimal: {{ cursorLat !== null ? cursorLat : '-' }}, {{ cursorLng !== null ? cursorLng : '-' }}</span>
+    <span
+      >Decimal: {{ cursorLat !== null ? cursorLat : '-' }},
+      {{ cursorLng !== null ? cursorLng : '-' }}</span
+    >
     <span class="stable-mgrs" *ngIf="cursorMgrsStable">MGRS: {{ stableCursorMgrs }}</span>
     <span *ngIf="cursorElevation">Висота: {{ cursorElevation }}</span>
   </div>
@@ -398,7 +576,16 @@
     <span>Завантаження карти...</span>
   </div>
 
-  <div class="map-empty-state" *ngIf="hasMapLoaded && !isMapLoading && positionsCount === 0 && threatsCount === 0 && activeOrders.length === 0">
+  <div
+    class="map-empty-state"
+    *ngIf="
+      hasMapLoaded &&
+      !isMapLoading &&
+      positionsCount === 0 &&
+      threatsCount === 0 &&
+      activeOrders.length === 0
+    "
+  >
     <strong>Дані карти відсутні</strong>
     <span>ВП, активні ВГЗ або загрози ще не завантажені.</span>
     <button type="button" class="ghost-button" (click)="refreshMap()">Повторити</button>

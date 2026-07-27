@@ -264,10 +264,7 @@
         >
           {{ getWeaponReadinessLabelUa(item.assignedWeapon.readinessStatus) }}
         </div>
-        <div
-          class="weapon-status deployment"
-          [ngClass]="getWeaponDeploymentClass(item)"
-        >
+        <div class="weapon-status deployment" [ngClass]="getWeaponDeploymentClass(item)">
           {{ getWeaponDeploymentLabelUa(item) }}
         </div>
 
@@ -321,10 +318,6 @@
           <strong>{{ isEwPage || isAirAssetsPage ? 'Не вказано' : 'Не призначене' }}</strong>
         </div>
       </ng-template>
-
-      <div class="reason-box" *ngIf="item.notReadyReason">
-        {{ getFpReasonLabel(item.notReadyReason) }}
-      </div>
 
       <section class="maintenance-box">
         <span>Готовність до вогню</span>
@@ -489,7 +482,7 @@
 
         <section class="fp-detail-wide">
           <h3>Стан готовності</h3>
-          <strong>{{ detail.notReadyReason || 'Обмеження відсутні' }}</strong>
+          <strong>{{ detail.operationalState.reasonLabel || 'Обмеження відсутні' }}</strong>
           <span>Повітряна обстановка: {{ detail.airSituationStatus || '—' }}</span>
         </section>
       </main>

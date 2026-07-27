@@ -33,10 +33,8 @@ export class FirePositionsPage implements OnInit, OnDestroy {
   returnTo: string | null = null;
   detailsPosition: FirePosition | null = null;
   activeFilter: PositionStatusFilter = 'all';
-pageKind: PositionPageKind = 'fire_positions';
+  pageKind: PositionPageKind = 'fire_positions';
   collapsedForeignUnits: Record<string, boolean> = {};
-  readinessActionId = '';
-  notReadyReasons: Record<string, 'threat' | 'damaged' | 'prohibited' | 'other'> = {};
   pageSkeleton = Array.from({ length: 6 });
 
   form = this.getEmptyForm();
@@ -52,40 +50,40 @@ pageKind: PositionPageKind = 'fire_positions';
   ) {}
 
   ngOnInit(): void {
-  this.syncPageKindFromUrl(this.router.url);
+    this.syncPageKindFromUrl(this.router.url);
 
-  this.route.queryParamMap.subscribe((params) => {
-    this.returnTo = params.get('returnTo');
-    const editId = params.get('editId');
+    this.route.queryParamMap.subscribe((params) => {
+      this.returnTo = params.get('returnTo');
+      const editId = params.get('editId');
 
-    if (editId) this.startEdit(editId);
-  });
+      if (editId) this.startEdit(editId);
+    });
 
-  this.autoRefreshSubscription.add(
-    this.router.events
-      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
-      .subscribe((event) => {
-        const previousPageKind = this.pageKind;
+    this.autoRefreshSubscription.add(
+      this.router.events
+        .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+        .subscribe((event) => {
+          const previousPageKind = this.pageKind;
 
-        this.syncPageKindFromUrl(event.urlAfterRedirects);
+          this.syncPageKindFromUrl(event.urlAfterRedirects);
 
-        if (previousPageKind !== this.pageKind) {
-          this.activeFilter = 'all';
-          this.formModalOpen = false;
-          this.editingId = null;
-          this.detailsPosition = null;
-          this.form = this.getEmptyForm();
-          this.load();
-        }
-      }),
-  );
+          if (previousPageKind !== this.pageKind) {
+            this.activeFilter = 'all';
+            this.formModalOpen = false;
+            this.editingId = null;
+            this.detailsPosition = null;
+            this.form = this.getEmptyForm();
+            this.load();
+          }
+        }),
+    );
 
-  this.load();
+    this.load();
 
-  this.autoRefreshSubscription.add(
-    this.autoRefresh.watch(['all', 'map', 'missions', 'weapons', 'threats'], () => this.load()),
-  );
-}
+    this.autoRefreshSubscription.add(
+      this.autoRefresh.watch(['all', 'map', 'missions', 'weapons', 'threats'], () => this.load()),
+    );
+  }
 
   ngOnDestroy(): void {
     this.autoRefreshSubscription.unsubscribe();
@@ -96,12 +94,12 @@ pageKind: PositionPageKind = 'fire_positions';
   }
 
   get isEwPage(): boolean {
-  return this.pageKind === 'ew';
-}
+    return this.pageKind === 'ew';
+  }
 
-get isAirAssetsPage(): boolean {
-  return this.pageKind === 'air_assets';
-}
+  get isAirAssetsPage(): boolean {
+    return this.pageKind === 'air_assets';
+  }
 
   get pageEyebrow(): string {
     if (this.isAirAssetsPage) return 'ПОВІТРЯ';
@@ -143,11 +141,15 @@ get isAirAssetsPage(): boolean {
   }
 
   get readyCount(): number {
-    return this.ownItems.filter((x) => this.normalizeReadiness(x.readinessStatus) === 'combat_ready').length;
+    return this.ownItems.filter(
+      (x) => this.normalizeReadiness(x.readinessStatus) === 'combat_ready',
+    ).length;
   }
 
   get notReadyCount(): number {
-    return this.ownItems.filter((x) => this.normalizeReadiness(x.readinessStatus) === 'not_combat_ready').length;
+    return this.ownItems.filter(
+      (x) => this.normalizeReadiness(x.readinessStatus) === 'not_combat_ready',
+    ).length;
   }
 
   get withSgCount(): number {
@@ -163,7 +165,9 @@ get isAirAssetsPage(): boolean {
       return this.ownItems.filter((item) => item.hasSg);
     }
 
-    return this.ownItems.filter((item) => this.normalizeReadiness(item.readinessStatus) === this.activeFilter);
+    return this.ownItems.filter(
+      (item) => this.normalizeReadiness(item.readinessStatus) === this.activeFilter,
+    );
   }
 
   get activeFilterLabel(): string {
@@ -184,6 +188,9 @@ get isAirAssetsPage(): boolean {
     this.service.getAll().subscribe({
       next: (items) => {
         this.items = items;
+        if (this.detailsPosition) {
+          this.detailsPosition = items.find((item) => item.id === this.detailsPosition?.id) ?? null;
+        }
         this.loadUnits();
       },
       error: (error) => this.fail(error, 'Не вдалося завантажити точки'),
@@ -344,48 +351,6 @@ get isAirAssetsPage(): boolean {
     });
   }
 
-  confirmFirePositionReadiness(item: FirePosition, event?: Event): void {
-    event?.stopPropagation();
-    if (this.readinessActionId) {
-      return;
-    }
-
-    this.readinessActionId = item.id;
-    this.service.confirmReadiness(item.id).subscribe({
-      next: () => {
-        this.readinessActionId = '';
-        this.load();
-      },
-      error: (error) => {
-        this.readinessActionId = '';
-        this.fail(error, error?.error?.message || 'Не вдалося підтвердити готовність ВП');
-      },
-    });
-  }
-
-  setFirePositionNotReady(item: FirePosition, event?: Event): void {
-    event?.stopPropagation();
-    if (this.readinessActionId) {
-      return;
-    }
-
-    this.readinessActionId = item.id;
-    this.service
-      .setNotReady(item.id, {
-        notReadyReason: this.notReadyReasons[item.id] || 'prohibited',
-      })
-      .subscribe({
-        next: () => {
-          this.readinessActionId = '';
-          this.load();
-        },
-        error: (error) => {
-          this.readinessActionId = '';
-          this.fail(error, error?.error?.message || 'Не вдалося змінити готовність ВП');
-        },
-      });
-  }
-
   openDetails(item: FirePosition): void {
     this.detailsPosition = item;
   }
@@ -435,57 +400,56 @@ get isAirAssetsPage(): boolean {
     return this.normalizeReadiness(status) === 'combat_ready' ? 'ready' : 'danger';
   }
 
-private getEmptyForm(): {
-  name: string;
-  positionType: PositionType;
-  unitId: string;
-  coordinateMode: 'decimal' | 'mgrs';
-  lat: string;
-  lng: string;
-  mgrs: string;
-  mainDirectionUnits: string;
-  traverseLeftUnits: string;
-  traverseRightUnits: string;
-  personnelRotationStatus: string;
-  personnelRotationDate: string;
-} {
-  return {
-    name: '',
-    positionType:
-      this.pageKind === 'air_assets'
-        ? 'air_asset_crew'
-        : this.pageKind === 'ew'
-          ? 'ew_post'
-          : 'fire_position',
-    unitId: '',
-    coordinateMode: 'decimal',
-    lat: '',
-    lng: '',
-    mgrs: '',
-    mainDirectionUnits: '',
-    traverseLeftUnits: '',
-    traverseRightUnits: '',
-    personnelRotationStatus: '',
-    personnelRotationDate: '',
-  };
-}
-
-private syncPageKindFromUrl(url: string): void {
-  const cleanUrl = url.split('?')[0];
-
-  if (cleanUrl.startsWith('/air-assets')) {
-    this.pageKind = 'air_assets';
-    return;
+  private getEmptyForm(): {
+    name: string;
+    positionType: PositionType;
+    unitId: string;
+    coordinateMode: 'decimal' | 'mgrs';
+    lat: string;
+    lng: string;
+    mgrs: string;
+    mainDirectionUnits: string;
+    traverseLeftUnits: string;
+    traverseRightUnits: string;
+    personnelRotationStatus: string;
+    personnelRotationDate: string;
+  } {
+    return {
+      name: '',
+      positionType:
+        this.pageKind === 'air_assets'
+          ? 'air_asset_crew'
+          : this.pageKind === 'ew'
+            ? 'ew_post'
+            : 'fire_position',
+      unitId: '',
+      coordinateMode: 'decimal',
+      lat: '',
+      lng: '',
+      mgrs: '',
+      mainDirectionUnits: '',
+      traverseLeftUnits: '',
+      traverseRightUnits: '',
+      personnelRotationStatus: '',
+      personnelRotationDate: '',
+    };
   }
 
-  if (cleanUrl.startsWith('/ew')) {
-    this.pageKind = 'ew';
-    return;
+  private syncPageKindFromUrl(url: string): void {
+    const cleanUrl = url.split('?')[0];
+
+    if (cleanUrl.startsWith('/air-assets')) {
+      this.pageKind = 'air_assets';
+      return;
+    }
+
+    if (cleanUrl.startsWith('/ew')) {
+      this.pageKind = 'ew';
+      return;
+    }
+
+    this.pageKind = 'fire_positions';
   }
-
-  this.pageKind = 'fire_positions';
-}
-
 
   private normalizePositionType(value: string | null | undefined): PositionType {
     const allowed = this.positionTypeOptions.map((option) => option.value);
@@ -546,18 +510,6 @@ private syncPageKindFromUrl(url: string): void {
     return this.normalizeReadiness(item.readinessStatus) === 'combat_ready';
   }
 
-  getFpReasonLabel(reason: string | null | undefined): string {
-    const labels: Record<string, string> = {
-      threat: 'Під загрозою',
-      damaged: 'Пошкоджена',
-      not_prepared: 'Не підготовлена',
-      occupied: 'Зайнята',
-      other: 'Інше',
-    };
-
-    return reason ? labels[reason] ?? 'Інше' : '';
-  }
-
   getWeaponReadinessLabelUa(status: string | undefined): string {
     return this.normalizeReadiness(status) === 'combat_ready' ? 'СГ БГ' : 'СГ НЕ БГ';
   }
@@ -575,68 +527,20 @@ private syncPageKindFromUrl(url: string): void {
   }
 
   getAggregateReadinessLabel(item: FirePosition): string {
-    return this.getAggregateReadinessReasons(item).length === 0
-      ? 'Готова до вогню'
-      : 'Не готова до вогню';
+    return item.operationalState.ready ? 'Готова до вогню' : 'Не готова до вогню';
   }
 
   getAggregateReadinessClass(item: FirePosition): string {
-    return this.getAggregateReadinessReasons(item).length === 0 ? 'ready' : 'danger';
+    return item.operationalState.ready ? 'ready' : 'danger';
   }
 
   getAggregateReasonLabels(item: FirePosition): string[] {
-    const labels: Record<string, string> = {
-      fp_not_prepared: 'ВП не підготовлена',
-      fp_threat: 'ВП під загрозою',
-      weapon_missing: 'СГ не призначена',
-      weapon_moving: 'СГ ще в русі',
-      weapon_not_ready: 'СГ НЕ БГ',
-      weapon_active_maintenance: 'активний ремонт',
-    };
-
-    return this.getAggregateReadinessReasons(item).map((reason) => labels[reason] ?? reason);
+    return item.operationalState.reasonLabel ? [item.operationalState.reasonLabel] : [];
   }
 
-  private getAggregateReadinessReasons(item: FirePosition): string[] {
-    const reasons: string[] = [];
-
-    if (this.normalizeReadiness(item.readinessStatus) !== 'combat_ready') {
-      reasons.push(item.notReadyReason === 'threat' ? 'fp_threat' : 'fp_not_prepared');
-    }
-
-    const weapon = item.assignedWeapon;
-    if (!weapon) {
-      reasons.push('weapon_missing');
-      return reasons;
-    }
-
-    if (weapon.deploymentStatus !== 'at_fire_position') {
-      reasons.push('weapon_moving');
-    }
-
-    if (this.normalizeReadiness(weapon.readinessStatus) !== 'combat_ready') {
-      reasons.push('weapon_not_ready');
-    }
-
-    if (this.hasActiveWeaponMaintenance(weapon)) {
-      reasons.push('weapon_active_maintenance');
-    }
-
-    return reasons;
-  }
-
-  private hasActiveWeaponMaintenance(
-    weapon: NonNullable<FirePosition['assignedWeapon']>,
-  ): boolean {
-    return (
-      weapon.maintenanceStatus === 'opened' ||
-      weapon.maintenanceStatus === 'in_progress' ||
-      weapon.maintenanceStatus === 'pending' ||
-      weapon.maintenanceStatus === 'approved'
-    );
-  }
-
-  private normalizeReadiness(status: string | null | undefined): 'combat_ready' | 'not_combat_ready' {
+  private normalizeReadiness(
+    status: string | null | undefined,
+  ): 'combat_ready' | 'not_combat_ready' {
     return status === 'combat_ready' || status === 'ready' || status === 'ready_for_combat'
       ? 'combat_ready'
       : 'not_combat_ready';
@@ -659,7 +563,9 @@ private syncPageKindFromUrl(url: string): void {
       return [];
     }
 
-    const positionUnits = this.units.filter((unit) => ['battery', 'platoon', 'squad'].includes(normalizeUnitType(unit)));
+    const positionUnits = this.units.filter((unit) =>
+      ['battery', 'platoon', 'squad'].includes(normalizeUnitType(unit)),
+    );
 
     if (user.role === 'admin' || user.scope === 'main') {
       return positionUnits;
@@ -670,11 +576,15 @@ private syncPageKindFromUrl(url: string): void {
     }
 
     if (user.scope === 'battery') {
-      return positionUnits.filter((unit) => unit.id === user.unitId || unit.parentId === user.unitId);
+      return positionUnits.filter(
+        (unit) => unit.id === user.unitId || unit.parentId === user.unitId,
+      );
     }
 
     if (user.scope === 'division') {
-      return positionUnits.filter((unit) => unit.parentId === user.unitId || isUnitChildOf(this.units, unit.id, user.unitId!));
+      return positionUnits.filter(
+        (unit) => unit.parentId === user.unitId || isUnitChildOf(this.units, unit.id, user.unitId!),
+      );
     }
 
     return [];

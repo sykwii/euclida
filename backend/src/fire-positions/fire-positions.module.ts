@@ -11,9 +11,16 @@ import { EventLogsModule } from '../event-logs/event-logs.module';
 import { OperationalNotificationsModule } from '../operational-notifications/operational-notifications.module';
 
 @Module({
-  imports: [RealtimeModule, TypeOrmModule.forFeature([FirePosition, Depot]), AuthModule,
-  AccessScopeModule, EventLogsModule, OperationalNotificationsModule],
+  imports: [
+    RealtimeModule,
+    TypeOrmModule.forFeature([FirePosition, Depot]),
+    AuthModule,
+    AccessScopeModule,
+    EventLogsModule,
+    OperationalNotificationsModule,
+  ],
   controllers: [FirePositionsController],
   providers: [FirePositionsService],
+  exports: [FirePositionsService],
 })
 export class FirePositionsModule {}

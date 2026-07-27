@@ -10,6 +10,15 @@ export interface Depot {
   depotType: string;
 }
 
+export type FirePositionOperationalReasonCode =
+  | 'fp_threat'
+  | 'fp_damaged'
+  | 'fp_prohibited'
+  | 'fp_other'
+  | 'weapon_missing'
+  | 'weapon_not_ready'
+  | null;
+
 export interface FirePosition {
   id: string;
   name: string;
@@ -36,6 +45,12 @@ export interface FirePosition {
   hasSg: boolean;
   readinessStatus: string;
   notReadyReason: string | null;
+  operationalState: {
+    ready: boolean;
+    reasonCode: FirePositionOperationalReasonCode;
+    reasonLabel: string | null;
+    assignedWeapon: FirePosition['assignedWeapon'];
+  };
 
   completedVgzCount: number;
   personnelRotationStatus: string | null;
@@ -54,12 +69,12 @@ export interface FirePosition {
   maxSectorDistanceM?: number;
   aggregateReady?: boolean;
   aggregateReadinessReasons?: Array<
-    | 'fp_not_prepared'
+    | 'fp_damaged'
+    | 'fp_prohibited'
+    | 'fp_other'
     | 'fp_threat'
     | 'weapon_missing'
-    | 'weapon_moving'
     | 'weapon_not_ready'
-    | 'weapon_active_maintenance'
   >;
 
   assignedWeapon?: {

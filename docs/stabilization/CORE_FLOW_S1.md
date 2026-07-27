@@ -26,12 +26,12 @@ only `Призначити на ВП` and `Зняти з ВП`.
 
 ### Derived fire-position readiness
 
-A fire position is ready when all conditions are true:
-
-- its block reason is empty;
-- a weapon is canonically assigned through `currentFirePositionId`;
-- the weapon is `combat_ready`;
-- the weapon has no active maintenance.
+A fire position uses the pure `deriveFirePositionOperationalState` result. An
+explicit `threat`, `damaged`, `prohibited`, or `other` block wins. Otherwise, no
+canonical weapon produces `СГ не призначена`, a non-BG weapon produces
+`СГ НЕ БГ: <localized reason>`, and a `combat_ready` weapon makes the position
+ready. Weapon readiness is authoritative; derived state is never persisted by a
+read endpoint.
 
 Allowed position block reasons are `threat`, `damaged`, `prohibited`, `other`.
 Assignment never changes the block reason. No assigned weapon and a non-ready
@@ -66,22 +66,26 @@ compatibility but are no longer reachable from `complete()`.
 | Domain | Active | Legacy/read compatibility only |
 | --- | --- | --- |
 | Weapon readiness | `readiness_status`, `not_ready_reason` | old readiness values normalized by migration |
-| Assignment | `current_fire_position_id` | `fire_position_id`, `location_type` |
+| Assignment | `current_fire_position_id` with `deployment_status=at_fire_position` | `fire_position_id`, `location_type` |
 | Assignment history | completed `weapon_deployments` rows | `planned`, `moving`, `cancelled` rows and movement endpoints |
 | FP block | `not_ready_reason` | raw `readiness_status`, `has_sg` |
 | Shot kit | `selected_shot_configuration_id`, kit charges | `selected_zone_id`, shell/charge compatibility tables |
 | Consumption | posted `execution_records`, `stock_operation_id` | direct completion write-off helpers |
 
 `database/init/47_core_flow_s1_normalization.sql` is rerunnable. It normalizes
-weapon readiness/reasons and clears obsolete fire-position pseudo-reasons without
-dropping any historical table or column.
+weapon readiness/reasons and clears every fire-position pseudo-reason except the
+explicit block set `threat`, `damaged`, `prohibited`, `other`. In particular,
+stale `not_prepared` is cleared. It does not alter weapon assignment or discard
+historical tables.
 
 ## Suggestion algorithm
 
-The active artillery candidate query uses only canonically assigned weapons. It
-requires weapon BG, no active maintenance, no position block, no other active
-order on the position, target sector coverage, and a local depot. For each weapon
-model it loads shot kits and depot balances in batches, then validates:
+The active artillery candidate query uses only canonically assigned weapons and
+the same derived position helper as list, detail, map, and analytics responses.
+Rejected candidates retain the exact localized operational reason. It requires
+weapon BG, no position block, no other active order on the position, target
+sector coverage, and a local depot. For each weapon model it loads shot kits and
+depot balances, then validates:
 
 - kit is active and matches the weapon model;
 - complete shell, fuze, primer, and every charge component;
@@ -110,6 +114,23 @@ used to guess those values.
   raised stacking context.
 
 ## Verification transcript
+
+CORE-FLOW-S1.1 automated verification on 2026-07-27:
+
+```text
+backend: 14 suites, 81 tests passed
+frontend: 11 files, 44 tests passed
+backend production build: passed
+frontend production build: passed
+authenticated API smoke: passed
+```
+
+`backend/scripts/core-flow-s1-1-readiness-smoke.js` creates an isolated
+fire-position/weapon fixture, reuses a stocked depot only for the duration of the
+test, verifies list/card/map/suggestion consistency for BG, breakdown, restored
+BG, removal, and explicit threat states, then removes the fixture. Chrome UI
+automation could not complete because the Windows browser controller could not
+reliably establish the current URL; the API smoke and cleanup did complete.
 
 Automated verification on 2026-07-15:
 

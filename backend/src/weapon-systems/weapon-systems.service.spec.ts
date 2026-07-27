@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
@@ -11,13 +15,19 @@ import { WeaponMaintenance } from './weapon-maintenance.entity';
 import { WeaponSystem } from './weapon-system.entity';
 import { WeaponSystemsService } from './weapon-systems.service';
 
-type RepoMock<T> = Pick<Repository<T>, 'findOne' | 'find' | 'save' | 'update' | 'remove'>;
+type RepoMock<T> = Pick<
+  Repository<T>,
+  'findOne' | 'find' | 'save' | 'update' | 'remove'
+>;
 type ManagerMock = {
   getRepository: jest.Mock<RepoMock<unknown>, [unknown]>;
   create: jest.Mock<unknown, [unknown, unknown]>;
   save: jest.Mock<Promise<unknown>, [unknown, unknown]>;
 };
-type DataSourceMock = Pick<DataSource, 'transaction' | 'query' | 'getRepository'>;
+type DataSourceMock = Pick<
+  DataSource,
+  'transaction' | 'query' | 'getRepository'
+>;
 
 describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
   let weaponRepository: jest.Mocked<RepoMock<WeaponSystem>>;
@@ -47,11 +57,16 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
 
     manager = {
       getRepository: jest.fn((entity: unknown) => {
-        if (entity === WeaponSystem) return weaponRepository as RepoMock<unknown>;
-        if (entity === WeaponMaintenance) return maintenanceRepository as RepoMock<unknown>;
-        if (entity === WeaponDeployment) return deploymentRepository as RepoMock<unknown>;
-        if (entity === FirePosition) return firePositionRepository as RepoMock<unknown>;
-        if (entity === ServiceOrder) return serviceOrderRepository as RepoMock<unknown>;
+        if (entity === WeaponSystem)
+          return weaponRepository as RepoMock<unknown>;
+        if (entity === WeaponMaintenance)
+          return maintenanceRepository as RepoMock<unknown>;
+        if (entity === WeaponDeployment)
+          return deploymentRepository as RepoMock<unknown>;
+        if (entity === FirePosition)
+          return firePositionRepository as RepoMock<unknown>;
+        if (entity === ServiceOrder)
+          return serviceOrderRepository as RepoMock<unknown>;
         throw new Error('Unexpected repository');
       }),
       create: jest.fn((_entity, value) => value),
@@ -59,17 +74,26 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     };
 
     dataSource = {
-      transaction: jest.fn(async (callback: (tx: ManagerMock) => Promise<unknown>) =>
-        callback(manager),
+      transaction: jest.fn(
+        async (callback: (tx: ManagerMock) => Promise<unknown>) =>
+          callback(manager),
       ),
       query: jest.fn(),
-      getRepository: jest.fn((entity: unknown) => manager.getRepository(entity)),
+      getRepository: jest.fn((entity: unknown) =>
+        manager.getRepository(entity),
+      ),
     };
 
     service = new WeaponSystemsService(
       weaponRepository as Repository<WeaponSystem>,
-      { canAccessUnit: jest.fn(async () => true), getAllowedUnitIds: jest.fn() } as unknown as AccessScopeService,
-      { emitMany: jest.fn() } as unknown as RealtimeEventsService,
+      {
+        canAccessUnit: jest.fn(async () => true),
+        getAllowedUnitIds: jest.fn(),
+      } as unknown as AccessScopeService,
+      {
+        emitMany: jest.fn(),
+        emit: jest.fn(),
+      } as unknown as RealtimeEventsService,
       { create: jest.fn(async () => undefined) } as unknown as EventLogsService,
       dataSource as DataSource,
     );
@@ -77,9 +101,9 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
 
   it('rejects assigning a not combat ready weapon even when force is requested', async () => {
     const weapon = createWeapon({ readinessStatus: 'not_combat_ready' });
-    weaponRepository.findOne.mockResolvedValueOnce(
-      weapon,
-    ).mockResolvedValueOnce(weapon);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
     firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
 
     await expect(
@@ -126,7 +150,10 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
   });
 
   it('derives a missing fire position unit from the assigned weapon', async () => {
-    const weapon = createWeapon({ readinessStatus: 'combat_ready', unitId: 'unit-1' });
+    const weapon = createWeapon({
+      readinessStatus: 'combat_ready',
+      unitId: 'unit-1',
+    });
     const firePosition = createFirePosition({ unitId: null });
 
     weaponRepository.findOne.mockResolvedValue(weapon);
@@ -156,7 +183,10 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
   });
 
   it('rejects assignment to a fire position with a different unit', async () => {
-    const weapon = createWeapon({ readinessStatus: 'combat_ready', unitId: 'unit-1' });
+    const weapon = createWeapon({
+      readinessStatus: 'combat_ready',
+      unitId: 'unit-1',
+    });
     const firePosition = createFirePosition({ unitId: 'unit-2' });
 
     weaponRepository.findOne
@@ -255,7 +285,11 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       .mockResolvedValueOnce(null);
     firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
     deploymentRepository.findOne.mockResolvedValueOnce(
-      createDeployment({ status: 'planned', toLocationType: 'fire_position', toLocationId: 'fp-1' }),
+      createDeployment({
+        status: 'planned',
+        toLocationType: 'fire_position',
+        toLocationId: 'fp-1',
+      }),
     );
 
     await service.startMoveToFirePosition('weapon-1', {}, user);
@@ -277,7 +311,11 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       .mockResolvedValueOnce(null);
     firePositionRepository.findOne.mockResolvedValueOnce(createFirePosition());
     deploymentRepository.findOne.mockResolvedValueOnce(
-      createDeployment({ status: 'moving', toLocationType: 'fire_position', toLocationId: 'fp-1' }),
+      createDeployment({
+        status: 'moving',
+        toLocationType: 'fire_position',
+        toLocationId: 'fp-1',
+      }),
     );
 
     const result = await service.confirmFirePositionArrival(
@@ -359,7 +397,9 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       user,
     );
 
-    expect(weapon.maintenancePlannedEndAt?.toISOString()).toBe(expectedCompletedAt);
+    expect(weapon.maintenancePlannedEndAt?.toISOString()).toBe(
+      expectedCompletedAt,
+    );
     expect(manager.save).toHaveBeenCalledWith(
       WeaponMaintenance,
       expect.objectContaining({
@@ -433,14 +473,16 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       firePositionId: 'fp-1',
       locationType: 'fire_position',
     });
-    weaponRepository.findOne.mockResolvedValueOnce(
-      weapon,
-    ).mockResolvedValueOnce(weapon);
-    serviceOrderRepository.findOne.mockResolvedValueOnce({ id: 'order-1' } as ServiceOrder);
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+    serviceOrderRepository.findOne.mockResolvedValueOnce({
+      id: 'order-1',
+    } as ServiceOrder);
 
-    await expect(service.moveToReserve('weapon-1', user)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.moveToReserve('weapon-1', user),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('keeps reserve arrival transition behavior', async () => {
@@ -557,7 +599,9 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     } as WeaponSystem;
   }
 
-  function createFirePosition(overrides: Partial<FirePosition> = {}): FirePosition {
+  function createFirePosition(
+    overrides: Partial<FirePosition> = {},
+  ): FirePosition {
     return {
       id: 'fp-1',
       name: 'FP-1',
