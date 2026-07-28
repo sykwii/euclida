@@ -34,6 +34,10 @@ export interface WeaponSystem {
   maintenanceNote?: string | null;
   maintenanceRequestedByUserId?: string | null;
   maintenanceApprovedByUserId?: string | null;
+  isArchived?: boolean;
+  archivedAt?: string | null;
+  archivedByUserId?: string | null;
+  hasHistoricalReferences?: boolean;
   createdAt: string;
   updatedAt: string;
   locationType: string;
@@ -52,6 +56,16 @@ firePosition?: {
     description: string | null;
     result: string | null;
   }>;
+  activeMaintenance?: {
+    id: string;
+    reason: string;
+    status: 'opened' | 'in_progress';
+    startedAt: string;
+    expectedCompletedAt: string | null;
+    completedAt: string | null;
+    description: string | null;
+    result: string | null;
+  } | null;
   deployments?: Array<{
     id: string;
     fromLocationType: string;

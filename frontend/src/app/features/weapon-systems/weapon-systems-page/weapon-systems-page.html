@@ -204,7 +204,7 @@
         Причина НЕ БГ: {{ getReasonLabel(item.notReadyReason) || item.notReadyReason }}
       </div>
 
-      <section class="maintenance-box" *ngIf="hasOpenMaintenance(item) || item.maintenanceStatus">
+      <section class="maintenance-box" *ngIf="item.activeMaintenance">
         <span>ТО / ремонт</span>
         <strong>{{ getMaintenanceLabel(item) }}</strong>
         <small>{{ getMaintenanceDetails(item) }}</small>
@@ -303,10 +303,21 @@
         <button
           type="button"
           class="danger-button"
+          *ngIf="!item.hasHistoricalReferences"
           (click)="remove(item.id)"
           [disabled]="deletingId === item.id"
         >
           {{ deletingId === item.id ? 'Видалення...' : 'Видалити' }}
+        </button>
+
+        <button
+          type="button"
+          class="ghost-button"
+          *ngIf="item.hasHistoricalReferences"
+          (click)="archive(item)"
+          [disabled]="deletingId === item.id"
+        >
+          {{ deletingId === item.id ? 'Архівування...' : 'Архівувати' }}
         </button>
       </div>
     </article>

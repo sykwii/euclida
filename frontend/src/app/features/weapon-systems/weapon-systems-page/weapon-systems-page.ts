@@ -300,6 +300,16 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
       return;
     }
 
+    const item = this.items.find((weapon) => weapon.id === id);
+    if (
+      !item ||
+      item.hasHistoricalReferences ||
+      !confirm(
+        `Видалити ${item.callsign || item.serialNumber || 'СГ'} без можливості відновлення?`,
+      )
+    ) {
+      return;
+    }
     this.deletingId = id;
     this.service.delete(id).subscribe({
       next: () => {
@@ -309,6 +319,29 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
       error: (error) => {
         this.deletingId = '';
         this.fail(error, error?.error?.message || 'Не вдалося видалити СГ');
+      },
+    });
+  }
+
+  archive(item: WeaponSystem): void {
+    if (
+      this.deletingId ||
+      !confirm(
+        `Архівувати ${item.callsign || item.serialNumber || 'СГ'}? Історія ВГЗ буде збережена.`,
+      )
+    ) {
+      return;
+    }
+    this.deletingId = item.id;
+    this.service.archive(item.id).subscribe({
+      next: () => {
+        this.deletingId = '';
+        this.items = this.items.filter((weapon) => weapon.id !== item.id);
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        this.deletingId = '';
+        this.fail(error, error?.error?.message || 'Не вдалося архівувати СГ');
       },
     });
   }
@@ -418,9 +451,9 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
         ? new Date(this.maintenanceForm.expectedCompletedAt).toISOString()
         : undefined,
     }).subscribe({
-      next: () => {
+      next: (updated) => {
         this.closeMaintenanceModal();
-        this.afterAction();
+        this.afterAction(updated);
       },
       error: (error) => this.failAction(error, 'Не вдалося відкрити ремонт'),
     });
@@ -433,7 +466,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
 
     this.maintenanceId = item.id;
     this.service.startMaintenance(item.id).subscribe({
-      next: () => this.afterAction(),
+      next: (updated) => this.afterAction(updated),
       error: (error) => this.failAction(error, 'Не вдалося розпочати ТО'),
     });
   }
@@ -445,7 +478,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
 
     this.maintenanceId = item.id;
     this.service.completeMaintenance(item.id, { result: 'Завершено оператором' }).subscribe({
-      next: () => this.afterAction(),
+      next: (updated) => this.afterAction(updated),
       error: (error) => this.failAction(error, 'Не вдалося завершити ТО'),
     });
   }
@@ -457,7 +490,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
 
     this.maintenanceId = item.id;
     this.service.cancelMaintenance(item.id).subscribe({
-      next: () => this.afterAction(),
+      next: (updated) => this.afterAction(updated),
       error: (error) => this.failAction(error, 'Не вдалося скасувати ТО'),
     });
   }
@@ -617,14 +650,11 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   hasOpenMaintenance(item: WeaponSystem): boolean {
-    return item.maintenances?.some((maintenance) =>
-      ['opened', 'in_progress'].includes(maintenance.status),
-    ) || ['opened', 'in_progress'].includes(item.maintenanceStatus || '');
+    return item.activeMaintenance !== null && item.activeMaintenance !== undefined;
   }
 
   canOpenMaintenance(item: WeaponSystem): boolean {
-    const status = this.getMaintenanceStatus(item);
-    return !status || status === 'cancelled';
+    return !item.activeMaintenance;
   }
 
   canStartMaintenance(item: WeaponSystem): boolean {
@@ -788,21 +818,11 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
   }
 
   private getMaintenanceStatus(item: WeaponSystem): string | null {
-    const active = this.getDisplayedMaintenance(item);
-
-    return active?.status ?? item.maintenanceStatus ?? null;
+    return item.activeMaintenance?.status ?? null;
   }
 
   private getDisplayedMaintenance(item: WeaponSystem) {
-    const maintenances = item.maintenances ?? [];
-    return (
-      maintenances.find((maintenance) =>
-        ['opened', 'in_progress'].includes(maintenance.status),
-      ) ??
-      maintenances.find((maintenance) => maintenance.status === item.maintenanceStatus) ??
-      maintenances[0] ??
-      null
-    );
+    return item.activeMaintenance ?? null;
   }
 
   private formatDateTime(value: string): string {
@@ -837,12 +857,19 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     return null;
   }
 
-  private afterAction(): void {
+  private afterAction(updated?: WeaponSystem): void {
     this.movingId = '';
     this.maintenanceId = '';
     this.readinessId = '';
     this.maintenanceModalWeapon = null;
     this.errorMessage = '';
+    if (updated) {
+      this.items = this.items.map((item) =>
+        item.id === updated.id ? updated : item,
+      );
+      this.cdr.detectChanges();
+      return;
+    }
     this.load();
   }
 

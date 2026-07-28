@@ -27,6 +27,10 @@ import { UpdateWeaponDeploymentDto } from './dto/update-weapon-deployment.dto';
 import { UpdateWeaponSystemDto } from './dto/update-weapon-system.dto';
 import { WeaponDeployment } from './weapon-deployment.entity';
 import { WeaponMaintenance } from './weapon-maintenance.entity';
+import {
+  activeMaintenanceFromHistory,
+  getActiveMaintenance,
+} from './weapon-maintenance-state';
 import { WeaponSystem } from './weapon-system.entity';
 
 type WeaponReadinessStatus = 'combat_ready' | 'not_combat_ready';
@@ -96,7 +100,10 @@ export class WeaponSystemsService implements OnModuleInit {
       ADD COLUMN IF NOT EXISTS maintenance_requested_by_user_id UUID,
       ADD COLUMN IF NOT EXISTS maintenance_approved_by_user_id UUID,
       ADD COLUMN IF NOT EXISTS deployment_status VARCHAR(40) NOT NULL DEFAULT 'reserve_area',
-      ADD COLUMN IF NOT EXISTS current_fire_position_id UUID
+      ADD COLUMN IF NOT EXISTS current_fire_position_id UUID,
+      ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS archived_by_user_id UUID
     `);
   }
 
@@ -107,11 +114,16 @@ export class WeaponSystemsService implements OnModuleInit {
       return [];
     }
 
-    return this.repository.find({
-      where: allowedUnitIds === null ? {} : { unitId: In(allowedUnitIds) },
+    const items = await this.repository.find({
+      where:
+        allowedUnitIds === null
+          ? { isArchived: false }
+          : { unitId: In(allowedUnitIds), isArchived: false },
       relations: this.weaponRelations(),
       order: { createdAt: 'DESC' },
     });
+    await this.decorateWeaponResponses(items);
+    return items;
   }
 
   async findOne(id: string, user: AuthUser): Promise<WeaponSystem> {
@@ -124,6 +136,7 @@ export class WeaponSystemsService implements OnModuleInit {
       throw new NotFoundException('СГ не знайдено');
     }
     await this.ensureCanUseUnit(user, item.unitId);
+    await this.decorateWeaponResponses([item]);
     return item;
   }
 
@@ -481,10 +494,11 @@ export class WeaponSystemsService implements OnModuleInit {
         user,
       );
       const previousReadinessStatus = weapon.readinessStatus;
-      await this.ensureNoOpenMaintenance(
-        manager.getRepository(WeaponMaintenance),
-        weapon.id,
-      );
+      if (await getActiveMaintenance(this.dataSource, weapon.id, manager)) {
+        throw new BadRequestException(
+          'Для цієї СГ вже є активне ТО або ремонт',
+        );
+      }
 
       const reason = this.normalizeMaintenanceReason(body.reason);
       const startedAt = this.parseDate(body.startedAt);
@@ -518,8 +532,8 @@ export class WeaponSystemsService implements OnModuleInit {
       weapon.maintenanceRequestedByUserId = user.sub;
       weapon.maintenanceApprovedByUserId = null;
 
-      await manager.save(WeaponMaintenance, maintenance);
       await manager.save(WeaponSystem, weapon);
+      await manager.save(WeaponMaintenance, maintenance);
       return { weapon, previousReadinessStatus };
     });
 
@@ -547,10 +561,17 @@ export class WeaponSystemsService implements OnModuleInit {
         id,
         user,
       );
-      const maintenance = await this.findOpenMaintenance(
-        manager.getRepository(WeaponMaintenance),
+      const maintenance = await getActiveMaintenance(
+        this.dataSource,
         weapon.id,
+        manager,
       );
+      if (!maintenance) {
+        throw new BadRequestException('Немає активного ТО або ремонту');
+      }
+      if (maintenance.status !== 'opened') {
+        throw new BadRequestException('ТО або ремонт вже розпочато');
+      }
 
       maintenance.status = 'in_progress';
       weapon.maintenanceStatus = 'in_progress';
@@ -579,14 +600,18 @@ export class WeaponSystemsService implements OnModuleInit {
         id,
         user,
       );
-      const maintenance = await this.findOpenMaintenance(
-        manager.getRepository(WeaponMaintenance),
+      const maintenance = await getActiveMaintenance(
+        this.dataSource,
         weapon.id,
+        manager,
       );
+      if (!maintenance) {
+        throw new BadRequestException('Немає активного ТО або ремонту');
+      }
 
       maintenance.status = 'cancelled';
       maintenance.completedAt = new Date();
-      weapon.maintenanceStatus = 'cancelled';
+      weapon.maintenanceStatus = null;
       weapon.maintenanceActualEndAt = maintenance.completedAt;
       await manager.save(WeaponMaintenance, maintenance);
       await manager.save(WeaponSystem, weapon);
@@ -611,12 +636,16 @@ export class WeaponSystemsService implements OnModuleInit {
         id,
         user,
       );
-      const maintenance = await this.findOpenMaintenance(
-        manager.getRepository(WeaponMaintenance),
+      const maintenance = await getActiveMaintenance(
+        this.dataSource,
         weapon.id,
+        manager,
       );
+      if (!maintenance) {
+        throw new BadRequestException('Немає активного ТО або ремонту');
+      }
 
-      if (maintenance.status === 'opened') {
+      if (maintenance.status !== 'in_progress') {
         throw new BadRequestException('ТО ще не розпочато');
       }
 
@@ -663,12 +692,16 @@ export class WeaponSystemsService implements OnModuleInit {
         id,
         user,
       );
-      const maintenance = await this.findOpenMaintenance(
-        manager.getRepository(WeaponMaintenance),
+      const maintenance = await getActiveMaintenance(
+        this.dataSource,
         weapon.id,
+        manager,
       );
+      if (!maintenance) {
+        throw new BadRequestException('Немає активного ТО або ремонту');
+      }
 
-      if (maintenance.status === 'opened') {
+      if (maintenance.status !== 'in_progress') {
         throw new BadRequestException('ТО ще не розпочато');
       }
 
@@ -676,7 +709,7 @@ export class WeaponSystemsService implements OnModuleInit {
       maintenance.completedAt = new Date();
       maintenance.completedByUserId = user.sub;
       maintenance.result = body.result?.trim() || null;
-      weapon.maintenanceStatus = 'completed';
+      weapon.maintenanceStatus = null;
       weapon.maintenanceActualEndAt = maintenance.completedAt;
       weapon.maintenanceNote = maintenance.result ?? weapon.maintenanceNote;
       weapon.readinessStatus = 'not_combat_ready';
@@ -700,6 +733,15 @@ export class WeaponSystemsService implements OnModuleInit {
   ): Promise<WeaponSystem> {
     this.ensureMaintenanceFieldOperator(user);
     const item = await this.findOne(id, user);
+    if (
+      this.normalizeWeaponReadiness(body.readinessStatus) ===
+        'combat_ready' &&
+      (await getActiveMaintenance(this.dataSource, item.id))
+    ) {
+      throw new BadRequestException(
+        'Неможливо підтвердити БГ під час активного ТО або ремонту',
+      );
+    }
     const previousReadinessStatus = item.readinessStatus;
     item.readinessStatus = this.normalizeWeaponReadiness(body.readinessStatus);
     item.notReadyReason = this.normalizeWeaponReason(
@@ -741,13 +783,61 @@ export class WeaponSystemsService implements OnModuleInit {
   }
 
   async remove(id: string, user: AuthUser): Promise<void> {
-    const item = await this.findOne(id, user);
+    let item: WeaponSystem;
+    try {
+      item = await this.dataSource.transaction(async (manager) => {
+        const locked = await this.lockWeapon(
+          manager.getRepository(WeaponSystem),
+          id,
+          user,
+        );
+        if (await this.hasHistoricalReferences(locked.id, manager)) {
+          throw new ConflictException(
+            'СГ використовується в історії ВГЗ і не може бути видалена. Архівуйте її.',
+          );
+        }
+        await manager.remove(WeaponSystem, locked);
+        return locked;
+      });
+    } catch (error) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+      throw new ConflictException(
+        'СГ використовується в історії ВГЗ і не може бути видалена. Архівуйте її.',
+      );
+    }
+
     const previousFirePositionId =
       item.currentFirePositionId ?? item.firePositionId;
-    await this.repository.remove(item);
     await this.syncFirePositionWeaponState(previousFirePositionId);
     await this.writeWeaponEvent(item, user, 'deleted');
     this.emitWeaponChanged('deleted', item.id, [previousFirePositionId]);
+  }
+
+  async archive(id: string, user: AuthUser): Promise<WeaponSystem> {
+    const item = await this.dataSource.transaction(async (manager) => {
+      const weapon = await this.lockWeapon(
+        manager.getRepository(WeaponSystem),
+        id,
+        user,
+      );
+      if (weapon.isArchived) {
+        return weapon;
+      }
+      weapon.isArchived = true;
+      weapon.archivedAt = new Date();
+      weapon.archivedByUserId = user.sub;
+      return manager.save(WeaponSystem, weapon);
+    });
+
+    await this.writeWeaponEvent(item, user, 'updated');
+    this.emitWeaponChanged('updated', item.id, [item.currentFirePositionId]);
+    return this.findOne(item.id, user);
   }
 
   private async planDeployment(
@@ -1502,20 +1592,7 @@ export class WeaponSystemsService implements OnModuleInit {
   }
 
   private hasActiveMaintenance(weapon: WeaponSystem): boolean {
-    if (
-      weapon.maintenanceStatus === 'opened' ||
-      weapon.maintenanceStatus === 'in_progress' ||
-      weapon.maintenanceStatus === 'pending' ||
-      weapon.maintenanceStatus === 'approved'
-    ) {
-      return true;
-    }
-
-    return (
-      weapon.maintenances?.some(
-        (item) => item.status === 'opened' || item.status === 'in_progress',
-      ) ?? false
-    );
+    return activeMaintenanceFromHistory(weapon.maintenances) !== null;
   }
 
   private getCurrentLocationType(weapon: WeaponSystem): DeploymentLocationType {
@@ -1551,6 +1628,75 @@ export class WeaponSystemsService implements OnModuleInit {
       maintenances: true,
       deployments: true,
     };
+  }
+
+  private async decorateWeaponResponses(
+    items: WeaponSystem[],
+  ): Promise<void> {
+    if (items.length === 0) {
+      return;
+    }
+    const referencedRows = await this.dataSource.query(
+      `
+        SELECT DISTINCT weapon_system_id
+        FROM (
+          SELECT selected_weapon_system_id AS weapon_system_id
+          FROM service_order_deliveries
+          WHERE selected_weapon_system_id = ANY($1::uuid[])
+          UNION ALL
+          SELECT weapon_system_id FROM fire_missions
+          WHERE weapon_system_id = ANY($1::uuid[])
+          UNION ALL
+          SELECT weapon_system_id FROM fire_position_weapons
+          WHERE weapon_system_id = ANY($1::uuid[])
+          UNION ALL
+          SELECT weapon_system_id FROM weapon_deployments
+          WHERE weapon_system_id = ANY($1::uuid[])
+          UNION ALL
+          SELECT weapon_system_id FROM weapon_maintenances
+          WHERE weapon_system_id = ANY($1::uuid[])
+        ) reference_rows
+      `,
+      [items.map((item) => item.id)],
+    );
+    const referencedIds = new Set(
+      (Array.isArray(referencedRows) ? referencedRows : []).map(
+        (row: { weapon_system_id: string }) => row.weapon_system_id,
+      ),
+    );
+
+    for (const item of items) {
+      const activeMaintenance = activeMaintenanceFromHistory(
+        item.maintenances,
+      );
+      item.activeMaintenance = activeMaintenance;
+      item.maintenanceStatus = activeMaintenance?.status ?? null;
+      item.hasHistoricalReferences = referencedIds.has(item.id);
+    }
+  }
+
+  private async hasHistoricalReferences(
+    weaponId: string,
+    manager: DataSource['manager'],
+  ): Promise<boolean> {
+    const rows = await manager.query(
+      `
+        SELECT EXISTS (
+          SELECT 1 FROM service_order_deliveries
+          WHERE selected_weapon_system_id = $1
+          UNION ALL
+          SELECT 1 FROM fire_missions WHERE weapon_system_id = $1
+          UNION ALL
+          SELECT 1 FROM fire_position_weapons WHERE weapon_system_id = $1
+          UNION ALL
+          SELECT 1 FROM weapon_deployments WHERE weapon_system_id = $1
+          UNION ALL
+          SELECT 1 FROM weapon_maintenances WHERE weapon_system_id = $1
+        ) AS referenced
+      `,
+      [weaponId],
+    );
+    return rows?.[0]?.referenced === true;
   }
 
   private async ensureCanUseUnit(

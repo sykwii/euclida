@@ -224,7 +224,9 @@ export class ServiceOrderSuggestionsService {
     const weaponRepository = this.dataSource.getRepository(WeaponSystem);
     const weapons = await weaponRepository.find({
       where:
-        allowedUnitIds === null ? {} : { unitId: In(allowedUnitIds) },
+        allowedUnitIds === null
+          ? { isArchived: false }
+          : { unitId: In(allowedUnitIds), isArchived: false },
       relations: {
         weaponModel: true,
         unit: true,
@@ -644,17 +646,8 @@ export class ServiceOrderSuggestionsService {
     if (!weapon) {
       return false;
     }
-    const activeStatuses = new Set([
-      'opened',
-      'in_progress',
-      'pending',
-      'approved',
-    ]);
-    return (
-      activeStatuses.has(weapon.maintenanceStatus ?? '') ||
-      (weapon.maintenances ?? []).some((item) =>
-        activeStatuses.has(item.status),
-      )
+    return (weapon.maintenances ?? []).some(
+      (item) => item.status === 'opened' || item.status === 'in_progress',
     );
   }
 

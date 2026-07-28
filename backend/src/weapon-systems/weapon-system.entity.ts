@@ -86,6 +86,15 @@ export class WeaponSystem {
   @Column({ name: 'maintenance_approved_by_user_id', type: 'uuid', nullable: true })
   maintenanceApprovedByUserId!: string | null;
 
+  @Column({ name: 'is_archived', type: 'boolean', default: false })
+  isArchived!: boolean;
+
+  @Column({ name: 'archived_at', type: 'timestamp', nullable: true })
+  archivedAt!: Date | null;
+
+  @Column({ name: 'archived_by_user_id', type: 'uuid', nullable: true })
+  archivedByUserId!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
@@ -107,4 +116,8 @@ firePositionId!: string | null;
 
   @OneToMany(() => WeaponDeployment, (item) => item.weaponSystem)
   deployments!: WeaponDeployment[];
+
+  activeMaintenance?: WeaponMaintenance | null;
+
+  hasHistoricalReferences?: boolean;
 }

@@ -46,7 +46,7 @@ import { ShotConfiguration } from '../shot-configurations/shot-configuration.ent
 import { StockMovement } from '../stock-movements/stock-movement.entity';
 import { Unit } from '../units/unit.entity';
 import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
-import { WeaponMaintenance } from '../weapon-systems/weapon-maintenance.entity';
+import { getActiveMaintenance } from '../weapon-systems/weapon-maintenance-state';
 
 export interface ServiceOrderMapResult {
   id: string;
@@ -2436,20 +2436,7 @@ async selectAirAsset(
       throw new BadRequestException('СГ не перебуває у стані БГ');
     }
 
-    const activeMaintenance = await this.dataSource.getRepository(WeaponMaintenance).findOne({
-      where: {
-        weaponSystemId: weapon.id,
-        status: In(['opened', 'in_progress']),
-      },
-    });
-
-    if (
-      activeMaintenance ||
-      weapon.maintenanceStatus === 'opened' ||
-      weapon.maintenanceStatus === 'in_progress' ||
-      weapon.maintenanceStatus === 'pending' ||
-      weapon.maintenanceStatus === 'approved'
-    ) {
+    if (await getActiveMaintenance(this.dataSource, weapon.id)) {
       throw new BadRequestException('Для СГ активне ТО або ремонт');
     }
   }

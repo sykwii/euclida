@@ -38,6 +38,10 @@ export class WeaponSystemsService {
     return this.api.delete<void>(`/weapon-systems/${id}`);
   }
 
+  archive(id: string): Observable<WeaponSystem> {
+    return this.api.post<WeaponSystem>(`/weapon-systems/${id}/archive`, {});
+  }
+
   moveToReserve(id: string): Observable<WeaponSystem> {
     return this.api.post<WeaponSystem>(`/weapon-systems/${id}/move-to-reserve`, {});
   }

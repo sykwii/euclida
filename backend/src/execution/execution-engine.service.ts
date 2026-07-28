@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entity';
@@ -19,8 +19,8 @@ import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { ServiceOrder } from '../service-orders/service-order.entity';
 import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { StockEngineService } from '../stock-engine/stock-engine.service';
-import { WeaponMaintenance } from '../weapon-systems/weapon-maintenance.entity';
 import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
+import { getActiveMaintenance } from '../weapon-systems/weapon-maintenance-state';
 import type { CreateExecutionRecordDto } from './dto/create-execution-record.dto';
 import type { ExecutionHandler } from './execution-handler.interface';
 import type { ExecutionPipelineContext } from './execution-pipeline-context.type';
@@ -667,16 +667,7 @@ export class ExecutionEngineService {
         });
       }
 
-      const maintenance = await this.dataSource.getRepository(WeaponMaintenance).findOne({
-        where: { weaponSystemId: weapon.id, status: In(['opened', 'in_progress']) },
-      });
-      if (
-        maintenance ||
-        weapon.maintenanceStatus === 'opened' ||
-        weapon.maintenanceStatus === 'in_progress' ||
-        weapon.maintenanceStatus === 'pending' ||
-        weapon.maintenanceStatus === 'approved'
-      ) {
+      if (await getActiveMaintenance(this.dataSource, weapon.id)) {
         reasons.push({
           code: 'weapon_active_maintenance',
           message: 'Для СГ активне ТО або ремонт',

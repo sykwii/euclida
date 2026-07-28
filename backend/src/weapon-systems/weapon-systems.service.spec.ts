@@ -23,6 +23,8 @@ type ManagerMock = {
   getRepository: jest.Mock<RepoMock<unknown>, [unknown]>;
   create: jest.Mock<unknown, [unknown, unknown]>;
   save: jest.Mock<Promise<unknown>, [unknown, unknown]>;
+  remove: jest.Mock<Promise<unknown>, [unknown, unknown]>;
+  query: jest.Mock<Promise<unknown[]>, [string, unknown[]]>;
 };
 type DataSourceMock = Pick<
   DataSource,
@@ -71,6 +73,8 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       }),
       create: jest.fn((_entity, value) => value),
       save: jest.fn(async (_entity, value) => value),
+      remove: jest.fn(async (_entity, value) => value),
+      query: jest.fn(async () => [{ referenced: false }]),
     };
 
     dataSource = {
@@ -78,7 +82,7 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
         async (callback: (tx: ManagerMock) => Promise<unknown>) =>
           callback(manager),
       ),
-      query: jest.fn(),
+      query: jest.fn(async () => []),
       getRepository: jest.fn((entity: unknown) =>
         manager.getRepository(entity),
       ),
@@ -377,11 +381,17 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
 
     expect(weapon.readinessStatus).toBe('not_combat_ready');
     expect(weapon.notReadyReason).toBe('breakdown');
-    expect(weapon.maintenanceStatus).toBe('opened');
     expect(manager.save).toHaveBeenCalledWith(
       WeaponMaintenance,
       expect.objectContaining({ status: 'opened', reason: 'breakdown' }),
     );
+    const weaponSaveOrder = manager.save.mock.invocationCallOrder.find(
+      (_, index) => manager.save.mock.calls[index][0] === WeaponSystem,
+    );
+    const maintenanceSaveOrder = manager.save.mock.invocationCallOrder.find(
+      (_, index) => manager.save.mock.calls[index][0] === WeaponMaintenance,
+    );
+    expect(weaponSaveOrder).toBeLessThan(maintenanceSaveOrder!);
   });
 
   it('opens maintenance with explicit expected completion date', async () => {
@@ -420,7 +430,6 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     await service.startMaintenance('weapon-1', user);
 
     expect(maintenance.status).toBe('in_progress');
-    expect(weapon.maintenanceStatus).toBe('in_progress');
   });
 
   it('cancels active maintenance', async () => {
@@ -433,7 +442,7 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     await service.cancelMaintenance('weapon-1', user);
 
     expect(maintenance.status).toBe('cancelled');
-    expect(weapon.maintenanceStatus).toBe('cancelled');
+    expect(weapon.maintenanceStatus).toBeNull();
   });
 
   it('rejects duplicate active maintenance', async () => {
@@ -557,6 +566,112 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
     expect(result.notReadyReason).toBeNull();
   });
 
+  it('ignores stale maintenance cache when no active row exists', async () => {
+    const weapon = createWeapon({
+      maintenanceStatus: 'opened',
+      maintenances: [createMaintenance({ status: 'completed' })],
+    });
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+
+    const result = await service.findOne(weapon.id, user);
+
+    expect(result.activeMaintenance).toBeNull();
+    expect(result.maintenanceStatus).toBeNull();
+  });
+
+  it('returns the latest active maintenance as canonical state', async () => {
+    const opened = createMaintenance({
+      id: 'maintenance-old',
+      status: 'opened',
+      createdAt: new Date('2026-07-14T00:00:00.000Z'),
+    });
+    const active = createMaintenance({
+      id: 'maintenance-new',
+      status: 'in_progress',
+      createdAt: new Date('2026-07-15T00:00:00.000Z'),
+    });
+    const weapon = createWeapon({
+      maintenanceStatus: null,
+      maintenances: [opened, active],
+    });
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+
+    const result = await service.findOne(weapon.id, user);
+
+    expect(result.activeMaintenance).toBe(active);
+    expect(result.maintenanceStatus).toBe('in_progress');
+  });
+
+  it('rejects deleting a historically referenced weapon with exact conflict', async () => {
+    const weapon = createWeapon();
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+    manager.query.mockResolvedValueOnce([{ referenced: true }]);
+
+    await expect(service.remove(weapon.id, user)).rejects.toMatchObject({
+      status: 409,
+      message:
+        'СГ використовується в історії ВГЗ і не може бути видалена. Архівуйте її.',
+    });
+    expect(manager.remove).not.toHaveBeenCalled();
+  });
+
+  it('deletes a never-used weapon', async () => {
+    const weapon = createWeapon();
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+
+    await service.remove(weapon.id, user);
+
+    expect(manager.remove).toHaveBeenCalledWith(WeaponSystem, weapon);
+  });
+
+  it('does not leak a database error if a reference appears during deletion', async () => {
+    const weapon = createWeapon();
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon);
+    manager.remove.mockRejectedValueOnce(new Error('foreign key violation'));
+
+    await expect(service.remove(weapon.id, user)).rejects.toMatchObject({
+      status: 409,
+      message:
+        'СГ використовується в історії ВГЗ і не може бути видалена. Архівуйте її.',
+    });
+  });
+
+  it('archives a referenced weapon without deleting history', async () => {
+    const weapon = createWeapon();
+    const archived = createWeapon({
+      isArchived: true,
+      archivedByUserId: user.sub,
+      archivedAt: new Date(),
+    });
+    weaponRepository.findOne
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(weapon)
+      .mockResolvedValueOnce(archived);
+    manager.save.mockResolvedValueOnce(archived);
+
+    const result = await service.archive(weapon.id, user);
+
+    expect(manager.remove).not.toHaveBeenCalled();
+    expect(manager.save).toHaveBeenCalledWith(
+      WeaponSystem,
+      expect.objectContaining({
+        isArchived: true,
+        archivedByUserId: user.sub,
+      }),
+    );
+    expect(result.isArchived).toBe(true);
+  });
+
   function createRepoMock<T>(): jest.Mocked<RepoMock<T>> {
     return {
       findOne: jest.fn(),
@@ -588,6 +703,9 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       maintenanceNote: null,
       maintenanceRequestedByUserId: null,
       maintenanceApprovedByUserId: null,
+      isArchived: false,
+      archivedAt: null,
+      archivedByUserId: null,
       createdAt: new Date('2026-07-14T00:00:00.000Z'),
       updatedAt: new Date('2026-07-14T00:00:00.000Z'),
       locationType: 'reserve',

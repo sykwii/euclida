@@ -842,6 +842,7 @@ export class FirePositionsService implements OnModuleInit {
       where: {
         currentFirePositionId: firePositionId,
         deploymentStatus: 'at_fire_position',
+        isArchived: false,
       },
       relations: {
         weaponModel: true,
@@ -862,6 +863,7 @@ export class FirePositionsService implements OnModuleInit {
       where: {
         currentFirePositionId: In(firePositionIds),
         deploymentStatus: 'at_fire_position',
+        isArchived: false,
       },
       relations: {
         weaponModel: true,
@@ -892,6 +894,7 @@ export class FirePositionsService implements OnModuleInit {
         where: {
           deploymentStatus: 'at_fire_position',
           unitId: In(allowedUnitIds),
+          isArchived: false,
         },
         select: { currentFirePositionId: true },
       });

@@ -71,6 +71,14 @@ export class WeaponSystemsController {
     return this.service.remove(id, user);
   }
 
+  @UseGuards(WriteAccessGuard)
+  @Post(':id/archive')
+  archive(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<WeaponSystem> {
+    return this.service.archive(id, user);
+  }
 
   @UseGuards(WriteAccessGuard)
   /** @deprecated Active UI uses the canonical planned deployment flow. */

@@ -30,7 +30,10 @@ describe('WeaponSystemsPage', () => {
   });
 
   it('shows only opened maintenance actions for opened maintenance', () => {
-    const item = createWeapon({ maintenanceStatus: 'opened' });
+    const item = createWeapon({
+      maintenanceStatus: 'opened',
+      activeMaintenance: createMaintenance('opened'),
+    });
 
     expect(component.canOpenMaintenance(item)).toBe(false);
     expect(component.canStartMaintenance(item)).toBe(true);
@@ -39,7 +42,10 @@ describe('WeaponSystemsPage', () => {
   });
 
   it('shows only completion actions for in-progress maintenance', () => {
-    const item = createWeapon({ maintenanceStatus: 'in_progress' });
+    const item = createWeapon({
+      maintenanceStatus: 'in_progress',
+      activeMaintenance: createMaintenance('in_progress'),
+    });
 
     expect(component.canOpenMaintenance(item)).toBe(false);
     expect(component.canStartMaintenance(item)).toBe(false);
@@ -51,17 +57,33 @@ describe('WeaponSystemsPage', () => {
     const item = createWeapon({
       readinessStatus: 'not_combat_ready',
       maintenanceStatus: 'completed',
+      activeMaintenance: null,
     });
 
     expect(component.getReadinessLabel(item.readinessStatus)).toBe('НЕ БГ');
-    expect(component.canOpenMaintenance(item)).toBe(false);
+    expect(component.canOpenMaintenance(item)).toBe(true);
     expect(component.canStartMaintenance(item)).toBe(false);
     expect(component.canCompleteMaintenance(item)).toBe(false);
     expect(component.canCancelMaintenance(item)).toBe(false);
   });
 
   it('allows opening new maintenance after cancelled maintenance', () => {
-    const item = createWeapon({ maintenanceStatus: 'cancelled' });
+    const item = createWeapon({
+      maintenanceStatus: 'cancelled',
+      activeMaintenance: null,
+    });
+
+    expect(component.canOpenMaintenance(item)).toBe(true);
+    expect(component.canStartMaintenance(item)).toBe(false);
+    expect(component.canCompleteMaintenance(item)).toBe(false);
+    expect(component.canCancelMaintenance(item)).toBe(false);
+  });
+
+  it('ignores a stale active maintenance cache', () => {
+    const item = createWeapon({
+      maintenanceStatus: 'opened',
+      activeMaintenance: null,
+    });
 
     expect(component.canOpenMaintenance(item)).toBe(true);
     expect(component.canStartMaintenance(item)).toBe(false);
@@ -82,6 +104,11 @@ function createWeapon(overrides: Partial<Parameters<WeaponSystemsPage['canOpenMa
     deploymentStatus: 'reserve_area',
     currentFirePositionId: null,
     maintenanceStatus: null,
+    activeMaintenance: null,
+    isArchived: false,
+    archivedAt: null,
+    archivedByUserId: null,
+    hasHistoricalReferences: false,
     createdAt: '2026-07-14T00:00:00.000Z',
     updatedAt: '2026-07-14T00:00:00.000Z',
     locationType: 'reserve',
@@ -89,5 +116,18 @@ function createWeapon(overrides: Partial<Parameters<WeaponSystemsPage['canOpenMa
     maintenances: [],
     deployments: [],
     ...overrides,
+  };
+}
+
+function createMaintenance(status: 'opened' | 'in_progress') {
+  return {
+    id: 'maintenance-1',
+    reason: 'scheduled',
+    status,
+    startedAt: '2026-07-14T00:00:00.000Z',
+    expectedCompletedAt: null,
+    completedAt: null,
+    description: null,
+    result: null,
   };
 }
