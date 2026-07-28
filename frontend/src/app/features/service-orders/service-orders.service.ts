@@ -172,8 +172,21 @@ export interface ServiceOrderAirPayloadVariant {
 
 export interface ServiceOrderSuggestion {
   executorType: 'fire_position' | 'air_asset_position';
+  candidateType?: 'fire_position' | 'standalone_weapon' | 'air_asset_position';
+  stableId?: string;
   firePositionId?: string | null;
   weaponSystemId?: string;
+  weaponModelId?: string;
+  callsign?: string | null;
+  unitId?: string | null;
+  ready?: boolean;
+  score?: number;
+  rank?: number;
+  stockSummary?: {
+    sufficient: boolean;
+    requiredShots: number;
+    availableShots: number;
+  };
   weapon?: {
     id: string;
     callsign: string | null;
@@ -193,7 +206,7 @@ export interface ServiceOrderSuggestion {
   firePosition?: {
     id: string;
     name: string;
-    readinessStatus: string;
+    readinessStatus?: string;
     completedVgzCount: number;
     unitId?: string | null;
     unit?: {
@@ -232,6 +245,7 @@ export interface ServiceOrderSuggestion {
   variants: ServiceOrderSuggestionVariant[];
   payloadVariants?: ServiceOrderAirPayloadVariant[];
   rejectionReasons?: string[];
+  rejectionReasonLabels?: string[];
 }
 
 @Injectable({ providedIn: 'root' })

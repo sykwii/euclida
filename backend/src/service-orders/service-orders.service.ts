@@ -636,7 +636,8 @@ export class ServiceOrdersService {
       );
     }
 
-    return this.suggestionsService.getSuggestions(order);
+    const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
+    return this.suggestionsService.getSuggestions(order, allowedUnitIds);
   }
 
   async selectPosition(
@@ -662,28 +663,40 @@ export class ServiceOrdersService {
       throw new BadRequestException('Р’РёР±С–СЂ РІРёРєРѕРЅР°РІС†СЏ РјРѕР¶Р»РёРІРёР№ С‚С–Р»СЊРєРё РґР»СЏ С‡РµСЂРЅРµС‚РєРё, РїСЂРѕРїРѕР·РёС†С–С— Р°Р±Рѕ РІС–РґС…РёР»РµРЅРѕС— Р·Р°СЏРІРєРё');
     }
 
-    const activeStatuses = [
-      'proposed',
-      'sent',
-      'sent_to_division',
-      'sent_to_battery',
-      'accepted',
-      'in_progress',
-    ];
+    if (!body.shotConfigurationId) {
+      throw new BadRequestException('Потрібно обрати комплект пострілу');
+    }
 
-    const activeOrder = await this.repository
-      .createQueryBuilder('order')
-      .where('order.selectedFirePositionId = :firePositionId', {
-        firePositionId: body.firePositionId,
-      })
-      .andWhere('order.status IN (:...statuses)', {
-        statuses: activeStatuses,
-      })
-      .andWhere('order.id <> :orderId', { orderId: order.id })
-      .getOne();
-
-    if (activeOrder) {
-      throw new BadRequestException('РќР° С†СЋ С‚РѕС‡РєСѓ РІР¶Рµ С” Р°РєС‚РёРІРЅРµ Р·Р°РІРґР°РЅРЅСЏ');
+    const allowedUnitIds = await this.accessScope.getAllowedUnitIds(user);
+    const suggestions = await this.suggestionsService.getSuggestions(
+      order,
+      allowedUnitIds,
+    );
+    const selectedCandidate = suggestions.find(
+      (candidate) =>
+        candidate.candidateType === 'fire_position' &&
+        candidate.firePositionId === body.firePositionId &&
+        candidate.weaponSystemId === body.weaponSystemId,
+    );
+    if (!selectedCandidate) {
+      throw new BadRequestException(
+        'Обраний виконавець відсутній серед дозволених кандидатів',
+      );
+    }
+    if (!selectedCandidate.ready) {
+      throw new BadRequestException(
+        selectedCandidate.rejectionReasonLabels?.join('; ') ||
+          'Обраний виконавець не готовий',
+      );
+    }
+    if (
+      !selectedCandidate.compatibleKits?.some(
+        (kit) => kit.shotConfigurationId === body.shotConfigurationId,
+      )
+    ) {
+      throw new BadRequestException(
+        'Комплект пострілу несумісний з обраним виконавцем',
+      );
     }
 
     const firePosition = await this.dataSource.getRepository(FirePosition).findOne({
@@ -699,21 +712,16 @@ export class ServiceOrdersService {
     }
 
     const selectedWeapon = await this.dataSource.getRepository(WeaponSystem).findOne({
-      where: [
-        {
-          id: body.weaponSystemId,
-          currentFirePositionId: firePosition.id,
-        },
-        {
-          id: body.weaponSystemId,
-          firePositionId: firePosition.id,
-        },
-      ],
+      where: {
+        id: body.weaponSystemId,
+        currentFirePositionId: firePosition.id,
+        deploymentStatus: 'at_fire_position',
+      },
     });
 
     if (
       !selectedWeapon ||
-      !['ready', 'combat_ready', 'ready_for_combat'].includes(selectedWeapon.readinessStatus)
+      selectedWeapon.readinessStatus !== 'combat_ready'
     ) {
       throw new BadRequestException('Немає БГ СГ');
     }
@@ -1698,13 +1706,53 @@ async selectAirAsset(
       ),
     );
 
-    return this.resolveShotConfiguration(manager, firePosition, {
-      shotConfigurationId: body.shotConfigurationId,
-      shellId: body.shellId,
-      chargeId: body.chargeId,
-      weaponSystemId: body.weaponSystemId,
-      distanceM,
+    if (!body.shotConfigurationId) {
+      throw new BadRequestException('Потрібно обрати комплект пострілу');
+    }
+
+    const weapon = await manager.findOne(WeaponSystem, {
+      where: {
+        id: body.weaponSystemId,
+        currentFirePositionId: firePosition.id,
+        deploymentStatus: 'at_fire_position',
+      },
     });
+    if (!weapon || weapon.readinessStatus !== 'combat_ready') {
+      throw new BadRequestException('Немає БГ СГ');
+    }
+
+    const configuration = await manager.findOne(ShotConfiguration, {
+      where: { id: body.shotConfigurationId },
+      relations: {
+        shell: true,
+        fuze: true,
+        primer: true,
+        charges: { charge: true },
+      },
+      order: { charges: { sortOrder: 'ASC' } },
+    });
+    if (!configuration || !configuration.isActive) {
+      throw new BadRequestException('Комплект пострілу не знайдено');
+    }
+    if (configuration.weaponModelId !== weapon.weaponModelId) {
+      throw new BadRequestException(
+        'Комплект пострілу не належить до моделі обраної СГ',
+      );
+    }
+    if (
+      !configuration.shellId ||
+      !configuration.fuzeId ||
+      !configuration.primerId ||
+      configuration.charges.length === 0
+    ) {
+      throw new BadRequestException('Комплект пострілу неповний');
+    }
+    if (distanceM > Number(configuration.maxRangeM)) {
+      throw new BadRequestException(
+        'Комплект пострілу не покриває дальність до цілі',
+      );
+    }
+    return this.mapShotConfiguration(configuration);
   }
 
   private async resolveShotConfigurationForCompletion(

@@ -104,8 +104,10 @@ function makeKit(id: string): ServiceOrderSuggestionVariant {
 function makeSuggestion(weaponSystemId: string, kits: ServiceOrderSuggestionVariant[]): ServiceOrderSuggestion {
   return {
     executorType: 'fire_position',
+    candidateType: 'fire_position',
     firePositionId: 'fp-1',
     weaponSystemId,
+    ready: true,
     weapon: {
       id: weaponSystemId,
       callsign: weaponSystemId,
@@ -258,6 +260,31 @@ describe('ServiceOrdersPage contextual primary action', () => {
       type: 'choose_kit',
       disabledReason: 'Немає сумісного комплекту пострілу',
     });
+  });
+
+  it('keeps rejected candidates collapsed and prevents their selection', () => {
+    const page = makePage();
+    assignMainUser(page);
+    const order = makeOrder();
+    const valid = makeSuggestion('weapon-ready', [makeKit('kit-ready')]);
+    const rejected = {
+      ...makeSuggestion('weapon-rejected', []),
+      ready: false,
+      rejectionReasons: ['weapon_not_ready'],
+      rejectionReasonLabels: ['СГ не боєготова'],
+    };
+    page.suggestions = [rejected, valid];
+
+    expect(page.validSuggestions).toEqual([valid]);
+    expect(page.rejectedSuggestions).toEqual([rejected]);
+    expect(page.rejectedSuggestionsExpanded).toBe(false);
+
+    page.toggleRejectedSuggestions();
+    page.selectExecutor(order, rejected);
+
+    expect(page.rejectedSuggestionsExpanded).toBe(true);
+    expect(page.selectedExecutorByOrderId[order.id]).toBeUndefined();
+    expect(page.getSuggestionRejectionText(rejected)).toBe('СГ не боєготова');
   });
 
   it('preserves the expanded order and local selection through a realtime reconciliation', () => {

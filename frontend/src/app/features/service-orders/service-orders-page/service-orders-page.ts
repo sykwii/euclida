@@ -202,6 +202,7 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   focusedOrderId: string | null = null;
   suggestions: ServiceOrderSuggestion[] = [];
   suggestionsLoading = false;
+  rejectedSuggestionsExpanded = false;
   viewMode: 'cards' | 'list' = 'list';
   problemFilter = '';
   orderBoardTab: 'active' | 'in_progress' | 'completed' | 'cancelled' | 'history' | 'planned_puar' = 'active';
@@ -719,6 +720,7 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     this.focusedOrderId = order.id;
     this.suggestions = [];
     this.expandedSuggestionIds = {};
+    this.rejectedSuggestionsExpanded = false;
     this.suggestionsLoading = true;
     this.errorMessage = '';
 
@@ -746,8 +748,26 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
     return suggestion.compatibleKits || suggestion.variants || [];
   }
 
+  get validSuggestions(): ServiceOrderSuggestion[] {
+    return this.suggestions.filter((suggestion) => suggestion.ready !== false);
+  }
+
+  get rejectedSuggestions(): ServiceOrderSuggestion[] {
+    return this.suggestions.filter((suggestion) => suggestion.ready === false);
+  }
+
+  toggleRejectedSuggestions(): void {
+    this.rejectedSuggestionsExpanded = !this.rejectedSuggestionsExpanded;
+  }
+
   selectExecutor(order: ServiceOrder, suggestion: ServiceOrderSuggestion): void {
-    if (!this.canSelectSuggestion(order) || suggestion.executorType !== 'fire_position') return;
+    if (
+      !this.canSelectSuggestion(order) ||
+      suggestion.executorType !== 'fire_position' ||
+      suggestion.ready === false
+    ) {
+      return;
+    }
     const previous = this.selectedExecutorByOrderId[order.id];
     const changed = previous?.weaponSystemId !== suggestion.weaponSystemId;
     this.selectedExecutorByOrderId[order.id] = suggestion;
@@ -803,9 +823,6 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
         firePositionId: suggestion.firePosition.id,
         weaponSystemId: suggestion.weaponSystemId,
         shotConfigurationId: variant.shotConfigurationId,
-        shellId: variant.shellId,
-        chargeId: variant.chargeId,
-        zoneNumber: variant.zoneNumber,
       })
       .pipe(
         switchMap((selectedOrder) => this.service.sendToUnit(selectedOrder.id)),
@@ -2181,6 +2198,10 @@ getSuggestionVariantCount(suggestion: ServiceOrderSuggestion): number {
 }
 
 getSuggestionReadinessLabel(suggestion: ServiceOrderSuggestion): string {
+  if (suggestion.ready === true) return 'БГ';
+  if (suggestion.ready === false) {
+    return suggestion.rejectionReasonLabels?.[0] || 'Не підходить';
+  }
   const status = suggestion.readiness?.status || suggestion.firePosition?.readinessStatus || 'unknown';
   if (status === 'combat_ready' || status === 'ready' || status === 'ready_for_combat') {
     return 'БГ';
@@ -2190,6 +2211,9 @@ getSuggestionReadinessLabel(suggestion: ServiceOrderSuggestion): string {
 
 getSuggestionStockLabel(suggestion: ServiceOrderSuggestion): string {
   if (suggestion.executorType === 'air_asset_position') return 'БК перевірено';
+  if (suggestion.stockSummary) {
+    return `Оцінка ${suggestion.stockSummary.availableShots} постр.`;
+  }
   return suggestion.stockSufficient ? 'БК достатньо' : 'БК недостатньо';
 }
 
@@ -2304,7 +2328,7 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
   }
 
   getSuggestionRejectionText(suggestion: ServiceOrderSuggestion): string {
-    const reasons = suggestion.rejectionReasons?.filter(Boolean) || [];
+    const reasons = suggestion.rejectionReasonLabels?.filter(Boolean) || [];
     return reasons.length > 0
       ? reasons.join(' · ')
       : 'Немає активного повного комплекту пострілу для моделі СГ, дальності або доступного БК.';

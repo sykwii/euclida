@@ -417,12 +417,12 @@
                 </button>
               </div>
 
-              <div class="co-candidate-list" *ngIf="!suggestionsLoading && suggestions.length > 0">
+              <div class="co-candidate-list" *ngIf="!suggestionsLoading && validSuggestions.length > 0">
                 <article
                   class="co-candidate"
                   [class.expanded]="isSuggestionExpanded(suggestion, pointIndex)"
                   [class.selected-executor]="isSelectedExecutor(item, suggestion)"
-                  *ngFor="let suggestion of suggestions; let pointIndex = index"
+                  *ngFor="let suggestion of validSuggestions; let pointIndex = index"
                 >
                   <div class="co-candidate-top">
                     <div>
@@ -599,7 +599,38 @@
                 </article>
               </div>
 
-
+              <section
+                class="co-rejected-candidates"
+                *ngIf="!suggestionsLoading && rejectedSuggestions.length > 0"
+              >
+                <button
+                  type="button"
+                  class="co-rejected-toggle"
+                  [attr.aria-expanded]="rejectedSuggestionsExpanded"
+                  (click)="toggleRejectedSuggestions()"
+                >
+                  Не підходять ({{ rejectedSuggestions.length }})
+                </button>
+                <div class="co-rejected-list" *ngIf="rejectedSuggestionsExpanded">
+                  <article
+                    class="co-rejected-candidate"
+                    *ngFor="let suggestion of rejectedSuggestions"
+                  >
+                    <div>
+                      <b>{{ getSuggestionExecutorLabel(suggestion) }}</b>
+                      <span>{{ getSuggestionTitle(suggestion) }}</span>
+                    </div>
+                    <div class="co-rejected-metrics">
+                      <span *ngIf="suggestion.distanceM < 9007199254740991">
+                        {{ suggestion.distanceM | number: '1.0-0' }} м
+                      </span>
+                      <span>{{ getSuggestionStockLabel(suggestion) }}</span>
+                      <span>{{ getSuggestionVariantCount(suggestion) }} компл.</span>
+                    </div>
+                    <p>{{ getSuggestionRejectionText(suggestion) }}</p>
+                  </article>
+                </div>
+              </section>
 
             </section>
           </section>

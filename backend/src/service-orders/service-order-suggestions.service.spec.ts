@@ -71,6 +71,38 @@ describe('ServiceOrderSuggestionsService shot kit variants', () => {
     expect(result.variants).toHaveLength(0);
     expect(result.rejectionReasons).toContain('Для моделі СГ немає комплектів пострілу');
   });
+
+  it('loads each stock category once for all candidate depots', async () => {
+    const findByEntity = new Map<unknown, jest.Mock>();
+    for (const entity of [
+      DepotShellStock,
+      DepotChargeStock,
+      DepotFuzeStock,
+      DepotPrimerStock,
+    ]) {
+      findByEntity.set(entity, jest.fn(async () => []));
+    }
+    const dataSource = {
+      getRepository: (entity: unknown) => ({
+        find: findByEntity.get(entity),
+      }),
+    } as unknown as DataSource;
+    const service = new ServiceOrderSuggestionsService(dataSource) as unknown as {
+      loadStockByDepot: (depotIds: string[]) => Promise<unknown>;
+    };
+
+    await service.loadStockByDepot(['depot-1', 'depot-2', 'depot-3']);
+
+    expect(
+      Array.from(findByEntity.values()).reduce(
+        (count, find) => count + find.mock.calls.length,
+        0,
+      ),
+    ).toBe(4);
+    for (const find of findByEntity.values()) {
+      expect(find).toHaveBeenCalledTimes(1);
+    }
+  });
 });
 
 function createService(data: {

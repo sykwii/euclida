@@ -796,6 +796,66 @@
   gap: 7px;
 }
 
+.co-rejected-candidates {
+  display: grid;
+  gap: 7px;
+}
+
+.co-rejected-toggle {
+  width: fit-content;
+  padding: 5px 0;
+  border: 0;
+  color: #bdc9ce;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.co-rejected-list {
+  display: grid;
+  gap: 6px;
+}
+
+.co-rejected-candidate {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr);
+  gap: 5px 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(137, 166, 178, 0.18);
+  border-left: 3px solid #8d6b70;
+  border-radius: 7px;
+  background: #0a1217;
+}
+
+.co-rejected-candidate div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.co-rejected-candidate b {
+  color: #e3e8ea;
+}
+
+.co-rejected-candidate span,
+.co-rejected-candidate p {
+  color: var(--co-muted);
+  font-size: 12px;
+}
+
+.co-rejected-candidate p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.co-rejected-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
 .co-candidate {
   display: grid;
   grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1fr) minmax(260px, 1.6fr);
