@@ -6,9 +6,14 @@ CREATE INDEX IF NOT EXISTS idx_execution_records_stock_operation
   ON execution_records(stock_operation_id);
 
 ALTER TABLE weapon_systems
+  ADD COLUMN IF NOT EXISTS weapon_model_id uuid NULL
+    REFERENCES weapon_models(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS archived_at timestamp NULL,
   ADD COLUMN IF NOT EXISTS archived_by_user_id uuid NULL;
+
+CREATE INDEX IF NOT EXISTS idx_weapon_systems_weapon_model
+  ON weapon_systems(weapon_model_id);
 
 CREATE INDEX IF NOT EXISTS idx_weapon_systems_active
   ON weapon_systems(is_archived, readiness_status);

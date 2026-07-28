@@ -98,6 +98,7 @@ function Assert-CriticalSchema {
 WITH required(table_name, column_name) AS (
     VALUES
       ('weapon_systems', 'current_fire_position_id'),
+      ('weapon_systems', 'weapon_model_id'),
       ('weapon_systems', 'readiness_status'),
       ('weapon_systems', 'is_archived'),
       ('fire_positions', 'readiness_status'),
