@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { UsersModule } from '../users/users.module';
@@ -10,6 +10,7 @@ import { HttpWriteGuard } from './http-write.guard';
 import { MainScopeGuard } from './main-scope.guard';
 import { WriteAccessGuard } from './write-access.guard';
 
+@Global()
 @Module({
   imports: [
     ConfigModule,
