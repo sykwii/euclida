@@ -24,6 +24,8 @@ export interface ExecutionRecord {
   result: string;
   startedAt: string;
   completedAt: string | null;
+  createdAt: string;
+  postedAt: string | null;
   quantity: number;
   comment: string | null;
   status: ExecutionRecordStatus | string;
@@ -47,9 +49,12 @@ export interface ExecutionValidationResult {
   reasons: Array<{
     code: string;
     message: string;
-    details?: Record<string, unknown>;
+    resourceType?: string;
+    resourceId?: string;
+    required?: number;
+    available?: number;
   }>;
-  requirements: Array<{
+  consumptionPreview: Array<{
     resourceType: string;
     resourceId: string;
     required: number;

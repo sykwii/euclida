@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { DepotChargeStock } from '../depot-charge-stock/depot-charge-stock.entity';
@@ -16,6 +16,7 @@ import { DepotPrimerStock } from '../depot-primer-stock/depot-primer-stock.entit
 import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 import { EventLogsService } from '../event-logs/event-logs.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { deriveFirePositionOperationalState } from '../fire-positions/fire-position-operational-state';
 import { ServiceOrder } from '../service-orders/service-order.entity';
 import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { StockEngineService } from '../stock-engine/stock-engine.service';
@@ -34,13 +35,16 @@ export const EXECUTION_HANDLERS = 'EXECUTION_HANDLERS';
 export interface ExecutionValidationReason {
   code: string;
   message: string;
-  details?: Record<string, unknown>;
+  resourceType?: string;
+  resourceId?: string;
+  required?: number;
+  available?: number;
 }
 
 export interface ExecutionValidationResult {
   valid: boolean;
   reasons: ExecutionValidationReason[];
-  requirements: Array<{
+  consumptionPreview: Array<{
     resourceType: string;
     resourceId: string;
     required: number;
@@ -77,7 +81,9 @@ export class ExecutionEngineService {
     return this.recordsRepository.find({
       where: { serviceOrderId: order.id },
       relations: {
-        artillery: true,
+        artillery: {
+          charges: true,
+        },
       },
       order: { createdAt: 'ASC' },
     });
@@ -261,17 +267,20 @@ export class ExecutionEngineService {
         );
       }
 
-      const validation = await this.validatePreFireContext(context, ammoDepotId);
+      const validation = await this.validatePreFireContext(
+        context,
+        ammoDepotId,
+        manager,
+      );
       if (!validation.valid) {
         throw new BadRequestException({
           message: 'Запис журналу не пройшов передвогневу перевірку',
           reasons: validation.reasons,
-          requirements: validation.requirements,
+          consumptionPreview: validation.consumptionPreview,
         });
       }
 
-    const stockOperation = await this.stockEngine.execute(
-      {
+      const stockRequest = {
         idempotencyKey: `execution:${lockedRecord.id}`,
         operationType: 'write_off',
         movementType: 'execution_post',
@@ -280,21 +289,29 @@ export class ExecutionEngineService {
         comment: lockedRecord.comment,
         reason: 'execution_record_posted',
         unitId: context.unitId,
-          resources: context.consumption,
-        },
+        resources: context.consumption,
+      } as const;
+      const stockResult = await this.stockEngine.executeInTransaction(
+        stockRequest,
         user,
+        manager,
       );
 
       const postedAt = new Date();
       const record = await this.journalWriter.markPosted(
         manager,
         lockedRecord,
-        stockOperation.id,
+        stockResult.operation.id,
         postedAt,
         user.sub,
       );
 
-      return { record, created: true };
+      return {
+        record,
+        created: true,
+        stockOperation: stockResult.operation,
+        stockRequest,
+      };
     });
 
     const saved = await this.recordsRepository.findOne({
@@ -306,9 +323,20 @@ export class ExecutionEngineService {
       throw new NotFoundException('Запис журналу не знайдено після проведення');
     }
 
-    if (!postResult.created || saved.status !== 'posted') {
+    if (
+      !postResult.created ||
+      saved.status !== 'posted' ||
+      !postResult.stockRequest ||
+      !postResult.stockOperation
+    ) {
       return saved;
     }
+
+    await this.stockEngine.publishCommittedOperation(
+      postResult.stockRequest,
+      user,
+      postResult.stockOperation,
+    );
 
     const context = this.buildContextFromRecord(
       {
@@ -370,7 +398,7 @@ export class ExecutionEngineService {
             message: 'Для виконавця не визначено склад боєприпасів',
           },
         ],
-        requirements: [],
+        consumptionPreview: [],
       };
     }
 
@@ -580,21 +608,25 @@ export class ExecutionEngineService {
   private async validatePreFireContext(
     context: ExecutionPipelineContext,
     ammoDepotId: string,
+    manager?: EntityManager,
   ): Promise<ExecutionValidationResult> {
     const reasons: ExecutionValidationReason[] = [];
-    const requirements = await this.getStockRequirements(ammoDepotId, context);
+    const consumptionPreview = await this.getStockRequirements(
+      ammoDepotId,
+      context,
+      manager,
+    );
     const order = context.serviceOrder;
 
     if (order.status !== 'in_progress') {
       reasons.push({
         code: 'service_order_not_in_progress',
         message: 'ВГЗ має бути у статусі "в роботі"',
-        details: { status: order.status },
       });
     }
 
     if (typeof this.dataSource.getRepository !== 'function') {
-      return { valid: reasons.length === 0, reasons, requirements };
+      return { valid: reasons.length === 0, reasons, consumptionPreview };
     }
 
     if (!order.selectedFirePositionId || !order.selectedFirePosition) {
@@ -602,52 +634,47 @@ export class ExecutionEngineService {
         code: 'fire_position_missing',
         message: 'Для ВГЗ не обрано ВП',
       });
-    } else {
-      const fpStatus = this.normalizeReadiness(order.selectedFirePosition.readinessStatus);
-      if (fpStatus !== 'combat_ready') {
-        reasons.push({
-          code: 'fire_position_not_ready',
-          message: 'Обрана ВП не БГ',
-          details: {
-            firePositionId: order.selectedFirePositionId,
-            readinessStatus: order.selectedFirePosition.readinessStatus,
-            reason: order.selectedFirePosition.notReadyReason,
+    }
+
+    const repository = <T extends object>(entity: new () => T) =>
+      manager
+        ? manager.getRepository(entity)
+        : this.dataSource.getRepository(entity);
+    const weapon = order.selectedFirePositionId
+      ? await repository(WeaponSystem).findOne({
+          where: {
+            currentFirePositionId: order.selectedFirePositionId,
+            deploymentStatus: 'at_fire_position',
           },
+        })
+      : null;
+
+    if (order.selectedFirePosition) {
+      const operationalState = deriveFirePositionOperationalState(
+        order.selectedFirePosition,
+        weapon,
+      );
+      if (!operationalState.ready) {
+        reasons.push({
+          code:
+            operationalState.reasonCode === 'weapon_missing'
+              ? 'weapon_missing'
+              : operationalState.reasonCode ?? 'fire_position_not_ready',
+          message: operationalState.reasonLabel ?? 'Обрана ВП не БГ',
         });
       }
     }
-
-    const weapon = order.selectedFirePositionId
-      ? await this.dataSource.getRepository(WeaponSystem).findOne({
-          where: [
-            {
-              currentFirePositionId: order.selectedFirePositionId,
-              deploymentStatus: 'at_fire_position',
-            },
-            {
-              firePositionId: order.selectedFirePositionId,
-              locationType: 'fire_position',
-            },
-          ],
-        })
-      : null;
 
     if (!weapon) {
       reasons.push({
         code: 'weapon_missing_on_fire_position',
         message: 'На обраній ВП немає СГ',
-        details: { firePositionId: order.selectedFirePositionId },
       });
     } else {
       if (this.normalizeReadiness(weapon.readinessStatus) !== 'combat_ready') {
         reasons.push({
           code: 'weapon_not_ready',
           message: 'СГ не БГ',
-          details: {
-            weaponSystemId: weapon.id,
-            readinessStatus: weapon.readinessStatus,
-            reason: weapon.notReadyReason,
-          },
         });
       }
 
@@ -658,27 +685,30 @@ export class ExecutionEngineService {
         reasons.push({
           code: 'weapon_not_on_selected_fire_position',
           message: 'СГ фізично не перебуває на обраній ВП',
-          details: {
-            weaponSystemId: weapon.id,
-            deploymentStatus: weapon.deploymentStatus,
-            currentFirePositionId: weapon.currentFirePositionId,
-            selectedFirePositionId: order.selectedFirePositionId,
-          },
         });
       }
 
-      if (await getActiveMaintenance(this.dataSource, weapon.id)) {
+      if (await getActiveMaintenance(this.dataSource, weapon.id, manager)) {
         reasons.push({
           code: 'weapon_active_maintenance',
           message: 'Для СГ активне ТО або ремонт',
-          details: { weaponSystemId: weapon.id },
+        });
+      }
+
+      if (
+        context.artillerySnapshot &&
+        weapon.weaponModelId !== context.artillerySnapshot.weaponModelId
+      ) {
+        reasons.push({
+          code: 'wrong_weapon_model',
+          message: 'Компоновка пострілу не відповідає моделі призначеної СГ',
         });
       }
     }
 
     if (context.artillerySnapshot && order.selectedFirePosition) {
       if (context.artillerySnapshot.sourceShotConfigurationId) {
-        const kit = await this.dataSource.getRepository(ShotConfiguration).findOne({
+        const kit = await repository(ShotConfiguration).findOne({
           where: { id: context.artillerySnapshot.sourceShotConfigurationId },
           relations: { charges: true },
         });
@@ -687,7 +717,6 @@ export class ExecutionEngineService {
           reasons.push({
             code: 'shot_kit_not_active_or_incomplete',
             message: 'Комплект пострілу неактивний або неповний',
-            details: { shotConfigurationId: context.artillerySnapshot.sourceShotConfigurationId },
           });
         }
       }
@@ -704,89 +733,109 @@ export class ExecutionEngineService {
       if (distanceM > Number(context.artillerySnapshot.maxRangeM)) {
         reasons.push({
           code: 'target_out_of_range',
-          message: 'Ціль поза максимальною дальністю комплекту',
-          details: {
-            distanceM,
-            maxRangeM: context.artillerySnapshot.maxRangeM,
-          },
+          message: `Ціль поза максимальною дальністю комплекту: ${distanceM} м, максимум ${context.artillerySnapshot.maxRangeM} м`,
         });
       }
     }
 
-    for (const item of requirements) {
+    for (const item of consumptionPreview) {
       if (item.available < item.required) {
         reasons.push({
-          code: 'insufficient_stock',
-          message: 'Недостатньо компонента на ВП',
-          details: item,
+          code: `${item.resourceType}_shortage`,
+          message: this.stockShortageMessage(item),
+          resourceType: item.resourceType,
+          resourceId: item.resourceId,
+          required: item.required,
+          available: item.available,
         });
       }
     }
 
-    return { valid: reasons.length === 0, reasons, requirements };
+    return { valid: reasons.length === 0, reasons, consumptionPreview };
   }
 
   private async getStockRequirements(
     ammoDepotId: string,
     context: ExecutionPipelineContext,
-  ): Promise<ExecutionValidationResult['requirements']> {
-    const requirements: ExecutionValidationResult['requirements'] = [];
-
-    for (const item of context.consumption) {
-      requirements.push({
+    manager?: EntityManager,
+  ): Promise<ExecutionValidationResult['consumptionPreview']> {
+    const balances = await this.getAvailableQuantities(
+      ammoDepotId,
+      context,
+      manager,
+    );
+    return context.consumption.map((item) => ({
         resourceType: item.resourceType,
         resourceId: item.resourceId,
         required: Number(item.quantity),
-        available: await this.getAvailableQuantity(
-          ammoDepotId,
-          item.resourceType,
-          item.resourceId,
-        ),
+        available:
+          balances.get(`${item.resourceType}:${item.resourceId}`) ?? 0,
         accountingUnit: item.accountingUnit,
-      });
-    }
-
-    return requirements;
+      }));
   }
 
-  private async getAvailableQuantity(
+  private async getAvailableQuantities(
     depotId: string,
-    resourceType: string,
-    resourceId: string,
-  ): Promise<number> {
+    context: ExecutionPipelineContext,
+    manager?: EntityManager,
+  ): Promise<Map<string, number>> {
     if (typeof this.dataSource.getRepository !== 'function') {
-      return Number.POSITIVE_INFINITY;
+      return new Map(
+        context.consumption.map((item) => [
+          `${item.resourceType}:${item.resourceId}`,
+          Number.POSITIVE_INFINITY,
+        ]),
+      );
     }
 
-    if (resourceType === 'shell') {
-      const stock = await this.dataSource.getRepository(DepotShellStock).findOne({
-        where: { depotId, shellId: resourceId },
-      });
-      return Number(stock?.quantity ?? 0);
-    }
+    const repo = <T extends object>(entity: new () => T) =>
+      manager
+        ? manager.getRepository(entity)
+        : this.dataSource.getRepository(entity);
+    const ids = (type: string) =>
+      context.consumption
+        .filter((item) => item.resourceType === type)
+        .map((item) => item.resourceId);
+    const [shells, charges, fuzes, primers] = await Promise.all([
+      ids('shell').length
+        ? repo(DepotShellStock).find({
+            where: { depotId, shellId: In(ids('shell')) },
+          })
+        : [],
+      ids('charge').length
+        ? repo(DepotChargeStock).find({
+            where: { depotId, chargeId: In(ids('charge')) },
+          })
+        : [],
+      ids('fuze').length
+        ? repo(DepotFuzeStock).find({
+            where: { depotId, fuzeId: In(ids('fuze')) },
+          })
+        : [],
+      ids('primer').length
+        ? repo(DepotPrimerStock).find({
+            where: { depotId, primerId: In(ids('primer')) },
+          })
+        : [],
+    ]);
+    return new Map([
+      ...shells.map((item) => [`shell:${item.shellId}`, Number(item.quantity)] as const),
+      ...charges.map((item) => [`charge:${item.chargeId}`, Number(item.quantity)] as const),
+      ...fuzes.map((item) => [`fuze:${item.fuzeId}`, Number(item.quantity)] as const),
+      ...primers.map((item) => [`primer:${item.primerId}`, Number(item.quantity)] as const),
+    ]);
+  }
 
-    if (resourceType === 'charge') {
-      const stock = await this.dataSource.getRepository(DepotChargeStock).findOne({
-        where: { depotId, chargeId: resourceId },
-      });
-      return Number(stock?.quantity ?? 0);
-    }
-
-    if (resourceType === 'fuze') {
-      const stock = await this.dataSource.getRepository(DepotFuzeStock).findOne({
-        where: { depotId, fuzeId: resourceId },
-      });
-      return Number(stock?.quantity ?? 0);
-    }
-
-    if (resourceType === 'primer') {
-      const stock = await this.dataSource.getRepository(DepotPrimerStock).findOne({
-        where: { depotId, primerId: resourceId },
-      });
-      return Number(stock?.quantity ?? 0);
-    }
-
-    return 0;
+  private stockShortageMessage(
+    item: ExecutionValidationResult['consumptionPreview'][number],
+  ): string {
+    const labels: Record<string, string> = {
+      shell: 'снарядів',
+      charge: 'зарядів',
+      fuze: 'підривників',
+      primer: 'праймерів',
+    };
+    return `Недостатньо ${labels[item.resourceType] ?? 'ресурсу'}: потрібно ${item.required}, доступно ${item.available}`;
   }
 
   private normalizePurpose(value: ExecutionRecord['purpose'] | string): ExecutionRecord['purpose'] {

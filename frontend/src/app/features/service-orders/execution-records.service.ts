@@ -55,6 +55,10 @@ export class ExecutionRecordsService {
     return this.api.post<ExecutionRecord>(`/execution/records/${id}/post`, {});
   }
 
+  update(id: string, body: CreateExecutionRecordRequest): Observable<ExecutionRecord> {
+    return this.api.patch<ExecutionRecord>(`/execution/records/${id}`, body);
+  }
+
   cancel(id: string): Observable<ExecutionRecord> {
     return this.api.post<ExecutionRecord>(`/execution/records/${id}/cancel`, {});
   }

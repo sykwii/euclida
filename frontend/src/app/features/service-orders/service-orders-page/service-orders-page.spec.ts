@@ -185,6 +185,13 @@ describe('ServiceOrdersPage contextual primary action', () => {
 
     page.executionRecordsByOrderId[active.id] = [{ id: 'draft-1', status: 'draft' } as never];
     expect(page.getPrimaryAction(active)).toMatchObject({
+      type: 'post_execution',
+      label: 'Провести виконання',
+      visualVariant: 'green',
+    });
+
+    page.executionValidationByRecordId['draft-1'] = ['Недостатньо снарядів'];
+    expect(page.getPrimaryAction(active)).toMatchObject({
       type: 'continue_execution',
       label: 'Продовжити виконання',
       visualVariant: 'amber',

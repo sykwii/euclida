@@ -16,6 +16,7 @@ type ServiceOrderRepositoryMock = Pick<Repository<ServiceOrder>, 'findOne' | 'sa
 type ExecutionRecordRepositoryMock = Pick<Repository<ExecutionRecord>, 'find'>;
 type TransactionManagerMock = {
   findOne: jest.Mock<Promise<unknown>, [unknown, unknown]>;
+  find: jest.Mock<Promise<unknown[]>, [unknown, unknown]>;
   save: jest.Mock<Promise<unknown>, [unknown, unknown]>;
   createQueryBuilder: jest.Mock;
 };
@@ -90,6 +91,7 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
 
     manager = {
       findOne: jest.fn(),
+      find: jest.fn(async () => executionRecordsRepository.find()),
       save: jest.fn(),
       createQueryBuilder: jest.fn(),
     };
@@ -325,7 +327,7 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     );
   });
 
-  it('rejects completion when a draft consumable journal record exists', async () => {
+  it('rejects completion when any active draft journal record exists', async () => {
     const order = createOrder();
     repository.findOne.mockResolvedValue(order);
     executionRecordsRepository.find.mockResolvedValue([
@@ -336,6 +338,32 @@ describe('ServiceOrdersService SE-5 completion flow', () => {
     await expect(service.complete(order.id, body, user)).rejects.toThrow(
       'Є непроведене виконання',
     );
+  });
+
+  it('rechecks drafts after locking the order before completion', async () => {
+    const order = createOrder();
+    const posted = createExecutionRecord({
+      id: 'posted',
+      status: 'posted',
+      quantity: 2,
+    });
+    repository.findOne.mockResolvedValue(order);
+    executionRecordsRepository.find.mockResolvedValue([posted]);
+    manager.find.mockResolvedValue([
+      posted,
+      createExecutionRecord({
+        id: 'late-draft',
+        executionType: 'fpv',
+        status: 'draft',
+        artillery: null,
+      }),
+    ]);
+    manager.findOne.mockResolvedValueOnce(order);
+
+    await expect(service.complete(order.id, body, user)).rejects.toThrow(
+      'Є непроведене виконання',
+    );
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
   it('returns an already sent order without creating duplicate deliveries', async () => {

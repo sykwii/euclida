@@ -1118,8 +1118,8 @@ async selectAirAsset(
     const postedExecutionRecords = activeExecutionRecords.filter(
       (item) => item.status === 'posted',
     );
-    const draftConsumableRecords = activeExecutionRecords.filter((item) =>
-      item.status === 'draft' && this.isConsumableExecutionRecord(item),
+    const activeDraftRecords = activeExecutionRecords.filter(
+      (item) => item.status === 'draft',
     );
 
     if (postedExecutionRecords.length === 0) {
@@ -1128,7 +1128,7 @@ async selectAirAsset(
       );
     }
 
-    if (draftConsumableRecords.length > 0) {
+    if (activeDraftRecords.length > 0) {
       throw new BadRequestException('Є непроведене виконання');
     }
 
@@ -1176,6 +1176,45 @@ async selectAirAsset(
         this.assertCanEdit(lockedOrder);
       }
 
+      const currentExecutionRecords = await manager.find(ExecutionRecord, {
+        where: { serviceOrderId: lockedOrder.id },
+        relations: {
+          artillery: {
+            charges: true,
+          },
+        },
+        order: {
+          createdAt: 'ASC',
+        },
+      });
+      const currentActiveRecords = currentExecutionRecords.filter(
+        (item) => item.status !== 'reversed' && item.status !== 'cancelled',
+      );
+      const currentPostedRecords = currentActiveRecords.filter(
+        (item) => item.status === 'posted',
+      );
+
+      if (currentPostedRecords.length === 0) {
+        throw new BadRequestException(
+          'Неможливо завершити ВГЗ без хоча б одного проведеного запису журналу виконання',
+        );
+      }
+      if (currentActiveRecords.some((item) => item.status === 'draft')) {
+        throw new BadRequestException('Є непроведене виконання');
+      }
+
+      const currentActualQuantity = this.roundStockQuantity(
+        currentPostedRecords.reduce(
+          (sum, item) => sum + Number(item.quantity ?? 0),
+          0,
+        ),
+      );
+      const currentDeviationSummary = this.buildExecutionDeviationSummary(
+        Number(lockedOrder.plannedQuantity ?? 0),
+        currentActualQuantity,
+        currentPostedRecords,
+      );
+
       const firePosition = await manager.findOne(FirePosition, {
         where: { id: lockedOrder.selectedFirePositionId! },
         lock: { mode: 'pessimistic_write' },
@@ -1188,9 +1227,12 @@ async selectAirAsset(
       lockedOrder.status = 'completed';
       lockedOrder.startedAt = startedAt;
       lockedOrder.completedAt = completedAt;
-      lockedOrder.actualQuantity = actualQuantity;
+      lockedOrder.actualQuantity = currentActualQuantity;
       lockedOrder.resultType = body.resultType;
-      lockedOrder.resultComment = [body.resultComment?.trim(), deviationSummary]
+      lockedOrder.resultComment = [
+        body.resultComment?.trim(),
+        currentDeviationSummary,
+      ]
         .filter(Boolean)
         .join('\n') || null;
       lockedOrder.completedByUserId = user.sub;

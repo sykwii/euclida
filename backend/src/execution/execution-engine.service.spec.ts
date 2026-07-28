@@ -109,6 +109,16 @@ describe('ExecutionEngineService', () => {
       execute:
         options?.stockExecute ??
         jest.fn().mockResolvedValue({ id: 'stock-op-1', movementGroupId: 'group-1' }),
+      executeInTransaction: options?.stockExecute
+        ? jest.fn().mockImplementation(async (...args: unknown[]) => ({
+            operation: await options.stockExecute!(...args),
+            created: true,
+          }))
+        : jest.fn().mockResolvedValue({
+            operation: { id: 'stock-op-1', movementGroupId: 'group-1' },
+            created: true,
+          }),
+      publishCommittedOperation: jest.fn(),
     };
     const eventLogs = {
       create: jest.fn(),
@@ -278,7 +288,7 @@ describe('ExecutionEngineService', () => {
 
     expect(result).toBe(existing);
     expect(mocks.journalWriter.writeDraft).not.toHaveBeenCalled();
-    expect(mocks.stockEngine.execute).not.toHaveBeenCalled();
+    expect(mocks.stockEngine.executeInTransaction).not.toHaveBeenCalled();
     expect(mocks.eventLogs.create).not.toHaveBeenCalled();
     expect(mocks.realtimeEvents.emitMany).not.toHaveBeenCalled();
   });
@@ -300,7 +310,7 @@ describe('ExecutionEngineService', () => {
 
     const result = await service.post(record.id, user);
 
-    expect(mocks.stockEngine.execute).toHaveBeenCalledWith(
+    expect(mocks.stockEngine.executeInTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
         idempotencyKey: `execution:${record.id}`,
         operationType: 'write_off',
@@ -319,6 +329,7 @@ describe('ExecutionEngineService', () => {
         ],
       }),
       user,
+      expect.anything(),
     );
     expect(mocks.journalWriter.markPosted).toHaveBeenCalled();
     expect(mocks.eventLogs.create).toHaveBeenCalled();
@@ -355,7 +366,7 @@ describe('ExecutionEngineService', () => {
     const result = await service.post(postedRecord.id, user);
 
     expect(result).toBe(postedRecord);
-    expect(mocks.stockEngine.execute).not.toHaveBeenCalled();
+    expect(mocks.stockEngine.executeInTransaction).not.toHaveBeenCalled();
     expect(mocks.journalWriter.markPosted).not.toHaveBeenCalled();
   });
 
@@ -371,7 +382,7 @@ describe('ExecutionEngineService', () => {
       BadRequestException,
     );
 
-    expect(mocks.stockEngine.execute).not.toHaveBeenCalled();
+    expect(mocks.stockEngine.executeInTransaction).not.toHaveBeenCalled();
     expect(mocks.journalWriter.markPosted).not.toHaveBeenCalled();
   });
 
@@ -398,7 +409,19 @@ describe('ExecutionEngineService', () => {
         return { findOne: jest.fn().mockResolvedValue(null) };
       }
 
-      return { findOne: jest.fn().mockResolvedValue({ quantity: 100 }) };
+      return {
+        findOne: jest.fn().mockResolvedValue({ quantity: 100 }),
+        find: jest.fn().mockResolvedValue([
+          {
+            depotId: 'depot-1',
+            shellId: 'shell-1',
+            chargeId: 'charge-1',
+            fuzeId: 'fuze-1',
+            primerId: 'primer-1',
+            quantity: 100,
+          },
+        ]),
+      };
     });
     const { service } = createService({ record, getRepository });
 
@@ -408,6 +431,61 @@ describe('ExecutionEngineService', () => {
     expect(result.reasons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'weapon_not_ready' }),
+      ]),
+    );
+  });
+
+  it('returns exact structured stock shortage and consumption preview', async () => {
+    const record = createDraftArtilleryRecord();
+    const getRepository = jest.fn((entity: { name?: string }) => {
+      if (entity.name === 'WeaponSystem') {
+        return {
+          findOne: jest.fn().mockResolvedValue({
+            id: 'weapon-1',
+            weaponModelId: 'weapon-1',
+            readinessStatus: 'combat_ready',
+            notReadyReason: null,
+            deploymentStatus: 'at_fire_position',
+            currentFirePositionId: 'fp-1',
+          }),
+        };
+      }
+      if (entity.name === 'WeaponMaintenance') {
+        return { findOne: jest.fn().mockResolvedValue(null) };
+      }
+      return {
+        find: jest.fn().mockResolvedValue(
+          entity.name === 'DepotShellStock'
+            ? [{ depotId: 'depot-1', shellId: 'shell-1', quantity: 1 }]
+            : entity.name === 'DepotChargeStock'
+              ? [{ depotId: 'depot-1', chargeId: 'charge-1', quantity: 100 }]
+              : [],
+        ),
+      };
+    });
+    const { service } = createService({ record, getRepository });
+
+    const result = await service.validateRecord(record.id, user);
+
+    expect(result.valid).toBe(false);
+    expect(result.reasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'shell_shortage',
+          resourceType: 'shell',
+          resourceId: 'shell-1',
+          required: 2,
+          available: 1,
+        }),
+      ]),
+    );
+    expect(result.consumptionPreview).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          resourceType: 'charge',
+          required: 4,
+          accountingUnit: 'module',
+        }),
       ]),
     );
   });

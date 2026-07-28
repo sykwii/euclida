@@ -335,6 +335,14 @@
                   <option value="additional_fire">Додатковий вогонь</option>
                   <option value="other">Інше</option>
                 </select>
+                <select
+                  [name]="'executionCompositionSource' + item.id"
+                  [(ngModel)]="getExecutionForm(item).compositionSource"
+                  aria-label="Фактична компоновка"
+                >
+                  <option value="planned">Плановий комплект</option>
+                  <option value="manual">Ручна компоновка</option>
+                </select>
                 <input
                   [name]="'executionQuantity' + item.id"
                   type="number"
@@ -349,7 +357,7 @@
                   placeholder="Коментар відхилення / результату"
                 />
                 <button type="submit" class="co-btn compact" [disabled]="executionSavingByOrderId[item.id]">
-                  Чернетка
+                  {{ executionEditingRecordByOrderId[item.id] ? 'Зберегти чернетку' : 'Створити чернетку' }}
                 </button>
               </form>
 
@@ -364,14 +372,27 @@
                   *ngFor="let record of getExecutionRecords(item)"
                 >
                   <div>
-                    <b>{{ getExecutionPurposeLabel(record.purpose) }}</b>
+                    <div class="execution-row-title">
+                      <b>{{ getExecutionPurposeLabel(record.purpose) }}</b>
+                      <time>{{ getExecutionTimestamp(record) }}</time>
+                    </div>
                     <span>{{ getExecutionStatusLabel(record.status) }} · {{ record.quantity }} постр.</span>
+                    <small>{{ getExecutionCompositionLabel(record) }}</small>
                     <small>{{ getExecutionRequirementLabel(record) }}</small>
+                    <small *ngIf="record.comment">{{ record.comment }}</small>
                   </div>
                   <div
                     class="execution-actions"
-                    [hidden]="record.status !== 'draft' || item.status !== 'in_progress'"
+                    *ngIf="record.status === 'draft' && item.status === 'in_progress'"
                   >
+                    <button
+                      type="button"
+                      class="co-btn compact"
+                      [disabled]="executionRecordSavingById[record.id]"
+                      (click)="editExecutionRecord(item, record)"
+                    >
+                      Редагувати
+                    </button>
                     <button
                       type="button"
                       class="co-btn compact"

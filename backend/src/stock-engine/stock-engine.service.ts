@@ -8,6 +8,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import {
   DataSource,
+  EntityManager,
   QueryFailedError,
   Repository,
 } from 'typeorm';
@@ -27,7 +28,7 @@ import type { StockAdapter } from './stock-adapter.interface';
 import { StockOperation } from './stock-operation.entity';
 import type { StockOperationRequest } from './stock-operation.types';
 
-interface TransactionResult {
+export interface StockTransactionResult {
   operation: StockOperation;
   created: boolean;
 }
@@ -116,125 +117,11 @@ export class StockEngineService {
       return existing;
     }
 
-    let transactionResult: TransactionResult;
+    let transactionResult: StockTransactionResult;
 
     try {
       transactionResult = await this.dataSource.transaction(
-        async (manager): Promise<TransactionResult> => {
-          const duplicate = await manager.findOne(StockOperation, {
-            where: { idempotencyKey: request.idempotencyKey },
-          });
-
-          if (duplicate) {
-            return {
-              operation: duplicate,
-              created: false,
-            };
-          }
-
-          const fromDepot = request.source
-            ? await manager.findOne(Depot, {
-                where: { id: request.source.id },
-                lock: { mode: 'pessimistic_read' },
-              })
-            : null;
-
-          const toDepot = request.destination
-            ? await manager.findOne(Depot, {
-                where: { id: request.destination.id },
-                lock: { mode: 'pessimistic_read' },
-              })
-            : null;
-
-          if (request.source && !fromDepot) {
-            throw new NotFoundException('РЎРєР»Р°Рґ-РІС–РґРїСЂР°РІРЅРёРє РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
-          }
-
-          if (request.destination && !toDepot) {
-            throw new NotFoundException('РЎРєР»Р°Рґ-РѕС‚СЂРёРјСѓРІР°С‡ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
-          }
-
-          await this.ensureCanOperate(user, fromDepot, toDepot);
-
-          const movementGroupId = randomUUID();
-
-          const operation = await manager.save(
-            StockOperation,
-            manager.create(StockOperation, {
-              idempotencyKey: request.idempotencyKey,
-              operationType: request.operationType,
-              movementGroupId,
-              fromDepotId: request.source?.id ?? null,
-              toDepotId: request.destination?.id ?? null,
-              documentNumber: request.documentNumber ?? null,
-              comment: request.comment ?? null,
-              payload: {
-                ...request,
-                movementType: input.movementType ?? null,
-                fromDepotId: request.source?.id ?? null,
-                toDepotId: request.destination?.id ?? null,
-              },
-              createdByUserId: user.sub,
-            }),
-          );
-
-          const normalizedResources = this.aggregate(request.resources);
-
-          for (const item of normalizedResources) {
-            const adapter = this.adapter(item.resourceType);
-            const accountingUnit =
-              item.accountingUnit ??
-              (await adapter.defaultAccountingUnit(
-                item.resourceType,
-                item.resourceId,
-                manager,
-              ));
-
-            if (request.source) {
-              await adapter.decrease(
-                manager,
-                request.source.id,
-                item.resourceType,
-                item.resourceId,
-                item.quantity,
-              );
-            }
-
-            if (request.destination) {
-              await adapter.increase(
-                manager,
-                request.destination.id,
-                item.resourceType,
-                item.resourceId,
-                item.quantity,
-              );
-            }
-
-            await manager.save(
-              StockMovement,
-              manager.create(StockMovement, {
-                fromDepotId: request.source?.id ?? null,
-                toDepotId: request.destination?.id ?? null,
-                itemType: item.resourceType,
-                itemId: item.resourceId,
-                quantity: item.quantity,
-                movementType:
-                  input.movementType ?? request.operationType,
-                movementGroupId,
-                documentNumber: request.documentNumber ?? null,
-                comment: request.comment ?? null,
-                fireMissionId: null,
-                accountingUnit,
-                stockOperationId: operation.id,
-              }),
-            );
-          }
-
-          return {
-            operation,
-            created: true,
-          };
-        },
+        (manager) => this.executeInTransaction(request, user, manager),
       );
     } catch (error: unknown) {
       if (this.isUniqueViolation(error)) {
@@ -254,18 +141,144 @@ export class StockEngineService {
       return transactionResult.operation;
     }
 
+    await this.publishCommittedOperation(
+      request,
+      user,
+      transactionResult.operation,
+    );
+
+    return transactionResult.operation;
+  }
+
+  async executeInTransaction(
+    input: StockOperationRequest,
+    user: AuthUser,
+    manager: EntityManager,
+  ): Promise<StockTransactionResult> {
+    const request = this.normalizeRequest(input);
+    this.validateOperation(request);
+
+    const duplicate = await manager.findOne(StockOperation, {
+      where: { idempotencyKey: request.idempotencyKey },
+    });
+
+    if (duplicate) {
+      return { operation: duplicate, created: false };
+    }
+
+    const fromDepot = request.source
+      ? await manager.findOne(Depot, {
+          where: { id: request.source.id },
+          lock: { mode: 'pessimistic_read' },
+        })
+      : null;
+    const toDepot = request.destination
+      ? await manager.findOne(Depot, {
+          where: { id: request.destination.id },
+          lock: { mode: 'pessimistic_read' },
+        })
+      : null;
+
+    if (request.source && !fromDepot) {
+      throw new NotFoundException('Склад-відправник не знайдено');
+    }
+    if (request.destination && !toDepot) {
+      throw new NotFoundException('Склад-отримувач не знайдено');
+    }
+
+    await this.ensureCanOperate(user, fromDepot, toDepot);
+
+    const movementGroupId = randomUUID();
+    const operation = await manager.save(
+      StockOperation,
+      manager.create(StockOperation, {
+        idempotencyKey: request.idempotencyKey,
+        operationType: request.operationType,
+        movementGroupId,
+        fromDepotId: request.source?.id ?? null,
+        toDepotId: request.destination?.id ?? null,
+        documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
+        payload: {
+          ...request,
+          movementType: input.movementType ?? null,
+          fromDepotId: request.source?.id ?? null,
+          toDepotId: request.destination?.id ?? null,
+        },
+        createdByUserId: user.sub,
+      }),
+    );
+
+    for (const item of this.aggregate(request.resources)) {
+      const adapter = this.adapter(item.resourceType);
+      const accountingUnit =
+        item.accountingUnit ??
+        (await adapter.defaultAccountingUnit(
+          item.resourceType,
+          item.resourceId,
+          manager,
+        ));
+
+      if (request.source) {
+        await adapter.decrease(
+          manager,
+          request.source.id,
+          item.resourceType,
+          item.resourceId,
+          item.quantity,
+        );
+      }
+      if (request.destination) {
+        await adapter.increase(
+          manager,
+          request.destination.id,
+          item.resourceType,
+          item.resourceId,
+          item.quantity,
+        );
+      }
+
+      await manager.save(
+        StockMovement,
+        manager.create(StockMovement, {
+          fromDepotId: request.source?.id ?? null,
+          toDepotId: request.destination?.id ?? null,
+          itemType: item.resourceType,
+          itemId: item.resourceId,
+          quantity: item.quantity,
+          movementType: input.movementType ?? request.operationType,
+          movementGroupId,
+          documentNumber: request.documentNumber ?? null,
+          comment: request.comment ?? null,
+          fireMissionId: null,
+          accountingUnit,
+          stockOperationId: operation.id,
+        }),
+      );
+    }
+
+    return { operation, created: true };
+  }
+
+  async publishCommittedOperation(
+    input: StockOperationRequest,
+    user: AuthUser,
+    operation: StockOperation,
+  ): Promise<void> {
+    const request = this.normalizeRequest(input);
+
     await this.eventLogs.create({
       eventType: 'stock',
       action: request.operationType,
       actor: user,
       unitId: request.unitId ?? user.unitId ?? null,
       entityType: 'stock_operation',
-      entityId: transactionResult.operation.id,
+      entityId: operation.id,
       title: 'РџСЂРѕРІРµРґРµРЅРѕ СЃРєР»Р°РґСЃСЊРєСѓ РѕРїРµСЂР°С†С–СЋ',
       details: request.comment ?? null,
       metadata: {
         movementGroupId:
-          transactionResult.operation.movementGroupId,
+          operation.movementGroupId,
         resources: request.resources,
       },
     });
@@ -275,13 +288,12 @@ export class StockEngineService {
       'moved',
       {
         entity: 'stock_operation',
-        id: transactionResult.operation.id,
+        id: operation.id,
         unitId: request.unitId ?? user.unitId ?? undefined,
         reason: request.reason ?? request.operationType,
       },
     );
 
-    return transactionResult.operation;
   }
 
   async executeAndGetMovements(

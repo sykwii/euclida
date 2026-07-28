@@ -56,6 +56,7 @@ export type ServiceOrderPrimaryActionType =
   | 'accept'
   | 'start'
   | 'add_execution'
+  | 'post_execution'
   | 'continue_execution'
   | 'complete';
 
@@ -246,11 +247,13 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
   executionLoadRequestByOrderId: Record<string, number> = {};
   executionSavingByOrderId: Record<string, boolean> = {};
   executionRecordSavingById: Record<string, boolean> = {};
+  executionEditingRecordByOrderId: Record<string, string | null> = {};
   executionValidationByRecordId: Record<string, string[]> = {};
   executionFormByOrderId: Record<
     string,
     {
       purpose: ExecutionRecordPurpose;
+      compositionSource: 'planned' | 'manual';
       quantity: string;
       comment: string;
     }
@@ -1185,7 +1188,18 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
 
     if (order.status === 'in_progress' && this.canExecuteOrder(order)) {
       const records = this.getExecutionRecords(order);
-      if (records.some((record) => record.status === 'draft')) {
+      const draft = records.find((record) => record.status === 'draft');
+      if (draft) {
+        const validationErrors = this.executionValidationByRecordId[draft.id] || [];
+        if (validationErrors.length === 0) {
+          return this.createPrimaryAction(order, {
+            type: 'post_execution',
+            label: 'Провести виконання',
+            visualVariant: 'green',
+            disabled: !!this.executionRecordSavingById[draft.id],
+            disabledReason: null,
+          });
+        }
         return this.createPrimaryAction(order, {
           type: 'continue_execution',
           label: 'Продовжити виконання',
@@ -1247,6 +1261,9 @@ export class ServiceOrdersPage implements OnInit, OnDestroy {
       this.start(order);
     } else if (action.type === 'add_execution') {
       this.focusExecutionControl(order, 'form');
+    } else if (action.type === 'post_execution') {
+      const draft = this.getExecutionRecords(order).find((record) => record.status === 'draft');
+      if (draft) this.postExecutionRecord(order, draft);
     } else if (action.type === 'continue_execution') {
       this.focusExecutionControl(order, 'draft');
     } else if (action.type === 'complete') {
@@ -2535,12 +2552,14 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
 
   getExecutionForm(order: ServiceOrder): {
     purpose: ExecutionRecordPurpose;
+    compositionSource: 'planned' | 'manual';
     quantity: string;
     comment: string;
   } {
     if (!this.executionFormByOrderId[order.id]) {
       this.executionFormByOrderId[order.id] = {
         purpose: 'main_fire',
+        compositionSource: 'planned',
         quantity: String(Math.max(Number(order.plannedQuantity || 1), 1)),
         comment: '',
       };
@@ -2564,21 +2583,40 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
       return;
     }
 
+    const editingRecord = this.getExecutionRecords(order).find(
+      (record) =>
+        record.id === this.executionEditingRecordByOrderId[order.id] &&
+        record.status === 'draft',
+    );
+    const savedComposition = editingRecord?.artillery;
     const kit = order.selectedShotConfiguration;
-    const fuzeId = kit?.fuzeId || kit?.fuze?.id || null;
-    const primerId = kit?.primerId || kit?.primer?.id || null;
-    const zoneId = kit?.zoneId || order.selectedZoneId || null;
-    const weaponModelId = kit?.weaponModelId || null;
+    const fuzeId = savedComposition?.fuzeId || kit?.fuzeId || kit?.fuze?.id || null;
+    const primerId = savedComposition?.primerId || kit?.primerId || kit?.primer?.id || null;
+    const zoneId = savedComposition?.zoneId || kit?.zoneId || order.selectedZoneId || null;
+    const weaponModelId = savedComposition?.weaponModelId || kit?.weaponModelId || null;
+    const shellId = savedComposition?.shellId || order.selectedShellId;
+    const charges = savedComposition?.charges.map((component) => ({
+      chargeId: component.chargeId,
+      chargeName: component.chargeNameSnapshot,
+      quantityPerShot: component.quantityPerShot,
+      accountingUnit: component.accountingUnit,
+      sortOrder: component.sortOrder,
+    })) || kit?.charges.map((component) => ({
+      chargeId: component.chargeId,
+      chargeName: component.charge.marking,
+      quantityPerShot: component.quantityPerShot,
+      accountingUnit: component.accountingUnit || 'piece' as const,
+      sortOrder: component.sortOrder,
+    })) || [];
 
-    if (!kit || !weaponModelId || !order.selectedShellId || !fuzeId || !primerId || kit.zoneNumber == null || kit.charges.length === 0) {
+    if ((!kit && !savedComposition) || !weaponModelId || !shellId || !fuzeId || !primerId || charges.length === 0) {
       this.toast.show('Для швидкого запису потрібен повний комплект пострілу', 'danger');
       return;
     }
 
     this.executionSavingByOrderId[order.id] = true;
-    this.executionRecords
-      .create(order.id, {
-        idempotencyKey: `ui:${order.id}:${Date.now()}`,
+    const request = {
+        idempotencyKey: editingRecord?.idempotencyKey || `ui:${order.id}:${Date.now()}`,
         executionType: 'artillery',
         purpose: form.purpose,
         result: 'executed',
@@ -2586,39 +2624,42 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
         quantity,
         comment: form.comment.trim() || undefined,
         artillery: {
-          compositionSource: 'planned',
-          sourceShotConfigurationId: kit.id,
+          compositionSource: form.compositionSource,
+          sourceShotConfigurationId:
+            form.compositionSource === 'planned'
+              ? savedComposition?.sourceShotConfigurationId || kit?.id || undefined
+              : undefined,
           weaponModelId,
-          shellId: order.selectedShellId,
+          shellId,
           fuzeId,
           primerId,
           zoneId,
-          maxRangeM: kit.maxRangeM,
-          compositionSnapshot: {
-            shotConfigurationId: kit.id,
-            name: kit.name,
-            zoneNumber: kit.zoneNumber ?? order.selectedZone?.zoneNumber ?? null,
-          },
-          charges: kit.charges.map((component) => ({
-            chargeId: component.chargeId,
-            chargeName: component.charge.marking,
-            quantityPerShot: component.quantityPerShot,
-            accountingUnit: component.accountingUnit || 'piece',
-            sortOrder: component.sortOrder,
-          })),
+          maxRangeM: savedComposition?.maxRangeM || kit!.maxRangeM,
+          compositionSnapshot:
+            savedComposition?.compositionSnapshot || {
+              shotConfigurationId: kit!.id,
+              name: kit!.name,
+              zoneNumber: kit!.zoneNumber ?? order.selectedZone?.zoneNumber ?? null,
+            },
+          charges,
         },
-      })
+      } as const;
+    const saveRequest = editingRecord
+      ? this.executionRecords.update(editingRecord.id, request)
+      : this.executionRecords.create(order.id, request);
+    saveRequest
       .subscribe({
         next: (record) => {
           this.executionSavingByOrderId[order.id] = false;
+          this.executionEditingRecordByOrderId[order.id] = null;
           form.comment = '';
           this.executionLoadRequestByOrderId[order.id] =
             (this.executionLoadRequestByOrderId[order.id] || 0) + 1;
           this.executionLoadingByOrderId[order.id] = false;
           const records = this.getExecutionRecords(order);
-          if (!records.some((item) => item.id === record.id)) {
-            this.executionRecordsByOrderId[order.id] = [record, ...records];
-          }
+          this.executionRecordsByOrderId[order.id] = records.some((item) => item.id === record.id)
+            ? records.map((item) => item.id === record.id ? record : item)
+            : [record, ...records];
           this.cdr.detectChanges();
           this.loadExecutionRecords(order);
         },
@@ -2628,6 +2669,19 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
           this.cdr.detectChanges();
         },
       });
+  }
+
+  editExecutionRecord(order: ServiceOrder, record: ExecutionRecord): void {
+    if (record.status !== 'draft' || this.executionRecordSavingById[record.id]) return;
+    this.executionEditingRecordByOrderId[order.id] = record.id;
+    this.executionFormByOrderId[order.id] = {
+      purpose: record.purpose as ExecutionRecordPurpose,
+      compositionSource:
+        record.artillery?.compositionSource === 'manual' ? 'manual' : 'planned',
+      quantity: String(record.quantity),
+      comment: record.comment || '',
+    };
+    this.focusExecutionControl(order, 'form');
   }
 
   postExecutionRecord(order: ServiceOrder, record: ExecutionRecord): void {
@@ -2646,8 +2700,13 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
         }
 
         this.executionRecords.post(record.id).subscribe({
-          next: () => {
+          next: (postedRecord) => {
             this.executionRecordSavingById[record.id] = false;
+            this.executionValidationByRecordId[record.id] = [];
+            this.executionRecordsByOrderId[order.id] = this.getExecutionRecords(order).map(
+              (item) => item.id === postedRecord.id ? postedRecord : item,
+            );
+            this.cdr.detectChanges();
             this.loadExecutionRecords(order);
           },
           error: (error) => {
@@ -2715,6 +2774,22 @@ getPayloadLabel(payload: ServiceOrderAirPayloadVariant): string {
     };
 
     return labels[value] || value;
+  }
+
+  getExecutionCompositionLabel(record: ExecutionRecord): string {
+    const artillery = record.artillery;
+    if (!artillery) return 'Без складської компоновки';
+    const source =
+      artillery.compositionSource === 'manual'
+        ? 'Ручна'
+        : artillery.compositionSource === 'template'
+          ? 'Шаблон'
+          : 'Планова';
+    return `${source} компоновка · ${artillery.charges.length} заряд(и)`;
+  }
+
+  getExecutionTimestamp(record: ExecutionRecord): string {
+    return formatKyivDateTime(record.postedAt || record.createdAt || record.startedAt);
   }
 
   getExecutionRequirementLabel(record: ExecutionRecord): string {
