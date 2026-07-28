@@ -16,6 +16,7 @@ describe('deriveFirePositionOperationalState', () => {
       deriveFirePositionOperationalState(position('not_prepared'), null),
     ).toMatchObject({
       ready: false,
+      displayState: 'unknown',
       reasonCode: 'weapon_missing',
       reasonLabel: 'СГ не призначена',
       assignedWeapon: null,
@@ -29,6 +30,7 @@ describe('deriveFirePositionOperationalState', () => {
       deriveFirePositionOperationalState(position(null), assignedWeapon),
     ).toEqual({
       ready: false,
+      displayState: 'danger',
       reasonCode: 'weapon_not_ready',
       reasonLabel: 'СГ НЕ БГ: Поломка',
       assignedWeapon,
@@ -42,6 +44,7 @@ describe('deriveFirePositionOperationalState', () => {
       deriveFirePositionOperationalState(position(null), assignedWeapon),
     ).toEqual({
       ready: true,
+      displayState: 'ready',
       reasonCode: null,
       reasonLabel: null,
       assignedWeapon,
@@ -65,6 +68,7 @@ describe('deriveFirePositionOperationalState', () => {
         ),
       ).toEqual({
         ready: false,
+        displayState: 'danger',
         reasonCode,
         reasonLabel,
         assignedWeapon,

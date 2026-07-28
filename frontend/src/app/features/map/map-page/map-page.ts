@@ -68,6 +68,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
   private readonly previousPositionSignatures = new Map<string, string>();
   private readonly previousThreatSignatures = new Map<string, string>();
   private readonly firePositionMarkers = new Map<string, import('leaflet').Marker>();
+  private readonly firePositionSectorLayers = new Map<string, LeafletLayerGroup>();
+  private readonly firePositionRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly liveMarkerKeys = new Set<string>();
   private readonly activeFirePositionIds = new Set<string>();
 
@@ -202,6 +204,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
     this.mapResultsRequest?.unsubscribe();
     this.activeOrdersRequest?.unsubscribe();
     this.positionCardRequest?.unsubscribe();
+    this.firePositionRefreshTimers.forEach((timer) => clearTimeout(timer));
+    this.firePositionRefreshTimers.clear();
     this.liveMarkerTimers.forEach((timer) => clearTimeout(timer));
     this.liveMarkerTimers.clear();
     if (this.scheduledRefreshTimer) clearInterval(this.scheduledRefreshTimer);
@@ -337,19 +341,43 @@ export class MapPage implements AfterViewInit, OnDestroy {
 
   private handleMapRealtimeEvent(event: RealtimeEventPayload): void {
     if (event.entity === 'weapon_system') {
+      if (event.id) {
+        this.mapPositions
+          .filter((position) => position.assignedWeapon?.id === event.id)
+          .forEach((position) => this.scheduleFirePositionRefresh(position.id));
+      }
       return;
     }
 
     if (event.entity === 'fire_position' && event.id) {
       if (event.action === 'deleted') {
+        this.cancelFirePositionRefresh(event.id);
         this.removeFirePositionFromMap(event.id);
       } else {
-        this.refreshFirePosition(event.id);
+        this.scheduleFirePositionRefresh(event.id);
       }
       return;
     }
 
     this.loadMapObjects();
+  }
+
+  private scheduleFirePositionRefresh(id: string): void {
+    this.cancelFirePositionRefresh(id);
+    const timer = setTimeout(() => {
+      this.firePositionRefreshTimers.delete(id);
+      this.refreshFirePosition(id);
+    }, 40);
+    this.firePositionRefreshTimers.set(id, timer);
+  }
+
+  private cancelFirePositionRefresh(id: string): void {
+    const timer = this.firePositionRefreshTimers.get(id);
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    this.firePositionRefreshTimers.delete(id);
   }
 
   private refreshFirePosition(id: string): void {
@@ -367,10 +395,11 @@ export class MapPage implements AfterViewInit, OnDestroy {
           this.positionsLayer.removeLayer(previousMarker);
           this.firePositionMarkers.delete(id);
         }
+        this.removeFirePositionSector(id);
 
         if (
           !this.readinessFilter ||
-          this.normalizeReadinessStatus(position.readinessStatus) === this.readinessFilter
+          this.getFirePositionReadinessBucket(position) === this.readinessFilter
         ) {
           this.addFirePositionMarker(position);
         }
@@ -379,7 +408,6 @@ export class MapPage implements AfterViewInit, OnDestroy {
           this.selectedPosition = position;
           this.loadPositionCard(id);
           if (!this.showSectors) {
-            this.sectorsLayer.clearLayers();
             this.addSector(position);
           }
         }
@@ -396,6 +424,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       this.positionsLayer.removeLayer(marker);
       this.firePositionMarkers.delete(id);
     }
+    this.removeFirePositionSector(id);
     this.mapPositions = this.mapPositions.filter((position) => position.id !== id);
     if (this.selectedPosition?.id === id) {
       this.closePositionPanel();
@@ -406,13 +435,13 @@ export class MapPage implements AfterViewInit, OnDestroy {
 
   private updateFirePositionReadinessCounters(): void {
     this.readyCount = this.mapPositions.filter(
-      (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'ready',
+      (position) => this.getFirePositionReadinessBucket(position) === 'ready',
     ).length;
     this.inProgressCount = this.mapPositions.filter(
-      (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'in_progress',
+      (position) => this.getFirePositionReadinessBucket(position) === 'in_progress',
     ).length;
     this.notReadyCount = this.mapPositions.filter(
-      (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'not_ready',
+      (position) => this.getFirePositionReadinessBucket(position) === 'not_ready',
     ).length;
   }
 
@@ -431,7 +460,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       plannedRoutes: this.plannedTripsService.getRoutes().pipe(catchError(() => of([]))),
     }).subscribe({
       next: ({ positions, ewPositions, airAssets, threats, plannedRoutes }) => {
-        this.sectorsLayer.clearLayers();
+        this.clearAllSectorLayers();
         this.positionsLayer.clearLayers();
         this.firePositionMarkers.clear();
         this.threatsLayer.clearLayers();
@@ -441,22 +470,29 @@ export class MapPage implements AfterViewInit, OnDestroy {
 
         const friendlyObjects = [...positions, ...ewPositions, ...airAssets];
         this.positionsCount = friendlyObjects.length;
-        this.readyCount = friendlyObjects.filter(
-          (x) => this.normalizeReadinessStatus(x.readinessStatus) === 'ready',
-        ).length;
+        this.readyCount =
+          positions.filter((position) => this.getFirePositionReadinessBucket(position) === 'ready')
+            .length +
+          [...ewPositions, ...airAssets].filter(
+            (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'ready',
+          ).length;
         this.inProgressCount = positions.filter(
-          (x) => this.normalizeReadinessStatus(x.readinessStatus) === 'in_progress',
+          (position) => this.getFirePositionReadinessBucket(position) === 'in_progress',
         ).length;
-        this.notReadyCount = friendlyObjects.filter(
-          (x) => this.normalizeReadinessStatus(x.readinessStatus) === 'not_ready',
-        ).length;
+        this.notReadyCount =
+          positions.filter(
+            (position) => this.getFirePositionReadinessBucket(position) === 'not_ready',
+          ).length +
+          [...ewPositions, ...airAssets].filter(
+            (position) => this.normalizeReadinessStatus(position.readinessStatus) === 'not_ready',
+          ).length;
 
         this.markUpdatedPositions(positions);
 
         const visiblePositions = positions.filter(
           (position) =>
             !this.readinessFilter ||
-            this.normalizeReadinessStatus(position.readinessStatus) === this.readinessFilter,
+            this.getFirePositionReadinessBucket(position) === this.readinessFilter,
         );
         const visibleEwPositions = ewPositions.filter(
           (position) => !this.readinessFilter || position.readinessStatus === this.readinessFilter,
@@ -508,8 +544,6 @@ export class MapPage implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const color = this.getReadinessColor(position.readinessStatus);
-
     const marker = this.L.marker([position.lat, position.lng], {
       icon: this.createPositionIcon(position),
     });
@@ -528,7 +562,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       this.threatFormVisible = false;
 
       if (!this.showSectors) {
-        this.sectorsLayer.clearLayers();
+        this.clearAllSectorLayers();
         this.addSector(position);
       }
 
@@ -621,6 +655,73 @@ export class MapPage implements AfterViewInit, OnDestroy {
     if (normalized === 'not_ready') return '#ff4040';
 
     return '#6b7280';
+  }
+
+  private getFirePositionReadinessColor(position: FirePosition): string {
+    switch (position.operationalState?.displayState) {
+      case 'ready':
+        return '#00ff88';
+      case 'danger':
+        return '#ff4040';
+      case 'warning':
+        return '#ffd400';
+      default:
+        return '#6b7280';
+    }
+  }
+
+  getFirePositionReadinessClass(
+    position: FirePosition,
+  ): FirePosition['operationalState']['displayState'] {
+    return position.operationalState?.displayState ?? 'unknown';
+  }
+
+  getFirePositionReadinessLabel(position: FirePosition): string {
+    switch (this.getFirePositionReadinessClass(position)) {
+      case 'ready':
+        return 'Боєготова';
+      case 'danger':
+        return 'Не боєготова';
+      case 'warning':
+        return 'Обмежено боєготова';
+      default:
+        return 'Стан невідомий';
+    }
+  }
+
+  private getFirePositionReadinessBucket(position: FirePosition): string {
+    switch (this.getFirePositionReadinessClass(position)) {
+      case 'ready':
+        return 'ready';
+      case 'danger':
+        return 'not_ready';
+      case 'warning':
+        return 'in_progress';
+      default:
+        return 'unknown';
+    }
+  }
+
+  private getSectorSpanDegrees(leftDeg: number, rightDeg: number): number {
+    return this.normalizeDegrees(rightDeg - leftDeg);
+  }
+
+  private normalizeDegrees(value: number): number {
+    return ((value % 360) + 360) % 360;
+  }
+
+  private removeFirePositionSector(id: string): void {
+    const group = this.firePositionSectorLayers.get(id);
+    if (!group) {
+      return;
+    }
+    this.sectorsLayer.removeLayer(group);
+    this.firePositionSectorLayers.delete(id);
+  }
+
+  private clearAllSectorLayers(): void {
+    this.sectorsLayer.clearLayers();
+    this.firePositionSectorLayers.clear();
   }
 
   private fail(error: unknown, message: string): void {
@@ -730,6 +831,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
   }
 
   private addSector(position: FirePosition): void {
+    this.removeFirePositionSector(position.id);
     const radiusM =
       position.maxSectorDistanceM && position.maxSectorDistanceM > 0
         ? position.maxSectorDistanceM
@@ -752,6 +854,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       radiusM,
     );
 
+    const group = this.L.layerGroup();
     this.L.polygon(points, {
       color: '#a855f7',
       weight: 1,
@@ -759,13 +862,15 @@ export class MapPage implements AfterViewInit, OnDestroy {
 
       fillColor: '#9333ea',
       fillOpacity: 0.08,
-    }).addTo(this.sectorsLayer);
+    }).addTo(group);
     this.L.polyline(points, {
       color: '#c084fc',
       weight: 1,
       opacity: 0.56,
       dashArray: '5 7',
-    }).addTo(this.sectorsLayer);
+    }).addTo(group);
+    group.addTo(this.sectorsLayer);
+    this.firePositionSectorLayers.set(position.id, group);
   }
 
   private fitMapToVisibleObjects(
@@ -820,12 +925,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
     const points: LeafletLatLngExpression[] = [[lat, lng]];
     const step = 2;
 
-    let start = leftDeg;
-    let end = rightDeg;
-
-    if (end < start) {
-      end += 360;
-    }
+    const start = this.normalizeDegrees(leftDeg);
+    const end = start + this.getSectorSpanDegrees(leftDeg, rightDeg);
 
     for (let angle = start; angle <= end; angle += step) {
       points.push(this.destinationPoint(lat, lng, angle % 360, radiusM));
@@ -1195,7 +1296,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
     this.maintenanceNote = '';
   }
   private createPositionIcon(position: FirePosition): LeafletDivIcon {
-    const color = this.getReadinessColor(position.readinessStatus);
+    const color = this.getFirePositionReadinessColor(position);
     const label = this.escapeHtml(this.getFirePositionLabel(position));
     const shortLabel = this.escapeHtml(this.getFirePositionShortUnit(position));
     const classes = [
@@ -1510,7 +1611,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
   }
 
   private getPositionSignGlyph(position: FirePosition): string {
-    const color = this.getReadinessColor(position.readinessStatus);
+    const color = this.getFirePositionReadinessColor(position);
     const symbol = this.getPositionMilsymbolSvg(position, color);
 
     if (this.isPositionMaintenanceActive(position)) {
@@ -1609,7 +1710,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
         this.selectedPositionCard = card;
 
         if (!this.showSectors && this.selectedPosition) {
-          this.sectorsLayer.clearLayers();
+          this.clearAllSectorLayers();
           const radiusM =
             card.maxSectorDistanceM && card.maxSectorDistanceM > 0
               ? card.maxSectorDistanceM
@@ -1632,7 +1733,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
     this.selectedPositionCard = null;
 
     if (!this.showSectors) {
-      this.sectorsLayer.clearLayers();
+      this.clearAllSectorLayers();
     }
 
     this.cdr.detectChanges();
@@ -1663,6 +1764,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
   }
 
   private addSectorWithRadius(position: FirePosition, radiusM: number): void {
+    this.removeFirePositionSector(position.id);
     if (
       position.lat === null ||
       position.lng === null ||
@@ -1681,13 +1783,16 @@ export class MapPage implements AfterViewInit, OnDestroy {
       radiusM,
     );
 
+    const group = this.L.layerGroup();
     this.L.polygon(points, {
       color: '#8b5cf6',
       weight: 1,
       opacity: 0.48,
       fillColor: '#8b5cf6',
       fillOpacity: 0.08,
-    }).addTo(this.sectorsLayer);
+    }).addTo(group);
+    group.addTo(this.sectorsLayer);
+    this.firePositionSectorLayers.set(position.id, group);
   }
 
   goToCreateOrder(): void {
@@ -2225,7 +2330,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
     return [
       position.lat,
       position.lng,
-      position.readinessStatus,
+      position.operationalState?.displayState ?? 'unknown',
+      position.operationalState?.reasonCode ?? '',
       position.notReadyReason || '',
       position.hasSg ? 'sg' : 'no-sg',
       position.completedVgzCount ?? 0,

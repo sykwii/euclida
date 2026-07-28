@@ -335,11 +335,11 @@
 
     <div
       class="status-badge"
-      [class.ready]="position.readinessStatus === 'ready'"
-      [class.progress]="position.readinessStatus === 'in_progress'"
-      [class.danger]="position.readinessStatus === 'not_ready'"
+      [class.ready]="getFirePositionReadinessClass(position) === 'ready'"
+      [class.progress]="getFirePositionReadinessClass(position) === 'warning'"
+      [class.danger]="getFirePositionReadinessClass(position) === 'danger'"
     >
-      {{ getReadinessLabel(position.readinessStatus) }}
+      {{ getFirePositionReadinessLabel(position) }}
     </div>
 
     <button type="button" class="edit-button" (click)="editSelectedPosition()">Редагувати</button>

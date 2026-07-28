@@ -412,11 +412,14 @@
 }
 
 .status-dot.progress,
-.status-label.progress {
+.status-label.progress,
+.status-dot.warning,
+.status-label.warning {
   color: #fde68a;
 }
 
-.status-dot.progress {
+.status-dot.progress,
+.status-dot.warning {
   background: #facc15;
 }
 

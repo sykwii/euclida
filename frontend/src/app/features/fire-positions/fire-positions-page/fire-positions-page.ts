@@ -531,7 +531,7 @@ export class FirePositionsPage implements OnInit, OnDestroy {
   }
 
   getAggregateReadinessClass(item: FirePosition): string {
-    return item.operationalState.ready ? 'ready' : 'danger';
+    return item.operationalState.displayState;
   }
 
   getAggregateReasonLabels(item: FirePosition): string[] {

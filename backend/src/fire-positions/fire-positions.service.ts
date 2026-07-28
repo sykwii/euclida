@@ -21,6 +21,7 @@ import { DepotFuzeStock } from '../depot-fuze-stock/depot-fuze-stock.entity';
 import { DepotPrimerStock } from '../depot-primer-stock/depot-primer-stock.entity';
 import { ShellCompatibleCharge } from '../shell-compatible-charges/shell-compatible-charge.entity';
 import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
+import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import { WeaponDeployment } from '../weapon-systems/weapon-deployment.entity';
 import { ForbiddenException } from '@nestjs/common';
 import { In } from 'typeorm';
@@ -35,6 +36,7 @@ import {
   FirePositionOperationalReasonCode,
   FirePositionOperationalState,
 } from './fire-position-operational-state';
+import { deriveFirePositionSector } from './fire-position-sector';
 
 type FireReadinessReason = Exclude<FirePositionOperationalReasonCode, null>;
 
@@ -251,30 +253,11 @@ export class FirePositionsService implements OnModuleInit {
       mgrs = latLngToMgrs(lat, lng);
     }
 
-    const mainDirectionDegrees =
-      data.mainDirectionUnits !== undefined
-        ? Math.ceil(Number(data.mainDirectionUnits) * 6)
-        : null;
-
-    const traverseLeftDegrees =
-      data.traverseLeftUnits !== undefined
-        ? Math.ceil(Number(data.traverseLeftUnits) * 6)
-        : null;
-
-    const traverseRightDegrees =
-      data.traverseRightUnits !== undefined
-        ? Math.ceil(Number(data.traverseRightUnits) * 6)
-        : null;
-
-    const sectorLeftDegrees =
-      mainDirectionDegrees !== null && traverseLeftDegrees !== null
-        ? this.normalizeDegrees(mainDirectionDegrees - traverseLeftDegrees)
-        : null;
-
-    const sectorRightDegrees =
-      mainDirectionDegrees !== null && traverseRightDegrees !== null
-        ? this.normalizeDegrees(mainDirectionDegrees + traverseRightDegrees)
-        : null;
+    const sector = deriveFirePositionSector(
+      data.mainDirectionUnits,
+      data.traverseLeftUnits,
+      data.traverseRightUnits,
+    );
     const positionType = this.normalizePositionType(data.positionType);
     const isFirePosition = positionType === 'fire_position';
     return this.dataSource.transaction(async (manager) => {
@@ -299,11 +282,7 @@ export class FirePositionsService implements OnModuleInit {
           ? 'not_combat_ready'
           : (data.readinessStatus ?? 'combat_ready'),
         notReadyReason: isFirePosition ? null : (data.notReadyReason ?? null),
-        mainDirectionDegrees,
-        traverseLeftDegrees,
-        traverseRightDegrees,
-        sectorLeftDegrees,
-        sectorRightDegrees,
+        ...sector,
       });
 
       const savedFirePosition = await manager.save(FirePosition, firePosition);
@@ -339,30 +318,11 @@ export class FirePositionsService implements OnModuleInit {
         ? data.traverseRightUnits
         : item.traverseRightUnits;
 
-    const mainDirectionDegrees =
-      mainDirectionUnits !== null && mainDirectionUnits !== undefined
-        ? Math.ceil(Number(mainDirectionUnits) * 6)
-        : null;
-
-    const traverseLeftDegrees =
-      traverseLeftUnits !== null && traverseLeftUnits !== undefined
-        ? Math.ceil(Number(traverseLeftUnits) * 6)
-        : null;
-
-    const traverseRightDegrees =
-      traverseRightUnits !== null && traverseRightUnits !== undefined
-        ? Math.ceil(Number(traverseRightUnits) * 6)
-        : null;
-
-    const sectorLeftDegrees =
-      mainDirectionDegrees !== null && traverseLeftDegrees !== null
-        ? this.normalizeDegrees(mainDirectionDegrees - traverseLeftDegrees)
-        : null;
-
-    const sectorRightDegrees =
-      mainDirectionDegrees !== null && traverseRightDegrees !== null
-        ? this.normalizeDegrees(mainDirectionDegrees + traverseRightDegrees)
-        : null;
+    const sector = deriveFirePositionSector(
+      mainDirectionUnits,
+      traverseLeftUnits,
+      traverseRightUnits,
+    );
     let lat = data.lat !== undefined ? data.lat : item.lat;
     let lng = data.lng !== undefined ? data.lng : item.lng;
     let mgrs = data.mgrs !== undefined ? data.mgrs : item.mgrs;
@@ -397,11 +357,7 @@ export class FirePositionsService implements OnModuleInit {
       lat,
       lng,
       mgrs,
-      mainDirectionDegrees,
-      traverseLeftDegrees,
-      traverseRightDegrees,
-      sectorLeftDegrees,
-      sectorRightDegrees,
+      ...sector,
     });
     const saved = await this.repository.save(item);
     this.emitFirePositionChanged('updated', saved.id);
@@ -439,9 +395,6 @@ export class FirePositionsService implements OnModuleInit {
     });
   }
 
-  private normalizeDegrees(value: number): number {
-    return ((value % 360) + 360) % 360;
-  }
   getSectorInfo(id: string) {
     return this.findOne(id).then((item) => ({
       id: item.id,
@@ -626,8 +579,10 @@ export class FirePositionsService implements OnModuleInit {
     const assignedWeapons =
       await this.findCanonicalAssignedWeapons(positionIds);
     const incomingDeployments = await this.findIncomingDeployments(positionIds);
-    const maxSectorDistances =
-      await this.getMaxSectorDistancesForPositions(positions);
+    const maxSectorDistances = await this.getMaxSectorDistancesForPositions(
+      positions,
+      assignedWeapons,
+    );
 
     const result: Array<
       OperationalFirePosition & {
@@ -682,6 +637,7 @@ export class FirePositionsService implements OnModuleInit {
 
   private async getMaxSectorDistancesForPositions(
     positions: FirePosition[],
+    assignedWeapons: Map<string, WeaponSystem>,
   ): Promise<Map<string, number>> {
     const depotIds = Array.from(
       new Set(
@@ -690,8 +646,44 @@ export class FirePositionsService implements OnModuleInit {
           .filter((id): id is string => !!id),
       ),
     );
+    const weaponModelIds = Array.from(
+      new Set(
+        Array.from(assignedWeapons.values())
+          .map((weapon) => weapon.weaponModelId)
+          .filter(Boolean),
+      ),
+    );
+    const activeKits =
+      weaponModelIds.length > 0
+        ? await this.dataSource.getRepository(ShotConfiguration).find({
+            where: {
+              weaponModelId: In(weaponModelIds),
+              isActive: true,
+            },
+          })
+        : [];
+    const maxKitRangeByModel = new Map<string, number>();
+    for (const kit of activeKits) {
+      maxKitRangeByModel.set(
+        kit.weaponModelId,
+        Math.max(
+          maxKitRangeByModel.get(kit.weaponModelId) ?? 0,
+          Number(kit.maxRangeM),
+        ),
+      );
+    }
+    const result = new Map<string, number>();
+    for (const position of positions) {
+      const weapon = assignedWeapons.get(position.id);
+      const kitRange = weapon
+        ? (maxKitRangeByModel.get(weapon.weaponModelId) ?? 0)
+        : 0;
+      if (kitRange > 0) {
+        result.set(position.id, kitRange);
+      }
+    }
     if (depotIds.length === 0) {
-      return new Map();
+      return result;
     }
 
     const [shellStock, chargeStock] = await Promise.all([
@@ -709,7 +701,7 @@ export class FirePositionsService implements OnModuleInit {
       new Set(chargeStock.map((item) => item.chargeId)),
     );
     if (shellIds.length === 0 || chargeIds.length === 0) {
-      return new Map();
+      return result;
     }
 
     const compatibleRanges = await this.dataSource
@@ -726,9 +718,10 @@ export class FirePositionsService implements OnModuleInit {
       chargeStock,
       (item) => item.chargeId,
     );
-    const result = new Map<string, number>();
-
     for (const position of positions) {
+      if ((result.get(position.id) ?? 0) > 0) {
+        continue;
+      }
       if (!position.ammoDepotId) {
         continue;
       }

@@ -90,9 +90,42 @@ describe('WeaponSystemsPage', () => {
     expect(component.canCompleteMaintenance(item)).toBe(false);
     expect(component.canCancelMaintenance(item)).toBe(false);
   });
+
+  it('keeps two maximum-action card models and fires an action once', () => {
+    component.items = [
+      createWeapon({ id: 'weapon-1', readinessStatus: 'combat_ready' }),
+      createWeapon({
+        id: 'weapon-2',
+        callsign: 'Довгий український позивний для перевірки переносу',
+        readinessStatus: 'combat_ready',
+      }),
+    ];
+    component.loading = false;
+    component.errorMessage = '';
+    (
+      component as unknown as {
+        auth: { getUser(): { role: string; scope: string } };
+      }
+    ).auth.getUser = () => ({ role: 'admin', scope: 'main' });
+    Object.defineProperty(component, 'visibleItems', {
+      configurable: true,
+      get: () => component.items,
+    });
+    vi.spyOn(component, 'canEditWeapon').mockReturnValue(true);
+    vi.spyOn(component, 'canAssign').mockReturnValue(false);
+    vi.spyOn(component, 'canWithdraw').mockReturnValue(true);
+    const edit = vi.spyOn(component, 'startEdit').mockImplementation(() => undefined);
+
+    component.startEdit(component.filteredItems[0]);
+
+    expect(component.filteredItems.length).toBe(2);
+    expect(edit).toHaveBeenCalledOnce();
+  });
 });
 
-function createWeapon(overrides: Partial<Parameters<WeaponSystemsPage['canOpenMaintenance']>[0]> = {}) {
+function createWeapon(
+  overrides: Partial<Parameters<WeaponSystemsPage['canOpenMaintenance']>[0]> = {},
+) {
   return {
     id: 'weapon-1',
     weaponModelId: 'model-1',

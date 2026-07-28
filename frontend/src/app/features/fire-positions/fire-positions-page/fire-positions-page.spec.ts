@@ -59,6 +59,7 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       assignedWeapon,
       operationalState: {
         ready: false,
+        displayState: 'danger',
         reasonCode: 'fp_damaged',
         reasonLabel: 'ВП пошкоджена',
         assignedWeapon,
@@ -76,6 +77,7 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       assignedWeapon: createWeapon(),
       operationalState: {
         ready: true,
+        displayState: 'ready',
         reasonCode: null,
         reasonLabel: null,
         assignedWeapon: createWeapon(),
@@ -93,6 +95,7 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       assignedWeapon: null,
       operationalState: {
         ready: false,
+        displayState: 'unknown',
         reasonCode: 'weapon_missing',
         reasonLabel: 'СГ не призначена',
         assignedWeapon: null,
@@ -115,6 +118,7 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       assignedWeapon,
       operationalState: {
         ready: false,
+        displayState: 'danger',
         reasonCode: 'weapon_not_ready',
         reasonLabel: 'СГ НЕ БГ: Поломка',
         assignedWeapon,
@@ -146,6 +150,7 @@ describe('FirePositionsPage aggregate fire readiness', () => {
       notReadyReason: null,
       operationalState: {
         ready: true,
+        displayState: 'ready',
         reasonCode: null,
         reasonLabel: null,
         assignedWeapon: createWeapon(),

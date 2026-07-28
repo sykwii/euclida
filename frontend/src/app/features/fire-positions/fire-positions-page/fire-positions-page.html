@@ -211,9 +211,9 @@
       (click)="openDetails(item)"
     >
       <div class="card-status-row">
-        <span class="status-label" [class]="getReadinessClass(item.readinessStatus)">
-          <span class="status-dot" [class]="getReadinessClass(item.readinessStatus)"></span>
-          {{ getFpReadinessLabel(item.readinessStatus) }}
+        <span class="status-label" [class]="getAggregateReadinessClass(item)">
+          <span class="status-dot" [class]="getAggregateReadinessClass(item)"></span>
+          {{ getAggregateReadinessLabel(item) }}
         </span>
         <span class="card-code">{{ isAirAssetsPage ? 'ПОВІТРЯ' : isEwPage ? 'РЕБ' : 'ВП' }}</span>
       </div>
@@ -414,9 +414,9 @@
           <h2>{{ detail.name }}</h2>
         </div>
         <div class="fp-detail-actions">
-          <span class="status-label" [class]="getReadinessClass(detail.readinessStatus)">
-            <span class="status-dot" [class]="getReadinessClass(detail.readinessStatus)"></span>
-            {{ getReadinessLabel(detail.readinessStatus) }}
+          <span class="status-label" [class]="getAggregateReadinessClass(detail)">
+            <span class="status-dot" [class]="getAggregateReadinessClass(detail)"></span>
+            {{ getAggregateReadinessLabel(detail) }}
           </span>
           <button
             type="button"

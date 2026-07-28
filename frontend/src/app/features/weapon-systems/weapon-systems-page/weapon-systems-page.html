@@ -9,7 +9,12 @@
       <button type="button" class="primary-button" *ngIf="canCreateWeapon()" (click)="openCreate()">
         Додати СГ
       </button>
-      <button type="button" class="ghost-button" (click)="syncFirePositionStates()" [disabled]="syncing">
+      <button
+        type="button"
+        class="ghost-button"
+        (click)="syncFirePositionStates()"
+        [disabled]="syncing"
+      >
         {{ syncing ? 'Синхронізація...' : 'Синхронізувати ВП' }}
       </button>
       <button type="button" class="ghost-button" (click)="load()" [disabled]="loading">
@@ -19,7 +24,12 @@
   </header>
 
   <section class="stats-grid">
-    <button type="button" class="stat-card" [class.active]="activeFilter === 'all'" (click)="setFilter('all')">
+    <button
+      type="button"
+      class="stat-card"
+      [class.active]="activeFilter === 'all'"
+      (click)="setFilter('all')"
+    >
       <strong>{{ totalCount }}</strong>
       <span>Усього</span>
     </button>
@@ -118,10 +128,14 @@
       <div class="editor-head">
         <div>
           <span>ТО / ремонт</span>
-          <h2>{{ maintenanceModalWeapon.callsign || maintenanceModalWeapon.serialNumber || 'СГ' }}</h2>
+          <h2>
+            {{ maintenanceModalWeapon.callsign || maintenanceModalWeapon.serialNumber || 'СГ' }}
+          </h2>
         </div>
 
-        <button type="button" class="ghost-button" (click)="closeMaintenanceModal()">Скасувати</button>
+        <button type="button" class="ghost-button" (click)="closeMaintenanceModal()">
+          Скасувати
+        </button>
       </div>
 
       <form class="equipment-form" (ngSubmit)="submitMaintenance()">
@@ -148,8 +162,14 @@
           />
         </label>
 
-        <button type="submit" class="primary-button" [disabled]="maintenanceId === maintenanceModalWeapon.id">
-          {{ maintenanceId === maintenanceModalWeapon.id ? 'Відкриваємо...' : 'Відкрити ТО/ремонт' }}
+        <button
+          type="submit"
+          class="primary-button"
+          [disabled]="maintenanceId === maintenanceModalWeapon.id"
+        >
+          {{
+            maintenanceId === maintenanceModalWeapon.id ? 'Відкриваємо...' : 'Відкрити ТО/ремонт'
+          }}
         </button>
       </form>
     </section>
@@ -290,40 +310,50 @@
           Завершити ТО
         </button>
 
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="canCancelMaintenance(item)"
-          (click)="cancelMaintenance(item)"
-          [disabled]="maintenanceId === item.id"
-        >
-          Скасувати ТО
-        </button>
+        <details class="secondary-actions">
+          <summary aria-label="Інші дії" title="Інші дії">
+            <span class="menu-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </summary>
+          <div class="secondary-menu">
+            <button
+              type="button"
+              class="ghost-button"
+              *ngIf="canCancelMaintenance(item)"
+              (click)="cancelMaintenance(item)"
+              [disabled]="maintenanceId === item.id"
+            >
+              Скасувати ТО
+            </button>
 
-        <button
-          type="button"
-          class="danger-button"
-          *ngIf="!item.hasHistoricalReferences"
-          (click)="remove(item.id)"
-          [disabled]="deletingId === item.id"
-        >
-          {{ deletingId === item.id ? 'Видалення...' : 'Видалити' }}
-        </button>
+            <button
+              type="button"
+              class="danger-button"
+              *ngIf="!item.hasHistoricalReferences"
+              (click)="remove(item.id)"
+              [disabled]="deletingId === item.id"
+            >
+              {{ deletingId === item.id ? 'Видалення...' : 'Видалити' }}
+            </button>
 
-        <button
-          type="button"
-          class="ghost-button"
-          *ngIf="item.hasHistoricalReferences"
-          (click)="archive(item)"
-          [disabled]="deletingId === item.id"
-        >
-          {{ deletingId === item.id ? 'Архівування...' : 'Архівувати' }}
-        </button>
+            <button
+              type="button"
+              class="danger-button"
+              *ngIf="item.hasHistoricalReferences"
+              (click)="archive(item)"
+              [disabled]="deletingId === item.id"
+            >
+              {{ deletingId === item.id ? 'Архівування...' : 'Архівувати' }}
+            </button>
+          </div>
+        </details>
       </div>
     </article>
   </section>
 
-  <div class="ui-state ui-state-empty" *ngIf="!loading && !errorMessage && filteredItems.length === 0">
+  <div
+    class="ui-state ui-state-empty"
+    *ngIf="!loading && !errorMessage && filteredItems.length === 0"
+  >
     <strong>СГ ще не додані</strong>
     <p>Додайте першу СГ або перевірте доступ до підрозділу.</p>
   </div>

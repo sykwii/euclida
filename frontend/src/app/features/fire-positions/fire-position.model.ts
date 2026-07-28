@@ -47,6 +47,7 @@ export interface FirePosition {
   notReadyReason: string | null;
   operationalState: {
     ready: boolean;
+    displayState: 'ready' | 'danger' | 'warning' | 'unknown';
     reasonCode: FirePositionOperationalReasonCode;
     reasonLabel: string | null;
     assignedWeapon: FirePosition['assignedWeapon'];

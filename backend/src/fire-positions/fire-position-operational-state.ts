@@ -12,6 +12,7 @@ export type FirePositionOperationalReasonCode =
 
 export interface FirePositionOperationalState {
   ready: boolean;
+  displayState: 'ready' | 'danger' | 'warning' | 'unknown';
   reasonCode: FirePositionOperationalReasonCode;
   reasonLabel: string | null;
   assignedWeapon: WeaponSystem | null;
@@ -52,6 +53,7 @@ export function deriveFirePositionOperationalState(
   if (block) {
     return {
       ready: false,
+      displayState: 'danger',
       reasonCode: block.code,
       reasonLabel: block.label,
       assignedWeapon,
@@ -61,6 +63,7 @@ export function deriveFirePositionOperationalState(
   if (!assignedWeapon) {
     return {
       ready: false,
+      displayState: 'unknown',
       reasonCode: 'weapon_missing',
       reasonLabel: 'СГ не призначена',
       assignedWeapon: null,
@@ -74,6 +77,7 @@ export function deriveFirePositionOperationalState(
 
     return {
       ready: false,
+      displayState: 'danger',
       reasonCode: 'weapon_not_ready',
       reasonLabel: `СГ НЕ БГ: ${weaponReason}`,
       assignedWeapon,
@@ -82,6 +86,7 @@ export function deriveFirePositionOperationalState(
 
   return {
     ready: true,
+    displayState: 'ready',
     reasonCode: null,
     reasonLabel: null,
     assignedWeapon,

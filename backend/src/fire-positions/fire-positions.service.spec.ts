@@ -2,6 +2,7 @@ import { FirePositionsService } from './fire-positions.service';
 import { FirePosition } from './fire-position.entity';
 import { WeaponSystem } from '../weapon-systems/weapon-system.entity';
 import { WeaponDeployment } from '../weapon-systems/weapon-deployment.entity';
+import { ShotConfiguration } from '../shot-configurations/shot-configuration.entity';
 import type { AuthUser } from '../auth/auth-user.types';
 
 describe('FirePositionsService OPS-1 aggregate readiness', () => {
@@ -9,6 +10,7 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
     testMocks: {
       weaponRepository: { find: jest.Mock; findOne: jest.Mock };
       deploymentRepository: { find: jest.Mock; findOne: jest.Mock };
+      shotConfigurationRepository: { find: jest.Mock };
     };
   };
   const user: AuthUser = {
@@ -27,6 +29,7 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
       incomingDeployment?: WeaponDeployment | null;
       allowedUnitIds?: string[];
       canAccessUnit?: boolean;
+      activeKitRangeM?: number;
     } = {},
   ): TestService {
     const firePositionRepository = {
@@ -51,11 +54,25 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
       ),
       findOne: jest.fn(async () => options.incomingDeployment ?? null),
     };
+    const shotConfigurationRepository = {
+      find: jest.fn(async () =>
+        options.activeKitRangeM
+          ? [
+              {
+                weaponModelId: assignedWeapon?.weaponModelId,
+                maxRangeM: options.activeKitRangeM,
+                isActive: true,
+              },
+            ]
+          : [],
+      ),
+    };
     const dataSource = {
       getRepository: jest.fn((entity: unknown) => {
         if (entity === WeaponSystem) return weaponRepository;
         if (entity === WeaponDeployment) return deploymentRepository;
         if (entity === FirePosition) return firePositionRepository;
+        if (entity === ShotConfiguration) return shotConfigurationRepository;
         return {
           find: jest.fn(async () => []),
           findOne: jest.fn(async () => null),
@@ -93,7 +110,11 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
       { create: jest.fn(async () => undefined) } as never,
     );
     return Object.assign(service, {
-      testMocks: { weaponRepository, deploymentRepository },
+      testMocks: {
+        weaponRepository,
+        deploymentRepository,
+        shotConfigurationRepository,
+      },
     });
   }
 
@@ -213,6 +234,21 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
 
     expect(item.assignedWeapon?.id).toBe('weapon-1');
     expect(item.unitId).toBe('unit-1');
+  });
+
+  it('uses the assigned weapon model active-kit range for the map sector', async () => {
+    const service = createService(
+      createFirePosition({ readinessStatus: 'combat_ready' }),
+      createWeapon(),
+      { activeKitRangeM: 14500 },
+    );
+
+    const [item] = await service.findAllForMap(user);
+
+    expect(item.maxSectorDistanceM).toBe(14500);
+    expect(
+      service.testMocks.shotConfigurationRepository.find,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it('backfills fire-position unit from canonical arrived weapon on readiness confirmation', async () => {
