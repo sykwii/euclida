@@ -55,6 +55,7 @@ export interface SuggestionCandidateInput {
   callsign: string | null;
   weaponModelId: string | null;
   weaponReadinessStatus: string | null;
+  weaponReadinessLabel?: string | null;
   activeMaintenance: boolean;
   explicitFirePositionBlock?: string | null;
   assignedWeaponCount?: number;
@@ -236,7 +237,11 @@ export function evaluateSuggestionCandidate(
     );
   }
   if (input.weaponReadinessStatus !== 'combat_ready') {
-    rejections.push(rejection('weapon_not_ready'));
+    rejections.push(
+      input.weaponReadinessLabel
+        ? { code: 'weapon_not_ready', label: input.weaponReadinessLabel }
+        : rejection('weapon_not_ready'),
+    );
   }
   if (input.activeMaintenance) {
     rejections.push(rejection('active_maintenance'));

@@ -91,6 +91,25 @@ describe('WeaponSystemsPage', () => {
     expect(component.canCancelMaintenance(item)).toBe(false);
   });
 
+  it('uses the localized reserve-area fallback for an active deployment', () => {
+    const item = createWeapon({
+      deployments: [{
+        id: 'deployment-1',
+        fromLocationType: 'fire_position',
+        fromLocationId: 'fp-1',
+        toLocationType: 'reserve_area',
+        toLocationId: null,
+        status: 'moving',
+        orderedAt: '2026-07-28T00:00:00.000Z',
+        departedAt: '2026-07-28T00:01:00.000Z',
+        arrivedAt: null,
+        note: null,
+      }],
+    });
+
+    expect(component.getLocationName(item)).toBe('РЗ');
+  });
+
   it('keeps two maximum-action card models and fires an action once', () => {
     component.items = [
       createWeapon({ id: 'weapon-1', readinessStatus: 'combat_ready' }),

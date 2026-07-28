@@ -47,6 +47,7 @@ desktop.ini
 test-results/
 playwright-report/
 .codex-playwright/
+.release/
 
 codex-site-audit.js
 codex-spa-audit.js

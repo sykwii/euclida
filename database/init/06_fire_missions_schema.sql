@@ -35,10 +35,10 @@ CREATE TABLE IF NOT EXISTS fire_missions (
     created_at TIMESTAMP DEFAULT now()
 );
 ALTER TABLE fire_positions
-ADD COLUMN on_value NUMERIC(10,2);
+ADD COLUMN IF NOT EXISTS on_value NUMERIC(10,2);
 
 ALTER TABLE fire_positions
-ADD COLUMN traverse_left NUMERIC(10,2);
+ADD COLUMN IF NOT EXISTS traverse_left NUMERIC(10,2);
 
 ALTER TABLE fire_positions
-ADD COLUMN traverse_right NUMERIC(10,2);
+ADD COLUMN IF NOT EXISTS traverse_right NUMERIC(10,2);

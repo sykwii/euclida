@@ -13,8 +13,13 @@ CREATE TABLE IF NOT EXISTS stock_operations (
   CONSTRAINT chk_stock_operation_depots CHECK (from_depot_id IS NOT NULL OR to_depot_id IS NOT NULL)
 );
 
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS accounting_unit varchar(20) NULL;
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS stock_operation_id uuid NULL REFERENCES stock_operations(id) ON DELETE SET NULL;
+ALTER TABLE stock_movements
+  ADD COLUMN IF NOT EXISTS movement_type varchar(50) NOT NULL DEFAULT 'transfer',
+  ADD COLUMN IF NOT EXISTS fire_mission_id uuid NULL REFERENCES fire_missions(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS movement_group_id uuid NULL,
+  ADD COLUMN IF NOT EXISTS document_number varchar(50) NULL,
+  ADD COLUMN IF NOT EXISTS accounting_unit varchar(20) NULL,
+  ADD COLUMN IF NOT EXISTS stock_operation_id uuid NULL REFERENCES stock_operations(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_stock_operations_created_at ON stock_operations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_stock_operations_from_depot ON stock_operations(from_depot_id);
 CREATE INDEX IF NOT EXISTS idx_stock_operations_to_depot ON stock_operations(to_depot_id);

@@ -276,7 +276,8 @@ async function main() {
       !rejectedByWeapon.some(
         (item) =>
           item.firePositionId === position.id &&
-          item.rejectionReasons?.includes('СГ НЕ БГ: Поломка'),
+          item.rejectionReasons?.includes('weapon_not_ready') &&
+          item.rejectionReasonLabels?.includes('СГ НЕ БГ: Поломка'),
       )
     ) {
       throw new Error('Suggestion does not carry the weapon readiness reason');
@@ -329,7 +330,10 @@ async function main() {
       !rejectedByThreat.some(
         (item) =>
           item.firePositionId === position.id &&
-          item.rejectionReasons?.includes('Повітряна загроза'),
+          item.rejectionReasons?.includes('fp_blocked') &&
+          item.rejectionReasonLabels?.some((label) =>
+            label.includes('Повітряна загроза'),
+          ),
       )
     ) {
       throw new Error('Suggestion does not carry the FP threat reason');

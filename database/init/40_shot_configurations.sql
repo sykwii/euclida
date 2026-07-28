@@ -136,6 +136,28 @@ CREATE TABLE IF NOT EXISTS service_order_actual_shot_configuration_charges (
 CREATE INDEX IF NOT EXISTS idx_service_order_actual_shot_configuration_charges_parent
     ON service_order_actual_shot_configuration_charges(actual_shot_configuration_id, sort_order);
 
+ALTER TABLE zones
+    ADD COLUMN IF NOT EXISTS weapon_model_id UUID REFERENCES weapon_models(id) ON DELETE RESTRICT;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'zones'
+          AND column_name = 'weapon_model'
+    ) THEN
+        EXECUTE '
+            UPDATE zones z
+            SET weapon_model_id = wm.id
+            FROM weapon_models wm
+            WHERE z.weapon_model_id IS NULL
+              AND lower(trim(z.weapon_model)) = lower(trim(wm.name))
+        ';
+    END IF;
+END $$;
+
 WITH legacy_pairs AS (
     SELECT
         scc.id AS compatibility_id,

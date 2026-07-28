@@ -789,7 +789,7 @@ export class WeaponSystemsPage implements OnInit, OnDestroy {
     }
 
     if (deployment?.toLocationType === 'reserve_area') {
-      return item.unit?.name || 'Р Р—';
+      return item.unit?.name || 'РЗ';
     }
 
     if (this.isAtFirePosition(item)) {

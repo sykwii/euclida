@@ -2,6 +2,9 @@ ALTER TABLE users
 ADD COLUMN IF NOT EXISTS unit_id UUID NULL;
 
 ALTER TABLE users
+DROP CONSTRAINT IF EXISTS fk_users_unit;
+
+ALTER TABLE users
 ADD CONSTRAINT fk_users_unit
 FOREIGN KEY (unit_id)
 REFERENCES units(id)

@@ -329,7 +329,7 @@ async function main() {
     });
 
     const runs = [];
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       runs.push(
         stableProjection(
           await api(token, `/service-orders/${order.id}/suggestions`, {

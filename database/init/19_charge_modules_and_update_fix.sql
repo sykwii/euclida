@@ -31,7 +31,8 @@ ALTER TABLE charges
 
 ALTER TABLE shell_compatible_charges
   ADD COLUMN IF NOT EXISTS usable_modules int NULL,
-  ADD COLUMN IF NOT EXISTS compatibility_note text NULL;
+  ADD COLUMN IF NOT EXISTS compatibility_note text NULL,
+  ADD COLUMN IF NOT EXISTS zone_id uuid REFERENCES zones(id) ON DELETE SET NULL;
 
 ALTER TABLE shell_compatible_charges
   DROP CONSTRAINT IF EXISTS shell_compatible_charges_usable_modules_check,

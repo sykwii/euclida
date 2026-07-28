@@ -154,22 +154,23 @@ async function main() {
   let firePositionRestorePayload = null;
 
   const socketEvents = [];
-  const socket = io(API_URL, {
-    transports: ['websocket', 'polling'],
-    reconnection: true,
-    timeout: 8000,
-  });
-
-  socket.on('realtime:event', (payload) => {
-    socketEvents.push({
-      ...payload,
-      receivedAt: new Date().toISOString(),
-    });
-  });
+  let socket = null;
 
   try {
     adminToken = await login(ADMIN_LOGIN, ADMIN_PASSWORD);
     await cleanupPreviousSmokeOrders(adminToken);
+    socket = io(API_URL, {
+      transports: ['websocket', 'polling'],
+      auth: { token: adminToken },
+      reconnection: true,
+      timeout: 8000,
+    });
+    socket.on('realtime:event', (payload) => {
+      socketEvents.push({
+        ...payload,
+        receivedAt: new Date().toISOString(),
+      });
+    });
 
     await waitFor(
       () => socket.connected,
@@ -236,79 +237,39 @@ async function main() {
       scopes: createOrderEvents.map((event) => event.scope),
     });
 
-    const shellStockByDepot = new Map();
-    const chargeStockByDepot = new Map();
-
-    for (const item of depotShellStock) {
-      if (Number(item.quantity) <= 0) {
-        continue;
-      }
-      if (!shellStockByDepot.has(item.depotId)) {
-        shellStockByDepot.set(item.depotId, new Set());
-      }
-      shellStockByDepot.get(item.depotId).add(item.shellId);
-    }
-
-    for (const item of depotChargeStock) {
-      if (Number(item.quantity) <= 0) {
-        continue;
-      }
-      if (!chargeStockByDepot.has(item.depotId)) {
-        chargeStockByDepot.set(item.depotId, new Set());
-      }
-      chargeStockByDepot.get(item.depotId).add(item.chargeId);
-    }
-
-    let compatiblePair = null;
     let selectedShell = null;
     let selectedCharge = null;
     let selectedPositionId = null;
     let batteryUnitId = null;
-
-    let selectPositionError = null;
-
-    for (const candidate of candidateFirePositions) {
-      const shellIds = shellStockByDepot.get(candidate.ammoDepotId) || new Set();
-      const chargeIds = chargeStockByDepot.get(candidate.ammoDepotId) || new Set();
-      const candidatePair = shellCompatibleCharges.find((item) => {
-        return shellIds.has(item.shellId) && chargeIds.has(item.chargeId);
-      });
-
-      if (!candidatePair) {
-        continue;
-      }
-
-      const candidateShell = shells.find((item) => item.id === candidatePair.shellId);
-      const candidateCharge = charges.find((item) => item.id === candidatePair.chargeId);
-
-      if (!candidateShell || !candidateCharge) {
-        continue;
-      }
-
-      try {
-        await api(adminToken, `/service-orders/${createdOrderId}/select-position`, {
-          method: 'POST',
-          body: JSON.stringify({
-            firePositionId: candidate.id,
-            shellId: candidateShell.id,
-            chargeId: candidateCharge.id,
-            zoneId: candidatePair.zoneId || null,
-          }),
-        });
-        compatiblePair = candidatePair;
-        selectedShell = candidateShell;
-        selectedCharge = candidateCharge;
-        selectedPositionId = candidate.id;
-        batteryUnitId = candidate.unitId;
-        break;
-      } catch (error) {
-        selectPositionError = error;
-      }
+    const suggestions = await api(
+      adminToken,
+      `/service-orders/${createdOrderId}/suggestions`,
+      { method: 'POST', body: '{}' },
+    );
+    const selectedCandidate = suggestions.find(
+      (item) =>
+        item.candidateType === 'fire_position' &&
+        item.ready === true &&
+        item.firePositionId &&
+        item.weaponSystemId &&
+        item.compatibleKits?.length > 0,
+    );
+    const selectedKit = selectedCandidate?.compatibleKits?.[0];
+    if (!selectedCandidate || !selectedKit) {
+      throw new Error('No canonical fire-position candidate and shot kit for smoke test');
     }
-
-    if (!selectedPositionId || !batteryUnitId) {
-      throw selectPositionError || new Error('No available fire position for smoke test');
-    }
+    await api(adminToken, `/service-orders/${createdOrderId}/select-position`, {
+      method: 'POST',
+      body: JSON.stringify({
+        firePositionId: selectedCandidate.firePositionId,
+        weaponSystemId: selectedCandidate.weaponSystemId,
+        shotConfigurationId: selectedKit.shotConfigurationId,
+      }),
+    });
+    selectedShell = { id: selectedKit.shellId };
+    selectedCharge = { id: selectedKit.chargeId };
+    selectedPositionId = selectedCandidate.firePositionId;
+    batteryUnitId = selectedCandidate.unitId;
 
     const tempUser = await api(adminToken, '/users', {
       method: 'POST',
@@ -340,16 +301,34 @@ async function main() {
     assertUniqueScopes(sendEvents, 'service order send');
 
     const acceptBefore = socketEvents.length;
-    await api(batteryToken, `/service-orders/${createdOrderId}/accept`, {
+    const deliveries = await api(batteryToken, '/service-orders/deliveries');
+    const delivery = deliveries.find(
+      (item) =>
+        item.serviceOrderId === createdOrderId &&
+        item.recipientLevel === 'battery',
+    );
+    if (!delivery) {
+      throw new Error('Battery delivery was not created for realtime smoke');
+    }
+    await api(batteryToken, `/service-orders/deliveries/${delivery.id}/view`, {
       method: 'POST',
       body: JSON.stringify({}),
+    });
+    await api(batteryToken, `/service-orders/deliveries/${delivery.id}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'accepted',
+        selectedFirePositionId: selectedCandidate.firePositionId,
+        selectedWeaponSystemId: selectedCandidate.weaponSystemId,
+        comment: 'Realtime smoke accepted',
+      }),
     });
     const acceptEvents = await collectEntityEvents(
       socketEvents,
       acceptBefore,
       'service_order',
       createdOrderId,
-      'accepted',
+      'updated',
     );
     assertUniqueScopes(acceptEvents, 'service order accept');
 
@@ -368,11 +347,63 @@ async function main() {
     assertUniqueScopes(startEvents, 'service order start');
 
     const now = new Date();
+    const executionStartedAt = new Date(now.getTime() - 60_000);
+    const executionRecord = await api(
+      batteryToken,
+      `/execution/service-orders/${createdOrderId}/records`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          idempotencyKey: `realtime-smoke:${createdOrderId}`,
+          executionType: 'artillery',
+          purpose: 'main_fire',
+          result: 'executed',
+          startedAt: executionStartedAt.toISOString(),
+          completedAt: now.toISOString(),
+          quantity: 1,
+          comment: 'Realtime smoke execution',
+          artillery: {
+            compositionSource: 'template',
+            sourceShotConfigurationId: selectedKit.shotConfigurationId,
+            weaponModelId: selectedCandidate.weaponModelId,
+            shellId: selectedKit.shellId,
+            fuzeId: selectedKit.fuzeId,
+            primerId: selectedKit.primerId,
+            maxRangeM: selectedKit.maxRangeM,
+            compositionSnapshot: {
+              name: selectedKit.shotConfigurationName,
+              zoneNumber: selectedKit.zoneNumber,
+            },
+            charges: selectedKit.charges.map((item) => ({
+              chargeId: item.chargeId,
+              chargeName: item.charge.marking,
+              quantityPerShot: item.quantityPerShot,
+              accountingUnit: item.accountingUnit,
+              sortOrder: item.sortOrder,
+            })),
+          },
+        }),
+      },
+    );
+    const executionValidation = await api(
+      batteryToken,
+      `/execution/records/${executionRecord.id}/validate`,
+    );
+    if (!executionValidation.valid) {
+      throw new Error(
+        `Realtime execution validation failed: ${JSON.stringify(executionValidation.reasons)}`,
+      );
+    }
+    await api(batteryToken, `/execution/records/${executionRecord.id}/post`, {
+      method: 'POST',
+      body: '{}',
+    });
+
     const completeBefore = socketEvents.length;
     await api(batteryToken, `/service-orders/${createdOrderId}/complete`, {
       method: 'POST',
       body: JSON.stringify({
-        startedAt: new Date(now.getTime() - 60_000).toISOString(),
+        startedAt: executionStartedAt.toISOString(),
         completedAt: now.toISOString(),
         actualQuantity: 1,
         resultType: 'target_suppressed',
@@ -418,8 +449,8 @@ async function main() {
     const stockEvents = await collectEntityEvents(
       socketEvents,
       stockBefore,
-      'stock_movement',
-      stockMovement.id,
+      'stock_operation',
+      stockMovement.stockOperationId,
       'moved',
     );
     assertUniqueScopes(stockEvents, 'stock movement create');
@@ -565,14 +596,15 @@ async function main() {
     try {
       if (tempUserId && adminToken) {
         await api(adminToken, `/users/${tempUserId}`, {
-          method: 'DELETE',
+          method: 'PATCH',
+          body: JSON.stringify({ isActive: false }),
         });
       }
     } catch (error) {
       console.error(`Cleanup warning (user): ${error.message}`);
     }
 
-    socket.close();
+    socket?.close();
   }
 }
 

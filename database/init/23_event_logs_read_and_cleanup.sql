@@ -4,6 +4,9 @@ ADD COLUMN IF NOT EXISTS read_at timestamptz NULL;
 CREATE INDEX IF NOT EXISTS idx_event_logs_read_at
 ON event_logs(read_at);
 
+ALTER TABLE depots
+ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+
 -- Cleanup legacy training rows that cannot be used because they have no unit.
 UPDATE users
 SET is_active = false

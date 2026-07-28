@@ -87,6 +87,20 @@ describe('service order suggestion evaluator', () => {
     expect(result.rejections.map((item) => item.code)).toContain(code);
   });
 
+  it('keeps the exact localized weapon readiness label separate from its code', () => {
+    const result = evaluateSuggestionCandidate(
+      candidate({
+        weaponReadinessStatus: 'not_combat_ready',
+        weaponReadinessLabel: 'СГ НЕ БГ: Поломка',
+      }),
+    );
+
+    expect(result.rejections).toContainEqual({
+      code: 'weapon_not_ready',
+      label: 'СГ НЕ БГ: Поломка',
+    });
+  });
+
   it('rejects a candidate outside the allowed unit scope', () => {
     const result = evaluateSuggestionCandidate(
       candidate({ insideScope: false }),

@@ -29,10 +29,54 @@ function api(token, path, options = {}) {
   });
 }
 
+function executionBody({
+  orderId,
+  keySuffix,
+  purpose,
+  quantity,
+  comment,
+  kit,
+  weapon,
+  startedAt,
+  completedAt,
+}) {
+  return {
+    idempotencyKey: `release-smoke:${orderId}:${keySuffix}`,
+    executionType: 'artillery',
+    purpose,
+    result: 'executed',
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    quantity,
+    comment,
+    artillery: {
+      compositionSource: 'template',
+      sourceShotConfigurationId: kit.shotConfigurationId,
+      weaponModelId: weapon.weaponModelId,
+      shellId: kit.shellId,
+      fuzeId: kit.fuzeId,
+      primerId: kit.primerId,
+      maxRangeM: kit.maxRangeM,
+      compositionSnapshot: {
+        name: kit.shotConfigurationName,
+        zoneNumber: kit.zoneNumber,
+      },
+      charges: kit.charges.map((item) => ({
+        chargeId: item.chargeId,
+        chargeName: item.charge.marking,
+        quantityPerShot: item.quantityPerShot,
+        accountingUnit: item.accountingUnit,
+        sortOrder: item.sortOrder,
+      })),
+    },
+  };
+}
+
 async function main() {
   const suffix = Date.now();
   const adminToken = await login(ADMIN_LOGIN, ADMIN_PASSWORD);
   let temporaryUserId = null;
+  let temporaryShotConfigurationId = null;
 
   try {
     const [positions, weapons, existingOrders] = await Promise.all([
@@ -72,10 +116,45 @@ async function main() {
     );
     if (!weapon) throw new Error('Canonical assigned weapon was not returned');
 
+    const shotConfigurations = await api(adminToken, '/shot-configurations');
+    const baseConfiguration = shotConfigurations.find(
+      (item) =>
+        item.isActive &&
+        item.weaponModelId === weapon.weaponModelId &&
+        item.shellId &&
+        item.fuzeId &&
+        item.primerId &&
+        item.charges?.length > 0,
+    );
+    if (!baseConfiguration) {
+      throw new Error('No complete active shot configuration to clone for alternate warmup');
+    }
+    const temporaryShotConfiguration = await api(adminToken, '/shot-configurations', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `RELEASE-SMOKE-ALT-${suffix}`,
+        weaponModelId: baseConfiguration.weaponModelId,
+        shellId: baseConfiguration.shellId,
+        fuzeId: baseConfiguration.fuzeId,
+        primerId: baseConfiguration.primerId,
+        zoneNumber: baseConfiguration.zoneNumber,
+        maxRangeM: baseConfiguration.maxRangeM,
+        isActive: true,
+        note: 'RELEASE-STAB-1 alternate warmup kit',
+        charges: baseConfiguration.charges.map((item) => ({
+          chargeId: item.chargeId,
+          quantityPerShot: Number(item.quantityPerShot),
+          accountingUnit: item.accountingUnit,
+          sortOrder: item.sortOrder,
+        })),
+      }),
+    });
+    temporaryShotConfigurationId = temporaryShotConfiguration.id;
+
     const order = await api(adminToken, '/service-orders', {
       method: 'POST',
       body: JSON.stringify({
-        orderNumber: `CORE-S1-${suffix}`,
+        orderNumber: `RELEASE-SMOKE-${suffix}`,
         targetLat: Number(position.lat),
         targetLng: Number(position.lng),
         taskType: 'fire',
@@ -88,7 +167,12 @@ async function main() {
       body: '{}',
     });
     const candidate = suggestions.find(
-      (item) => item.executorType === 'fire_position' && item.variants?.length > 0,
+      (item) =>
+        item.executorType === 'fire_position' &&
+        item.firePositionId === position.id &&
+        item.weaponSystemId === weapon.id &&
+        item.ready === true &&
+        item.variants?.length > 0,
     );
     if (!candidate) throw new Error('Suggestion response has no compatible fire-position kit');
     const kit = candidate.variants[0];
@@ -97,18 +181,19 @@ async function main() {
       method: 'POST',
       body: JSON.stringify({
         firePositionId: candidate.firePosition.id,
+        weaponSystemId: candidate.weaponSystemId,
         shotConfigurationId: kit.shotConfigurationId,
       }),
     });
 
-    const tempLogin = `core_s1_${suffix}`;
+    const tempLogin = `RELEASE-SMOKE-${suffix}`;
     const tempPassword = 'Smoke123!';
     const tempUser = await api(adminToken, '/users', {
       method: 'POST',
       body: JSON.stringify({
         login: tempLogin,
         password: tempPassword,
-        fullName: 'CORE S1 smoke operator',
+        fullName: 'RELEASE-SMOKE operator',
         role: 'operator',
         scope: 'battery',
         unitId: candidate.firePosition.unitId,
@@ -148,35 +233,57 @@ async function main() {
 
     const startedAt = new Date();
     const completedAt = new Date(startedAt.getTime() + 1000);
+    const warmupKit = candidate.variants[1] || kit;
+    const warmupRecord = await api(
+      batteryToken,
+      `/execution/service-orders/${order.id}/records`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          executionBody({
+            orderId: order.id,
+            keySuffix: 'warmup',
+            purpose: 'barrel_warmup',
+            quantity: 1,
+            comment: 'RELEASE-SMOKE warmup',
+            kit: warmupKit,
+            weapon,
+            startedAt,
+            completedAt,
+          }),
+        ),
+      },
+    );
+    const warmupValidation = await api(
+      batteryToken,
+      `/execution/records/${warmupRecord.id}/validate`,
+    );
+    if (!warmupValidation.valid) {
+      throw new Error(
+        `Warmup validation failed: ${JSON.stringify(warmupValidation.reasons)}`,
+      );
+    }
+    const postedWarmup = await api(
+      batteryToken,
+      `/execution/records/${warmupRecord.id}/post`,
+      { method: 'POST', body: '{}' },
+    );
+
     const record = await api(batteryToken, `/execution/service-orders/${order.id}/records`, {
       method: 'POST',
-      body: JSON.stringify({
-        idempotencyKey: `core-s1:${order.id}`,
-        executionType: 'artillery',
-        purpose: 'main_fire',
-        result: 'executed',
-        startedAt: startedAt.toISOString(),
-        completedAt: completedAt.toISOString(),
-        quantity: 1,
-        comment: 'CORE S1 smoke execution',
-        artillery: {
-          compositionSource: 'template',
-          sourceShotConfigurationId: kit.shotConfigurationId,
-          weaponModelId: weapon.weaponModelId,
-          shellId: kit.shellId,
-          fuzeId: kit.fuzeId,
-          primerId: kit.primerId,
-          maxRangeM: kit.maxRangeM,
-          compositionSnapshot: { name: kit.shotConfigurationName, zoneNumber: kit.zoneNumber },
-          charges: kit.charges.map((item) => ({
-            chargeId: item.chargeId,
-            chargeName: item.charge.marking,
-            quantityPerShot: item.quantityPerShot,
-            accountingUnit: item.accountingUnit,
-            sortOrder: item.sortOrder,
-          })),
-        },
-      }),
+      body: JSON.stringify(
+        executionBody({
+          orderId: order.id,
+          keySuffix: 'main',
+          purpose: 'main_fire',
+          quantity: 2,
+          comment: 'RELEASE-SMOKE перевищення плану підтверджено оператором',
+          kit,
+          weapon,
+          startedAt,
+          completedAt,
+        }),
+      ),
     });
 
     const validation = await api(batteryToken, `/execution/records/${record.id}/validate`);
@@ -193,16 +300,89 @@ async function main() {
       throw new Error('Repeated post returned a different stock operation');
     }
 
-    const completed = await api(batteryToken, `/service-orders/${order.id}/complete`, {
-      method: 'POST',
-      body: JSON.stringify({
+    const blockingDraft = await api(
+      batteryToken,
+      `/execution/service-orders/${order.id}/records`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          executionBody({
+            orderId: order.id,
+            keySuffix: 'blocking-draft',
+            purpose: 'adjustment',
+            quantity: 999999,
+            comment: 'RELEASE-SMOKE insufficient stock blocking draft',
+            kit,
+            weapon,
+            startedAt,
+            completedAt,
+          }),
+        ),
+      },
+    );
+    const insufficientValidation = await api(
+      batteryToken,
+      `/execution/records/${blockingDraft.id}/validate`,
+    );
+    if (insufficientValidation.valid) {
+      throw new Error('Insufficient-stock draft unexpectedly passed validation');
+    }
+    let insufficientPostMessage = null;
+    try {
+      await api(batteryToken, `/execution/records/${blockingDraft.id}/post`, {
+        method: 'POST',
+        body: '{}',
+      });
+    } catch (error) {
+      insufficientPostMessage = error.message;
+    }
+    if (!insufficientPostMessage?.includes('передвогневу перевірку')) {
+      throw new Error(
+        `Insufficient stock did not reject post with domain error: ${insufficientPostMessage}`,
+      );
+    }
+    const completionPayload = {
         startedAt: startedAt.toISOString(),
         completedAt: completedAt.toISOString(),
-        actualQuantity: 1,
+        actualQuantity: 3,
         resultType: 'hit',
-        resultComment: 'CORE S1 smoke complete',
-      }),
+        resultComment: 'RELEASE-SMOKE complete with documented deviation',
+    };
+    let blockingMessage = null;
+    try {
+      await api(batteryToken, `/service-orders/${order.id}/complete`, {
+        method: 'POST',
+        body: JSON.stringify(completionPayload),
+      });
+    } catch (error) {
+      blockingMessage = error.message;
+    }
+    if (!blockingMessage?.includes('Є непроведене виконання')) {
+      throw new Error(`Blocking draft did not prevent completion: ${blockingMessage}`);
+    }
+    await api(batteryToken, `/execution/records/${blockingDraft.id}/cancel`, {
+      method: 'POST',
+      body: '{}',
     });
+
+    const completed = await api(batteryToken, `/service-orders/${order.id}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(completionPayload),
+    });
+    const repeatedComplete = await api(
+      batteryToken,
+      `/service-orders/${order.id}/complete`,
+      {
+        method: 'POST',
+        body: JSON.stringify(completionPayload),
+      },
+    );
+    if (
+      repeatedComplete.status !== 'completed' ||
+      Number(repeatedComplete.actualQuantity) !== Number(completed.actualQuantity)
+    ) {
+      throw new Error('Repeated completion changed the completed result');
+    }
     const notifications = await api(batteryToken, '/operational-notifications');
 
     process.stdout.write(`${JSON.stringify({
@@ -210,16 +390,37 @@ async function main() {
       candidateId: candidate.firePosition.id,
       kitId: kit.shotConfigurationId,
       deliveryId: delivery.id,
+      warmupExecutionRecordId: warmupRecord.id,
+      warmupStockOperationId: postedWarmup.stockOperationId,
+      warmupUsedAlternateKit: warmupKit.shotConfigurationId !== kit.shotConfigurationId,
       executionRecordId: record.id,
       stockOperationId: posted.stockOperationId,
       repeatedPostStockOperationId: repeatedPost.stockOperationId,
+      blockingDraftId: blockingDraft.id,
+      insufficientValidationReasons: insufficientValidation.reasons,
+      insufficientPostMessage,
+      blockingCompletionMessage: blockingMessage,
       completedStatus: completed.status,
       actualQuantity: completed.actualQuantity,
+      repeatedCompleteStatus: repeatedComplete.status,
       notificationCount: notifications.length,
     }, null, 2)}\n`);
   } finally {
+    if (temporaryShotConfigurationId) {
+      await api(
+        adminToken,
+        `/shot-configurations/${temporaryShotConfigurationId}/activate`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ isActive: false }),
+        },
+      ).catch(() => undefined);
+    }
     if (temporaryUserId) {
-      await api(adminToken, `/users/${temporaryUserId}`, { method: 'DELETE' });
+      await api(adminToken, `/users/${temporaryUserId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: false }),
+      });
     }
   }
 }

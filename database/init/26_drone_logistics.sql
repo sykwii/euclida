@@ -73,6 +73,17 @@ CREATE TABLE IF NOT EXISTS drone_stock_movements (
   created_at TIMESTAMP DEFAULT now()
 );
 
+ALTER TABLE depot_drone_stock
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT now();
+
+ALTER TABLE depot_drone_warhead_stock
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT now();
+
+ALTER TABLE drone_stock_movements
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
+
 CREATE INDEX IF NOT EXISTS idx_depot_drone_stock_depot ON depot_drone_stock(depot_id);
 CREATE INDEX IF NOT EXISTS idx_depot_warhead_stock_depot ON depot_drone_warhead_stock(depot_id);
 CREATE INDEX IF NOT EXISTS idx_air_asset_drone_stock_position ON air_asset_drone_stock(air_asset_position_id);

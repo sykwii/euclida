@@ -508,6 +508,10 @@ export class ServiceOrderSuggestionsService {
       callsign: weapon?.callsign ?? position?.name ?? null,
       weaponModelId: weapon?.weaponModelId ?? null,
       weaponReadinessStatus: weapon?.readinessStatus ?? null,
+      weaponReadinessLabel:
+        operationalState?.reasonCode === 'weapon_not_ready'
+          ? operationalState.reasonLabel
+          : null,
       activeMaintenance: this.hasActiveMaintenance(weapon),
       explicitFirePositionBlock,
       assignedWeaponCount: args.assignedWeaponCount,
