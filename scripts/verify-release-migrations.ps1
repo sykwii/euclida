@@ -117,6 +117,8 @@ WITH required(table_name, column_name) AS (
       ('execution_records', 'status'),
       ('execution_records', 'idempotency_key'),
       ('execution_records', 'stock_operation_id'),
+      ('execution_records', 'posted_at'),
+      ('execution_records', 'posted_by_user_id'),
       ('stock_operations', 'idempotency_key'),
       ('stock_operations', 'movement_group_id'),
       ('weapon_maintenances', 'status'),
@@ -147,7 +149,7 @@ ORDER BY 1;
     if ($missing.Count -gt 0) {
         throw "Critical Core schema is incomplete in ${Database}:`n$($missing -join "`n")"
     }
-    Write-Host "CRITICAL SCHEMA [$Database] PASS (28 required columns)"
+    Write-Host "CRITICAL SCHEMA [$Database] PASS (30 required columns)"
 }
 
 function Assert-WeaponSystemCanonicalInsertShape {
