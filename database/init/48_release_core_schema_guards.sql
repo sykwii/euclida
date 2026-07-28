@@ -12,6 +12,30 @@ ALTER TABLE weapon_systems
   ADD COLUMN IF NOT EXISTS archived_at timestamp NULL,
   ADD COLUMN IF NOT EXISTS archived_by_user_id uuid NULL;
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'weapon_systems'
+      AND column_name = 'system_type'
+  ) THEN
+    ALTER TABLE weapon_systems ALTER COLUMN system_type DROP NOT NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'weapon_systems'
+      AND column_name = 'model'
+  ) THEN
+    ALTER TABLE weapon_systems ALTER COLUMN model DROP NOT NULL;
+  END IF;
+END
+$$;
+
 CREATE INDEX IF NOT EXISTS idx_weapon_systems_weapon_model
   ON weapon_systems(weapon_model_id);
 

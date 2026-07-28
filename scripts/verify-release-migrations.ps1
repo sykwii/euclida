@@ -138,7 +138,33 @@ ORDER BY 1;
     if ($missing.Count -gt 0) {
         throw "Critical Core schema is incomplete in ${Database}:`n$($missing -join "`n")"
     }
-    Write-Host "CRITICAL SCHEMA [$Database] PASS (18 required columns)"
+    Write-Host "CRITICAL SCHEMA [$Database] PASS (19 required columns)"
+}
+
+function Assert-WeaponSystemCanonicalInsertShape {
+    param([Parameter(Mandatory)][string]$Database)
+
+    $sql = @'
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'weapon_systems'
+  AND column_name IN ('system_type', 'model')
+  AND is_nullable = 'NO'
+  AND column_default IS NULL
+ORDER BY column_name;
+'@
+
+    $output = Invoke-Psql -Database $Database -Sql $sql -Context 'WeaponSystem canonical insert shape check'
+    $blockingColumns = @(
+        $output |
+            ForEach-Object { "$_".Trim() } |
+            Where-Object { $_ -in @('system_type', 'model') }
+    )
+    if ($blockingColumns.Count -gt 0) {
+        throw "Legacy WeaponSystem columns block canonical inserts in ${Database}: $($blockingColumns -join ', ')"
+    }
+    Write-Host "WEAPON INSERT SHAPE [$Database] PASS"
 }
 
 Assert-SafeDatabaseName $LiveDatabase
@@ -179,6 +205,8 @@ try {
 
     Assert-CriticalSchema -Database $LiveDatabase
     Assert-CriticalSchema -Database $temporaryDatabase
+    Assert-WeaponSystemCanonicalInsertShape -Database $LiveDatabase
+    Assert-WeaponSystemCanonicalInsertShape -Database $temporaryDatabase
 
     $liveManifest = @(Get-SchemaManifest -Database $LiveDatabase)
     $temporaryManifest = @(Get-SchemaManifest -Database $temporaryDatabase)
