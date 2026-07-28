@@ -101,6 +101,15 @@ WITH required(table_name, column_name) AS (
       ('weapon_systems', 'weapon_model_id'),
       ('weapon_systems', 'readiness_status'),
       ('weapon_systems', 'is_archived'),
+      ('fire_positions', 'ammo_depot_id'),
+      ('fire_positions', 'main_direction_units'),
+      ('fire_positions', 'main_direction_degrees'),
+      ('fire_positions', 'traverse_left_units'),
+      ('fire_positions', 'traverse_left_degrees'),
+      ('fire_positions', 'traverse_right_units'),
+      ('fire_positions', 'traverse_right_degrees'),
+      ('fire_positions', 'sector_left_degrees'),
+      ('fire_positions', 'sector_right_degrees'),
       ('fire_positions', 'readiness_status'),
       ('fire_positions', 'not_ready_reason'),
       ('shot_configurations', 'weapon_model_id'),
@@ -138,7 +147,7 @@ ORDER BY 1;
     if ($missing.Count -gt 0) {
         throw "Critical Core schema is incomplete in ${Database}:`n$($missing -join "`n")"
     }
-    Write-Host "CRITICAL SCHEMA [$Database] PASS (19 required columns)"
+    Write-Host "CRITICAL SCHEMA [$Database] PASS (28 required columns)"
 }
 
 function Assert-WeaponSystemCanonicalInsertShape {
