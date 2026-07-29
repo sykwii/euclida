@@ -40,6 +40,10 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
   let manager: ManagerMock;
   let dataSource: DataSourceMock;
   let service: WeaponSystemsService;
+  let realtimeEvents: {
+    emitMany: jest.Mock;
+    emit: jest.Mock;
+  };
 
   const user: AuthUser = {
     sub: 'user-1',
@@ -88,18 +92,52 @@ describe('WeaponSystemsService OPS-1 readiness and deployment', () => {
       ),
     };
 
+    realtimeEvents = {
+      emitMany: jest.fn(),
+      emit: jest.fn(),
+    };
+
     service = new WeaponSystemsService(
       weaponRepository as Repository<WeaponSystem>,
       {
         canAccessUnit: jest.fn(async () => true),
         getAllowedUnitIds: jest.fn(),
       } as unknown as AccessScopeService,
-      {
-        emitMany: jest.fn(),
-        emit: jest.fn(),
-      } as unknown as RealtimeEventsService,
+      realtimeEvents as unknown as RealtimeEventsService,
       { create: jest.fn(async () => undefined) } as unknown as EventLogsService,
       dataSource as DataSource,
+    );
+  });
+
+  it('scopes weapon and affected fire-position events to the owning unit', () => {
+    (
+      service as unknown as {
+        emitWeaponChanged: (
+          action: 'updated',
+          id: string,
+          firePositionIds: string[],
+          unitId: string,
+        ) => void;
+      }
+    ).emitWeaponChanged('updated', 'weapon-1', ['fp-1'], 'unit-1');
+
+    expect(realtimeEvents.emitMany).toHaveBeenCalledWith(
+      ['weapons', 'map', 'analytics', 'events'],
+      'updated',
+      expect.objectContaining({
+        entity: 'weapon_system',
+        id: 'weapon-1',
+        unitId: 'unit-1',
+      }),
+    );
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(
+      'map',
+      'updated',
+      expect.objectContaining({
+        entity: 'fire_position',
+        id: 'fp-1',
+        unitId: 'unit-1',
+      }),
     );
   });
 

@@ -215,7 +215,7 @@ export class ServiceOrdersService {
     });
 
     if (!item) {
-      throw new NotFoundException('Р—Р°РІРґР°РЅРЅСЏ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      throw new NotFoundException('Завдання не знайдено');
     }
 
     if (user) {
@@ -421,12 +421,12 @@ export class ServiceOrdersService {
     user: AuthUser,
   ): Promise<ServiceOrder> {
     if (user.role === 'observer') {
-      throw new BadRequestException('РЎРїРѕСЃС‚РµСЂС–РіР°С‡ РЅРµ РјРѕР¶Рµ СЃС‚РІРѕСЂСЋРІР°С‚Рё Р·Р°СЏРІРєРё');
+      throw new BadRequestException('Спостерігач не може створювати заявки');
     }
 
     if (user.scope === 'ew') {
       throw new BadRequestException(
-        'РћРїРµСЂР°С‚РѕСЂ Р Р•Р‘ РјРѕР¶Рµ РїСЂР°С†СЋРІР°С‚Рё Р· РєР°СЂС‚РѕСЋ С‚Р° РїРѕРІС–С‚СЂСЏРЅРёРјРё Р·Р°РіСЂРѕР·Р°РјРё, Р°Р»Рµ РЅРµ СЃС‚РІРѕСЂСЋС” Р’Р“Р—',
+        'Оператор РЕБ може працювати з картою та повітряними загрозами, але не створює ВГЗ',
       );
     }
 
@@ -439,7 +439,7 @@ export class ServiceOrdersService {
         targetMgrs = normalizeMgrs(targetMgrs);
       } catch {
         throw new BadRequestException(
-          'РќРµРєРѕСЂРµРєС‚РЅРёР№ MGRS. Р¤РѕСЂРјР°С‚: 36U XB 11111 22222',
+          'Некоректний MGRS. Формат: 36U XB 11111 22222',
         );
       }
     }
@@ -451,7 +451,7 @@ export class ServiceOrdersService {
     }
 
     if (targetLat === undefined || targetLng === undefined) {
-      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё Lat/Lng Р°Р±Рѕ MGRS');
+      throw new BadRequestException('Потрібно вказати Lat/Lng або MGRS');
     }
 
     if (!targetMgrs) {
@@ -459,7 +459,7 @@ export class ServiceOrdersService {
     }
 
     if (!data.orderNumber.trim()) {
-      throw new BadRequestException('Р’РєР°Р¶С–С‚СЊ РЅРѕРјРµСЂ Р·Р°РІРґР°РЅРЅСЏ');
+      throw new BadRequestException('Вкажіть номер завдання');
     }
 
     const item = this.repository.create({
@@ -475,7 +475,7 @@ export class ServiceOrdersService {
 
     const savedItem = await this.repository.save(item);
 
-    await this.writeOrderEvent(savedItem, user, 'created', 'РЎС‚РІРѕСЂРµРЅРѕ Р·Р°СЏРІРєСѓ');
+    await this.writeOrderEvent(savedItem, user, 'created', 'Створено заявку');
 
     this.notifyRealtime(savedItem, 'created');
 
@@ -502,7 +502,7 @@ export class ServiceOrdersService {
       | undefined;
 
     if (!source?.lat || !source?.lng) {
-      throw new BadRequestException('РЈ РїСЂРѕРїРѕР·РёС†С–С— РџРЈРђР  РЅРµРјР°С” РєРѕРѕСЂРґРёРЅР°С‚');
+      throw new BadRequestException('У пропозиції ПУАР немає координат');
     }
 
     const orderNumber = `PUAR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${proposal.id.slice(0, 8)}`;
@@ -525,7 +525,7 @@ export class ServiceOrdersService {
     });
 
     const savedItem = await this.repository.save(item);
-    await this.writeOrderEvent(savedItem, user, 'created', 'РЎС‚РІРѕСЂРµРЅРѕ С‡РµСЂРЅРµС‚РєСѓ Р’Р“Р— Р· РџРЈРђР ');
+    await this.writeOrderEvent(savedItem, user, 'created', 'Створено чернетку ВГЗ з ПУАР');
     this.notifyRealtime(savedItem, 'created');
     this.realtimeEvents.emitMany(['missions', 'recon', 'events'], 'created', {
       entity: 'service_order',
@@ -559,7 +559,7 @@ export class ServiceOrdersService {
         targetMgrs = normalizeMgrs(data.targetMgrs);
       } catch {
         throw new BadRequestException(
-          'РќРµРєРѕСЂРµРєС‚РЅРёР№ MGRS. Р¤РѕСЂРјР°С‚: 36U XB 11111 22222',
+          'Некоректний MGRS. Формат: 36U XB 11111 22222',
         );
       }
     }
@@ -574,7 +574,7 @@ export class ServiceOrdersService {
     }
 
     if (targetLat === undefined || targetLng === undefined) {
-      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё Lat/Lng Р°Р±Рѕ MGRS');
+      throw new BadRequestException('Потрібно вказати Lat/Lng або MGRS');
     }
 
     if (!targetMgrs) {
@@ -594,7 +594,7 @@ export class ServiceOrdersService {
 
     const savedItem = await this.repository.save(item);
 
-    await this.writeOrderEvent(savedItem, user, 'updated', 'РћРЅРѕРІР»РµРЅРѕ Р·Р°СЏРІРєСѓ');
+    await this.writeOrderEvent(savedItem, user, 'updated', 'Оновлено заявку');
 
     this.notifyRealtime(savedItem, 'updated');
 
@@ -605,18 +605,18 @@ export class ServiceOrdersService {
     const item = await this.findOne(id, user);
 
     if (item.status !== 'draft') {
-      throw new BadRequestException('Р’РёРґР°Р»РёС‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё С‡РµСЂРЅРµС‚РєСѓ');
+      throw new BadRequestException('Видалити можна тільки чернетку');
     }
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'Р’РёРґР°Р»СЏС‚Рё С‡РµСЂРЅРµС‚РєРё РјРѕР¶Рµ С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
+        'Видаляти чернетки може тільки ОКП або адміністратор',
       );
     }
 
     await this.repository.remove(item);
 
-    await this.writeOrderEvent(item, user, 'deleted', 'Р’РёРґР°Р»РµРЅРѕ С‡РµСЂРЅРµС‚РєСѓ');
+    await this.writeOrderEvent(item, user, 'deleted', 'Видалено чернетку');
 
     this.notifyRealtime(item, 'deleted');
   }
@@ -626,13 +626,13 @@ export class ServiceOrdersService {
 
     if (order.status !== 'draft' && order.status !== 'proposed') {
       throw new BadRequestException(
-        'РџС–РґР±С–СЂ С‚РѕС‡РѕРє РґРѕСЃС‚СѓРїРЅРёР№ С‚С–Р»СЊРєРё РґР»СЏ С‡РµСЂРЅРµС‚РєРё Р°Р±Рѕ РїСЂРѕРїРѕР·РёС†С–С—',
+        'Підбір точок доступний тільки для чернетки або пропозиції',
       );
     }
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'РџС–РґР±С–СЂ Р’Рџ РІРёРєРѕРЅСѓС” РіРѕР»РѕРІРЅРёР№ РѕРїРµСЂР°С‚РѕСЂ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
+        'Підбір ВП виконує головний оператор або адміністратор',
       );
     }
 
@@ -655,12 +655,12 @@ export class ServiceOrdersService {
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'РћР±РёСЂР°С‚Рё Р’Рџ РґР»СЏ Р·Р°СЏРІРєРё РјРѕР¶Рµ С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
+        'Обирати ВП для заявки може тільки ОКП або адміністратор',
       );
     }
 
     if (!['draft', 'proposed', 'rejected'].includes(order.status)) {
-      throw new BadRequestException('Р’РёР±С–СЂ РІРёРєРѕРЅР°РІС†СЏ РјРѕР¶Р»РёРІРёР№ С‚С–Р»СЊРєРё РґР»СЏ С‡РµСЂРЅРµС‚РєРё, РїСЂРѕРїРѕР·РёС†С–С— Р°Р±Рѕ РІС–РґС…РёР»РµРЅРѕС— Р·Р°СЏРІРєРё');
+      throw new BadRequestException('Вибір виконавця можливий тільки для чернетки, пропозиції або відхиленої заявки');
     }
 
     if (!body.shotConfigurationId) {
@@ -704,7 +704,7 @@ export class ServiceOrdersService {
     });
 
     if (!firePosition) {
-      throw new BadRequestException('Р’РѕРіРЅРµРІСѓ РїРѕР·РёС†С–СЋ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      throw new BadRequestException('Вогневу позицію не знайдено');
     }
 
     if (!body.weaponSystemId) {
@@ -755,7 +755,7 @@ export class ServiceOrdersService {
       savedOrder,
       user,
       'updated',
-      'РћР±СЂР°РЅРѕ Р’Рџ РґР»СЏ Р·Р°СЏРІРєРё',
+      'Обрано ВП для заявки',
     );
 
     this.notifyRealtime(savedOrder, 'updated');
@@ -772,7 +772,7 @@ export class ServiceOrdersService {
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'РќР°РґСЃРёР»Р°С‚Рё Р·Р°СЏРІРєСѓ РІРёРєРѕРЅР°РІС†СЋ РјРѕР¶Рµ С‚С–Р»СЊРєРё РіРѕР»РѕРІРЅРёР№ РѕРїРµСЂР°С‚РѕСЂ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
+        'Надсилати заявку виконавцю може тільки головний оператор або адміністратор',
       );
     }
 
@@ -786,7 +786,7 @@ export class ServiceOrdersService {
 
     if (item.status !== 'proposed') {
       throw new BadRequestException(
-        'РќР°РґС–СЃР»Р°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё Р·Р°СЏРІРєСѓ, РґР»СЏ СЏРєРѕС— РІР¶Рµ РѕР±СЂР°РЅРѕ РІРёРєРѕРЅР°РІС†СЏ',
+        'Надіслати можна тільки заявку, для якої вже обрано виконавця',
       );
     }
 
@@ -820,8 +820,8 @@ export class ServiceOrdersService {
       user,
       'sent',
       item.executorType === 'air_asset_position'
-        ? `Р—Р°СЏРІРєСѓ РїРµСЂРµРґР°РЅРѕ РІРёРєРѕРЅР°РІС†СЋ ${item.selectedAirAssetPosition?.callsign || item.selectedAirAssetPosition?.name || ''}. РћРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РѕС‚СЂРёРјСѓС” С—С— Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ`
-        : `Р—Р°СЏРІРєСѓ РїРµСЂРµРґР°РЅРѕ РЅР° РџРЈР’Р‘ Р·Р° Р’Рџ ${item.selectedFirePosition?.name || ''}. РћРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РѕС‚СЂРёРјСѓС” С—С— Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ`,
+        ? `Заявку передано виконавцю ${item.selectedAirAssetPosition?.callsign || item.selectedAirAssetPosition?.name || ''}. Оператор підрозділу виконавця отримує її автоматично`
+        : `Заявку передано на ПУВБ за ВП ${item.selectedFirePosition?.name || ''}. Оператор підрозділу виконавця отримує її автоматично`,
     );
 
     this.notifyRealtime(saved, 'sent');
@@ -844,7 +844,7 @@ export class ServiceOrdersService {
       order.status !== 'sent_to_battery' &&
       order.status !== 'sent'
     ) {
-      throw new BadRequestException('РџСЂРёР№РЅСЏС‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё РїРµСЂРµРґР°РЅСѓ Р·Р°СЏРІРєСѓ');
+      throw new BadRequestException('Прийняти можна тільки передану заявку');
     }
 
     order.status = 'accepted';
@@ -853,7 +853,7 @@ export class ServiceOrdersService {
 
     const savedOrder = await this.repository.save(order);
 
-    await this.writeOrderEvent(savedOrder, user, 'accepted', 'Р—Р°СЏРІРєСѓ РїСЂРёР№РЅСЏС‚Рѕ');
+    await this.writeOrderEvent(savedOrder, user, 'accepted', 'Заявку прийнято');
 
     this.notifyRealtime(savedOrder, 'accepted');
 
@@ -875,11 +875,11 @@ export class ServiceOrdersService {
       order.status !== 'sent' &&
       order.status !== 'accepted'
     ) {
-      throw new BadRequestException('Р’С–РґС…РёР»РёС‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё РїРµСЂРµРґР°РЅСѓ Р·Р°СЏРІРєСѓ');
+      throw new BadRequestException('Відхилити можна тільки передану заявку');
     }
 
     if (!reason.trim()) {
-      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РїСЂРёС‡РёРЅСѓ РІС–РґС…РёР»РµРЅРЅСЏ');
+      throw new BadRequestException('Потрібно вказати причину відхилення');
     }
 
     order.status = 'rejected';
@@ -893,7 +893,7 @@ export class ServiceOrdersService {
       savedOrder,
       user,
       'rejected',
-      'Р—Р°СЏРІРєСѓ РІС–РґС…РёР»РµРЅРѕ',
+      'Заявку відхилено',
     );
 
     this.notifyRealtime(savedOrder, 'rejected');
@@ -906,13 +906,13 @@ export class ServiceOrdersService {
 
     if (user.role !== 'admin' && user.scope !== 'main') {
       throw new BadRequestException(
-        'РџРѕРІС‚РѕСЂРЅРёР№ РїС–РґР±С–СЂ РјРѕР¶Рµ РІРёРєРѕРЅР°С‚Рё С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
+        'Повторний підбір може виконати тільки ОКП або адміністратор',
       );
     }
 
     if (order.status !== 'rejected') {
       throw new BadRequestException(
-        'РџРѕРІС‚РѕСЂРЅРёР№ РїС–РґР±С–СЂ РґРѕСЃС‚СѓРїРЅРёР№ С‚С–Р»СЊРєРё РґР»СЏ РІС–РґС…РёР»РµРЅРѕРіРѕ Р·Р°РІРґР°РЅРЅСЏ',
+        'Повторний підбір доступний тільки для відхиленого завдання',
       );
     }
 
@@ -941,7 +941,7 @@ order.linkedAirTaskId = null;
       savedOrder,
       user,
       'reopened',
-      'Р—Р°СЏРІРєСѓ РїРѕРІРµСЂРЅСѓС‚Рѕ РЅР° РїРѕРІС‚РѕСЂРЅРёР№ РїС–РґР±С–СЂ',
+      'Заявку повернуто на повторний підбір',
     );
     this.notifyRealtime(savedOrder, 'updated');
     return savedOrder;
@@ -960,12 +960,12 @@ async selectAirAsset(
 
   if (user.role !== 'admin' && user.scope !== 'main') {
     throw new BadRequestException(
-      'РћР±РёСЂР°С‚Рё Р±РѕР№РѕРІРёР№ Р‘РїР›Рђ РґР»СЏ Р·Р°СЏРІРєРё РјРѕР¶Рµ С‚С–Р»СЊРєРё РћРљРџ Р°Р±Рѕ Р°РґРјС–РЅС–СЃС‚СЂР°С‚РѕСЂ',
+      'Обирати бойовий БпЛА для заявки може тільки ОКП або адміністратор',
     );
   }
 
   if (!['draft', 'proposed', 'rejected'].includes(order.status)) {
-      throw new BadRequestException('Р’РёР±С–СЂ РІРёРєРѕРЅР°РІС†СЏ РјРѕР¶Р»РёРІРёР№ С‚С–Р»СЊРєРё РґР»СЏ С‡РµСЂРЅРµС‚РєРё, РїСЂРѕРїРѕР·РёС†С–С— Р°Р±Рѕ РІС–РґС…РёР»РµРЅРѕС— Р·Р°СЏРІРєРё');
+      throw new BadRequestException('Вибір виконавця можливий тільки для чернетки, пропозиції або відхиленої заявки');
     }
 
   order.executorType = 'air_asset_position';
@@ -997,7 +997,7 @@ async selectAirAsset(
     savedOrder,
     user,
     'updated',
-    'РћР±СЂР°РЅРѕ Р±РѕР№РѕРІРёР№ Р‘РїР›Рђ РґР»СЏ Р·Р°СЏРІРєРё',
+    'Обрано бойовий БпЛА для заявки',
   );
 
   this.notifyRealtime(savedOrder, 'updated');
@@ -1012,15 +1012,15 @@ async selectAirAsset(
     await this.ensureCanExecuteOrder(order, user);
 
     if (order.status !== 'accepted') {
-      throw new BadRequestException('РџРѕС‡Р°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё РїСЂРёР№РЅСЏС‚Рµ Р·Р°РІРґР°РЅРЅСЏ');
+      throw new BadRequestException('Почати можна тільки прийняте завдання');
     }
 
     if (order.executorType === 'air_asset_position') {
       if (!order.selectedAirAssetPositionId) {
-        throw new BadRequestException('РќРµРјРѕР¶Р»РёРІРѕ РїРѕС‡Р°С‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕРіРѕ РІРёРєРѕРЅР°РІС†СЏ');
+        throw new BadRequestException('Неможливо почати завдання без обраного виконавця');
       }
     } else if (!order.selectedFirePositionId) {
-      throw new BadRequestException('РќРµРјРѕР¶Р»РёРІРѕ РїРѕС‡Р°С‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕРіРѕ РІРёРєРѕРЅР°РІС†СЏ');
+      throw new BadRequestException('Неможливо почати завдання без обраного виконавця');
     }
 
     if (order.executorType !== 'air_asset_position') {
@@ -1036,7 +1036,7 @@ async selectAirAsset(
       return manager.save(ServiceOrder, order);
     });
 
-    await this.writeOrderEvent(savedOrder, user, 'started', 'Р—Р°СЏРІРєСѓ СЂРѕР·РїРѕС‡Р°С‚Рѕ');
+    await this.writeOrderEvent(savedOrder, user, 'started', 'Заявку розпочато');
 
     this.notifyRealtime(savedOrder, 'started');
 
@@ -1278,18 +1278,18 @@ async selectAirAsset(
       Number.isNaN(startedAt.getTime()) ||
       Number.isNaN(completedAt.getTime())
     ) {
-      throw new BadRequestException('РќРµРєРѕСЂРµРєС‚РЅР° РґР°С‚Р° РїРѕС‡Р°С‚РєСѓ Р°Р±Рѕ Р·Р°РІРµСЂС€РµРЅРЅСЏ');
+      throw new BadRequestException('Некоректна дата початку або завершення');
     }
 
     if (completedAt < startedAt) {
       throw new BadRequestException(
-        'Р”Р°С‚Р° Р·Р°РІРµСЂС€РµРЅРЅСЏ РЅРµ РјРѕР¶Рµ Р±СѓС‚Рё СЂР°РЅС–С€Рµ РґР°С‚Рё РїРѕС‡Р°С‚РєСѓ',
+        'Дата завершення не може бути раніше дати початку',
       );
     }
 
     if (!Number.isInteger(shotQuantity) || shotQuantity <= 0) {
       throw new BadRequestException(
-        'Р¤Р°РєС‚РёС‡РЅР° РєС–Р»СЊРєС–СЃС‚СЊ РїРѕСЃС‚СЂС–Р»С–РІ РјР°С” Р±СѓС‚Рё С†С–Р»РёРј РґРѕРґР°С‚РЅРёРј С‡РёСЃР»РѕРј',
+        'Фактична кількість пострілів має бути цілим додатним числом',
       );
     }
 
@@ -1300,7 +1300,7 @@ async selectAirAsset(
       });
 
       if (!order) {
-        throw new NotFoundException('Р’РѕРіРЅРµРІРµ Р·Р°РІРґР°РЅРЅСЏ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+        throw new NotFoundException('Вогневе завдання не знайдено');
       }
 
       await this.ensureCanExecuteOrder(order, user);
@@ -1310,7 +1310,7 @@ async selectAirAsset(
 
       if (!isFirstCompletion && !isEditingCompleted) {
         throw new BadRequestException(
-          'Р—Р°РІРµСЂС€РёС‚Рё Р°Р±Рѕ СЂРµРґР°РіСѓРІР°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё Р·Р°РІРґР°РЅРЅСЏ РІ СЂРѕР±РѕС‚С– С‡Рё Р·Р°РІРµСЂС€РµРЅРµ Р·Р°РІРґР°РЅРЅСЏ',
+          'Завершити або редагувати можна тільки завдання в роботі чи завершене завдання',
         );
       }
 
@@ -1320,7 +1320,7 @@ async selectAirAsset(
 
       if (!order.selectedFirePositionId) {
         throw new BadRequestException(
-          'РќРµРјРѕР¶Р»РёРІРѕ Р·Р°РІРµСЂС€РёС‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕС— Р’Рџ',
+          'Неможливо завершити завдання без обраної ВП',
         );
       }
 
@@ -1330,7 +1330,7 @@ async selectAirAsset(
       });
 
       if (!firePosition?.ammoDepotId) {
-        throw new BadRequestException('РЈ РІРёР±СЂР°РЅРѕС— Р’Рџ РЅРµРјР°С” Р»РѕРєР°Р»СЊРЅРѕРіРѕ Р‘Рљ');
+        throw new BadRequestException('У вибраної ВП немає локального БК');
       }
 
       const configuration = await this.resolveShotConfigurationForCompletion(
@@ -1348,7 +1348,7 @@ async selectAirAsset(
         configuration.charges.length === 0
       ) {
         throw new BadRequestException(
-          'РђРєС‚РёРІРЅРёР№ РєРѕРјРїР»РµРєС‚ РїРѕСЃС‚СЂС–Р»Сѓ РїРѕРІРёРЅРµРЅ РјС–СЃС‚РёС‚Рё СЃРЅР°СЂСЏРґ, РїС–РґСЂРёРІРЅРёРє, РєР°РїСЃСѓР»СЊ, Р·РѕРЅСѓ С‚Р° С‰РѕРЅР°Р№РјРµРЅС€Рµ РѕРґРёРЅ Р·Р°СЂСЏРґ',
+          'Активний комплект пострілу повинен містити снаряд, підривник, капсуль, зону та щонайменше один заряд',
         );
       }
 
@@ -1357,7 +1357,7 @@ async selectAirAsset(
       });
 
       if (!configurationEntity?.isActive) {
-        throw new BadRequestException('РљРѕРјРїР»РµРєС‚ РїРѕСЃС‚СЂС–Р»Сѓ РЅРµР°РєС‚РёРІРЅРёР№');
+        throw new BadRequestException('Комплект пострілу неактивний');
       }
 
       const shellAdjustments = new Map<string, number>();
@@ -1481,7 +1481,7 @@ async selectAirAsset(
       savedOrder,
       user,
       'completed',
-      'Р—Р°СЏРІРєСѓ Р·Р°РІРµСЂС€РµРЅРѕ',
+      'Заявку завершено',
     );
 
     this.notifyRealtime(savedOrder, 'completed', [
@@ -1508,7 +1508,7 @@ async selectAirAsset(
 
     if (!isFirstCompletion && !isEditingCompleted) {
       throw new BadRequestException(
-        'Р—Р°РІРµСЂС€РёС‚Рё Р°Р±Рѕ СЂРµРґР°РіСѓРІР°С‚Рё РјРѕР¶РЅР° С‚С–Р»СЊРєРё Р·Р°РІРґР°РЅРЅСЏ РІ СЂРѕР±РѕС‚С– С‡Рё Р·Р°РІРµСЂС€РµРЅРµ Р·Р°РІРґР°РЅРЅСЏ',
+        'Завершити або редагувати можна тільки завдання в роботі чи завершене завдання',
       );
     }
 
@@ -1518,7 +1518,7 @@ async selectAirAsset(
 
     if (!order.selectedFirePositionId) {
       throw new BadRequestException(
-        'РќРµРјРѕР¶Р»РёРІРѕ Р·Р°РІРµСЂС€РёС‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· РѕР±СЂР°РЅРѕС— Р’Рџ',
+        'Неможливо завершити завдання без обраної ВП',
       );
     }
 
@@ -1529,12 +1529,12 @@ async selectAirAsset(
       Number.isNaN(startedAt.getTime()) ||
       Number.isNaN(completedAt.getTime())
     ) {
-      throw new BadRequestException('РќРµРєРѕСЂРµРєС‚РЅР° РґР°С‚Р° РїРѕС‡Р°С‚РєСѓ Р°Р±Рѕ Р·Р°РІРµСЂС€РµРЅРЅСЏ');
+      throw new BadRequestException('Некоректна дата початку або завершення');
     }
 
     if (completedAt < startedAt) {
       throw new BadRequestException(
-        'Р”Р°С‚Р° Р·Р°РІРµСЂС€РµРЅРЅСЏ РЅРµ РјРѕР¶Рµ Р±СѓС‚Рё СЂР°РЅС–С€Рµ РґР°С‚Рё РїРѕС‡Р°С‚РєСѓ',
+        'Дата завершення не може бути раніше дати початку',
       );
     }
 
@@ -1566,7 +1566,7 @@ async selectAirAsset(
       )
     ) {
       throw new BadRequestException(
-        'РќРµРјРѕР¶Р»РёРІРѕ Р·Р°РІРµСЂС€РёС‚Рё Р·Р°РІРґР°РЅРЅСЏ Р±РµР· С„Р°РєС‚РёС‡РЅРѕРіРѕ СЃРЅР°СЂСЏРґР° С‚Р° Р·Р°СЂСЏРґСѓ',
+        'Неможливо завершити завдання без фактичного снаряда та заряду',
       );
     }
 
@@ -1576,7 +1576,7 @@ async selectAirAsset(
       });
 
       if (!firePosition?.ammoDepotId) {
-        throw new BadRequestException('РЈ РІРёР±СЂР°РЅРѕС— Р’Рџ РЅРµРјР°С” Р»РѕРєР°Р»СЊРЅРѕРіРѕ Р‘Рљ');
+        throw new BadRequestException('У вибраної ВП немає локального БК');
       }
 
       const shellAdjustments = new Map<string, number>();
@@ -1619,7 +1619,7 @@ async selectAirAsset(
 
         if (!compatiblePair) {
           throw new BadRequestException(
-            'Р¤Р°РєС‚РёС‡РЅРёР№ СЃРЅР°СЂСЏРґ С– Р·Р°СЂСЏРґ РЅРµ РјР°СЋС‚СЊ РЅР°Р»Р°С€С‚РѕРІР°РЅРѕС— СЃСѓРјС–СЃРЅРѕСЃС‚С–',
+            'Фактичний снаряд і заряд не мають налаштованої сумісності',
           );
         }
 
@@ -1629,7 +1629,7 @@ async selectAirAsset(
 
         if (!actualCharge) {
           throw new BadRequestException(
-            'Р¤Р°РєС‚РёС‡РЅРёР№ Р·Р°СЂСЏРґ РЅРµ Р·РЅР°Р№РґРµРЅРѕ РІ РґРѕРІС–РґРЅРёРєСѓ',
+            'Фактичний заряд не знайдено в довіднику',
           );
         }
 
@@ -1714,7 +1714,7 @@ async selectAirAsset(
       savedOrder,
       user,
       'completed',
-      'Р—Р°СЏРІРєСѓ Р·Р°РІРµСЂС€РµРЅРѕ',
+      'Заявку завершено',
     );
 
     this.notifyRealtime(savedOrder, 'completed', [
@@ -2138,7 +2138,7 @@ async selectAirAsset(
 
     if (!Number.isInteger(modulesPerCharge) || modulesPerCharge <= 0) {
       throw new BadRequestException(
-        'Р”Р»СЏ РјРѕРґСѓР»СЊРЅРѕРіРѕ Р·Р°СЂСЏРґСѓ РЅРµ РЅР°Р»Р°С€С‚РѕРІР°РЅР° РєС–Р»СЊРєС–СЃС‚СЊ РјРѕРґСѓР»С–РІ Сѓ РїРѕРІРЅРѕРјСѓ Р·Р°СЂСЏРґС–',
+        'Для модульного заряду не налаштована кількість модулів у повному заряді',
       );
     }
 
@@ -2154,7 +2154,7 @@ async selectAirAsset(
       modulesPerShot > maxUsableModules
     ) {
       throw new BadRequestException(
-        `РќРµРєРѕСЂРµРєС‚РЅР° РєС–Р»СЊРєС–СЃС‚СЊ РјРѕРґСѓР»С–РІ Р·Р°СЂСЏРґСѓ. Р”РѕСЃС‚СѓРїРЅРѕ: 1-${Math.min(
+        `Некоректна кількість модулів заряду. Доступно: 1-${Math.min(
           modulesPerCharge,
           maxUsableModules,
         )}`,
@@ -2196,7 +2196,7 @@ async selectAirAsset(
 
       if (!stock) {
         throw new BadRequestException(
-          'РќР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ РЅРµРјР°С” С„Р°РєС‚РёС‡РЅРѕРіРѕ СЃРЅР°СЂСЏРґР°',
+          'На локальному БК ВП немає фактичного снаряда',
         );
       }
 
@@ -2206,7 +2206,7 @@ async selectAirAsset(
 
       if (nextQuantity < 0) {
         throw new BadRequestException(
-          `РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ С„Р°РєС‚РёС‡РЅРёС… СЃРЅР°СЂСЏРґС–РІ РЅР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ. РџРѕС‚СЂС–Р±РЅРѕ РґРѕРґР°С‚РєРѕРІРѕ: ${this.roundStockQuantity(
+          `Недостатньо фактичних снарядів на локальному БК ВП. Потрібно додатково: ${this.roundStockQuantity(
             Math.abs(nextQuantity),
           )}`,
         );
@@ -2232,7 +2232,7 @@ async selectAirAsset(
 
       if (!stock) {
         throw new BadRequestException(
-          'РќР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ РЅРµРјР°С” С„Р°РєС‚РёС‡РЅРѕРіРѕ Р·Р°СЂСЏРґСѓ',
+          'На локальному БК ВП немає фактичного заряду',
         );
       }
 
@@ -2242,7 +2242,7 @@ async selectAirAsset(
 
       if (nextQuantity < 0) {
         throw new BadRequestException(
-          `РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ С„Р°РєС‚РёС‡РЅРёС… Р·Р°СЂСЏРґС–РІ РЅР° Р»РѕРєР°Р»СЊРЅРѕРјСѓ Р‘Рљ Р’Рџ. РџРѕС‚СЂС–Р±РЅРѕ РґРѕРґР°С‚РєРѕРІРѕ: ${this.roundStockQuantity(
+          `Недостатньо фактичних зарядів на локальному БК ВП. Потрібно додатково: ${this.roundStockQuantity(
             Math.abs(nextQuantity),
           )}`,
         );
@@ -2328,7 +2328,7 @@ async selectAirAsset(
           movementType: 'write_off',
           movementGroupId,
           documentNumber,
-          comment: `РЎРїРёСЃР°РЅРЅСЏ Р·Р° Р’Р“Р— ${serviceOrderId}`,
+          comment: `Списання за ВГЗ ${serviceOrderId}`,
         });
       }
 
@@ -2342,7 +2342,7 @@ async selectAirAsset(
           movementType: 'write_off',
           movementGroupId,
           documentNumber,
-          comment: `РЎРїРёСЃР°РЅРЅСЏ Р·Р° Р’Р“Р— ${serviceOrderId}`,
+          comment: `Списання за ВГЗ ${serviceOrderId}`,
         });
       }
     }
@@ -2493,15 +2493,15 @@ async selectAirAsset(
     await this.ensureCanChangeOrder(order, user);
 
     if (order.status === 'completed') {
-      throw new BadRequestException('Р—Р°РІРµСЂС€РµРЅРµ Р·Р°РІРґР°РЅРЅСЏ РЅРµ РјРѕР¶РЅР° СЃРєР°СЃСѓРІР°С‚Рё');
+      throw new BadRequestException('Завершене завдання не можна скасувати');
     }
 
     if (order.status === 'cancelled') {
-      throw new BadRequestException('Р—Р°РІРґР°РЅРЅСЏ РІР¶Рµ СЃРєР°СЃРѕРІР°РЅРµ');
+      throw new BadRequestException('Завдання вже скасоване');
     }
 
     order.status = 'cancelled';
-    order.rejectionReason = reason?.trim() || 'РЎРєР°СЃРѕРІР°РЅРѕ РѕРїРµСЂР°С‚РѕСЂРѕРј';
+    order.rejectionReason = reason?.trim() || 'Скасовано оператором';
 
     const savedOrder = await this.repository.save(order);
 
@@ -2509,7 +2509,7 @@ async selectAirAsset(
       savedOrder,
       user,
       'cancelled',
-      'Р—Р°СЏРІРєСѓ СЃРєР°СЃРѕРІР°РЅРѕ',
+      'Заявку скасовано',
     );
 
     this.notifyRealtime(savedOrder, 'updated');
@@ -2573,7 +2573,7 @@ async selectAirAsset(
         shellMarking: item.selectedShell?.marking ?? null,
         chargeMarking: item.selectedCharge?.marking ?? null,
         zoneName: item.selectedZone
-          ? `Р—РѕРЅР° ${item.selectedZone.zoneNumber} (${item.selectedZone.distanceFromM}-${item.selectedZone.distanceToM} Рј)`
+          ? `Зона ${item.selectedZone.zoneNumber} (${item.selectedZone.distanceFromM}-${item.selectedZone.distanceToM} м)`
           : null,
       }),
     );
@@ -2581,13 +2581,13 @@ async selectAirAsset(
 
   private assertCanEdit(item: ServiceOrder): void {
     if (item.status === 'cancelled') {
-      throw new BadRequestException('РЎРєР°СЃРѕРІР°РЅРµ Р·Р°РІРґР°РЅРЅСЏ РЅРµ РјРѕР¶РЅР° СЂРµРґР°РіСѓРІР°С‚Рё');
+      throw new BadRequestException('Скасоване завдання не можна редагувати');
     }
 
     if (item.status === 'completed') {
       if (!item.completedAt) {
         throw new BadRequestException(
-          'Р—Р°РІРµСЂС€РµРЅРµ Р·Р°РІРґР°РЅРЅСЏ РјР°С” РЅРµРєРѕСЂРµРєС‚РЅСѓ РґР°С‚Сѓ Р·Р°РІРµСЂС€РµРЅРЅСЏ',
+          'Завершене завдання має некоректну дату завершення',
         );
       }
 
@@ -2597,7 +2597,7 @@ async selectAirAsset(
 
       if (now - completedAt > editWindowMs) {
         throw new BadRequestException(
-          'Р РµРґР°РіСѓРІР°РЅРЅСЏ Р·Р°РІРµСЂС€РµРЅРѕРіРѕ Р·Р°РІРґР°РЅРЅСЏ РґРѕСЃС‚СѓРїРЅРµ С‚С–Р»СЊРєРё РїСЂРѕС‚СЏРіРѕРј 30 С…РІРёР»РёРЅ РїС–СЃР»СЏ Р·Р°РІРµСЂС€РµРЅРЅСЏ',
+          'Редагування завершеного завдання доступне тільки протягом 30 хвилин після завершення',
         );
       }
     }
@@ -2927,7 +2927,7 @@ async selectAirAsset(
       return;
     }
 
-    throw new BadRequestException('РќРµРјР°С” РґРѕСЃС‚СѓРїСѓ РґРѕ С†С–С”С— Р·Р°СЏРІРєРё');
+    throw new BadRequestException('Немає доступу до цієї заявки');
   }
 
   private async canViewOrder(
@@ -2983,7 +2983,7 @@ async selectAirAsset(
     user: AuthUser,
   ): Promise<void> {
     if (user.role === 'observer') {
-      throw new BadRequestException('РЎРїРѕСЃС‚РµСЂС–РіР°С‡ РЅРµ РјРѕР¶Рµ Р·РјС–РЅСЋРІР°С‚Рё Р·Р°СЏРІРєРё');
+      throw new BadRequestException('Спостерігач не може змінювати заявки');
     }
 
     if (user.role === 'admin' || user.scope === 'main') {
@@ -2991,7 +2991,7 @@ async selectAirAsset(
     }
 
     if (!order.assignedUnitId) {
-      throw new BadRequestException('Р—Р°СЏРІРєР° С‰Рµ РЅРµ РїСЂРёР·РЅР°С‡РµРЅР° РїС–РґСЂРѕР·РґС–Р»Сѓ');
+      throw new BadRequestException('Заявка ще не призначена підрозділу');
     }
 
     const canAccess = await this.accessScope.canAccessUnit(
@@ -3000,7 +3000,7 @@ async selectAirAsset(
     );
 
     if (!canAccess) {
-      throw new BadRequestException('РќРµРјР°С” РґРѕСЃС‚СѓРїСѓ РґРѕ С†С–С”С— Р·Р°СЏРІРєРё');
+      throw new BadRequestException('Немає доступу до цієї заявки');
     }
   }
 
@@ -3010,35 +3010,35 @@ async selectAirAsset(
   ): Promise<void> {
     if (user.role !== 'operator') {
       throw new BadRequestException(
-        'Р’РёРєРѕРЅР°РІС‡С– РґС–С— РґРѕСЃС‚СѓРїРЅС– С‚С–Р»СЊРєРё РѕРїРµСЂР°С‚РѕСЂСѓ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ',
+        'Виконавчі дії доступні тільки оператору підрозділу виконавця',
       );
     }
 
     if (user.scope === 'main' || user.scope === 'division') {
       throw new BadRequestException(
-        'Р“РѕР»РѕРІРЅРёР№ РїСѓРЅРєС‚ С– РґРёРІС–Р·С–РѕРЅ С‚С–Р»СЊРєРё РєРѕРЅС‚СЂРѕР»СЋСЋС‚СЊ РІРёРєРѕРЅР°РЅРЅСЏ. РџСЂРёР№РјР°С‚Рё, РїРѕС‡РёРЅР°С‚Рё, Р·Р°РІРµСЂС€СѓРІР°С‚Рё С– СЂРµРґР°РіСѓРІР°С‚Рё Р·РІС–С‚ РјРѕР¶Рµ РѕРїРµСЂР°С‚РѕСЂ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ',
+        'Головний пункт і дивізіон тільки контролюють виконання. Приймати, починати, завершувати і редагувати звіт може оператор підрозділу виконавця',
       );
     }
 
     if (user.scope !== 'battery') {
       throw new BadRequestException(
-        'Р’РёРєРѕРЅР°РІС‡С– РґС–С— РґРѕСЃС‚СѓРїРЅС– С‚С–Р»СЊРєРё РѕРїРµСЂР°С‚РѕСЂСѓ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ',
+        'Виконавчі дії доступні тільки оператору підрозділу виконавця',
       );
     }
 
     if (!user.unitId) {
       throw new BadRequestException(
-        'Р”Р»СЏ РѕРїРµСЂР°С‚РѕСЂР° РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ РЅРµ РІРёР·РЅР°С‡РµРЅРѕ РїС–РґСЂРѕР·РґС–Р»',
+        'Для оператора підрозділу виконавця не визначено підрозділ',
       );
     }
 
     if (!order.assignedUnitId) {
-      throw new BadRequestException('Р—Р°СЏРІРєР° С‰Рµ РЅРµ РЅР°РґС–СЃР»Р°РЅР° РІРёРєРѕРЅР°РІС†СЋ');
+      throw new BadRequestException('Заявка ще не надіслана виконавцю');
     }
 
     if (order.assignedUnitId !== user.unitId) {
       throw new BadRequestException(
-        'Р¦СЏ Р·Р°СЏРІРєР° РЅР°Р»РµР¶РёС‚СЊ С–РЅС€РѕРјСѓ РїС–РґСЂРѕР·РґС–Р»Сѓ РІРёРєРѕРЅР°РІС†СЏ С– РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ РІРёРєРѕРЅР°РЅРЅСЏ',
+        'Ця заявка належить іншому підрозділу виконавця і недоступна для виконання',
       );
     }
   }

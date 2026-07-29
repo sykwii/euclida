@@ -274,7 +274,7 @@ export class StockEngineService {
       unitId: request.unitId ?? user.unitId ?? null,
       entityType: 'stock_operation',
       entityId: operation.id,
-      title: 'РџСЂРѕРІРµРґРµРЅРѕ СЃРєР»Р°РґСЃСЊРєСѓ РѕРїРµСЂР°С†С–СЋ',
+      title: 'Проведено складську операцію',
       details: request.comment ?? null,
       metadata: {
         movementGroupId:
@@ -323,7 +323,7 @@ export class StockEngineService {
 
     if (!adapter) {
       throw new BadRequestException(
-        `РќРµРїС–РґС‚СЂРёРјСѓРІР°РЅРёР№ С‚РёРї СЂРµСЃСѓСЂСЃСѓ: ${type}`,
+        `Непідтримуваний тип ресурсу: ${type}`,
       );
     }
 
@@ -343,7 +343,7 @@ export class StockEngineService {
 
       if (!Number.isFinite(quantity) || quantity <= 0) {
         throw new BadRequestException(
-          'РљС–Р»СЊРєС–СЃС‚СЊ РјР°С” Р±СѓС‚Рё Р±С–Р»СЊС€Рµ 0',
+          'Кількість має бути більше 0',
         );
       }
 
@@ -367,18 +367,18 @@ export class StockEngineService {
   private validateOperation(input: StockOperationRequest): void {
     if (!input.idempotencyKey?.trim()) {
       throw new BadRequestException(
-        'idempotencyKey РѕР±РѕРІвЂ™СЏР·РєРѕРІРёР№',
+        'idempotencyKey обов’язковий',
       );
     }
 
     if (!input.resources?.length) {
       throw new BadRequestException(
-        'РџРѕС‚СЂС–Р±РµРЅ С…РѕС‡Р° Р± РѕРґРёРЅ СЂРµСЃСѓСЂСЃ',
+        'Потрібен хоча б один ресурс',
       );
     }
 
     if (!input.source && !input.destination) {
-      throw new BadRequestException('РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё СЃРєР»Р°Рґ');
+      throw new BadRequestException('Потрібно вказати склад');
     }
 
     if (
@@ -387,7 +387,7 @@ export class StockEngineService {
       input.source.id === input.destination.id
     ) {
       throw new BadRequestException(
-        'РЎРєР»Р°РґРё РјР°СЋС‚СЊ РІС–РґСЂС–Р·РЅСЏС‚РёСЃСЏ',
+        'Склади мають відрізнятися',
       );
     }
 
@@ -396,7 +396,7 @@ export class StockEngineService {
       (!input.source || !input.destination)
     ) {
       throw new BadRequestException(
-        'Р”Р»СЏ transfer РїРѕС‚СЂС–Р±РЅС– РѕР±РёРґРІР° СЃРєР»Р°РґРё',
+        'Для transfer потрібні обидва склади',
       );
     }
 
@@ -405,7 +405,7 @@ export class StockEngineService {
       !input.source
     ) {
       throw new BadRequestException(
-        'Р”Р»СЏ write_off РїРѕС‚СЂС–Р±РµРЅ СЃРєР»Р°Рґ-РґР¶РµСЂРµР»Рѕ',
+        'Для write_off потрібен склад-джерело',
       );
     }
 
@@ -414,7 +414,7 @@ export class StockEngineService {
       !input.destination
     ) {
       throw new BadRequestException(
-        'Р”Р»СЏ receipt РїРѕС‚СЂС–Р±РµРЅ СЃРєР»Р°Рґ-РѕС‚СЂРёРјСѓРІР°С‡',
+        'Для receipt потрібен склад-отримувач',
       );
     }
   }
@@ -464,7 +464,7 @@ export class StockEngineService {
 
     if (location.type !== 'depot') {
       throw new BadRequestException(
-        `${field} РїС–РґС‚СЂРёРјСѓС” С‚С–Р»СЊРєРё depot`,
+        `${field} підтримує тільки depot`,
       );
     }
   }
@@ -478,7 +478,7 @@ export class StockEngineService {
       .findOne({ where: { id: depotId } });
 
     if (!depot) {
-      throw new NotFoundException('РЎРєР»Р°Рґ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      throw new NotFoundException('Склад не знайдено');
     }
 
     await this.ensureCanOperate(user, depot, depot);
@@ -510,7 +510,7 @@ export class StockEngineService {
         !visible.includes(depot.unitId)
       ) {
         throw new ForbiddenException(
-          'РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ РїСЂР°РІ РґР»СЏ С†СЊРѕРіРѕ СЃРєР»Р°РґСѓ',
+          'Недостатньо прав для цього складу',
         );
       }
     }

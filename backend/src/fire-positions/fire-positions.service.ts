@@ -220,7 +220,11 @@ export class FirePositionsService implements OnModuleInit {
     });
 
     await this.writeReadinessEvent(saved.savedItem, user);
-    this.emitFirePositionChanged('updated', saved.savedItem.id);
+    this.emitFirePositionChanged(
+      'updated',
+      saved.savedItem.id,
+      saved.savedItem.unitId,
+    );
     await this.operationalNotifications?.notifyFirePositionReadinessTransition(
       saved.previousReadinessStatus,
       saved.savedItem.id,
@@ -287,7 +291,11 @@ export class FirePositionsService implements OnModuleInit {
 
       const savedFirePosition = await manager.save(FirePosition, firePosition);
 
-      this.emitFirePositionChanged('created', savedFirePosition.id);
+      this.emitFirePositionChanged(
+        'created',
+        savedFirePosition.id,
+        savedFirePosition.unitId,
+      );
       return savedFirePosition;
     });
   }
@@ -360,7 +368,7 @@ export class FirePositionsService implements OnModuleInit {
       ...sector,
     });
     const saved = await this.repository.save(item);
-    this.emitFirePositionChanged('updated', saved.id);
+    this.emitFirePositionChanged('updated', saved.id, saved.unitId);
     return saved;
   }
 
@@ -370,7 +378,7 @@ export class FirePositionsService implements OnModuleInit {
     await this.ensureCanUseUnit(user, item.unitId);
 
     await this.repository.remove(item);
-    this.emitFirePositionChanged('deleted', id);
+    this.emitFirePositionChanged('deleted', id, item.unitId);
   }
 
   private normalizePositionType(value: string | null | undefined): string {
@@ -388,10 +396,12 @@ export class FirePositionsService implements OnModuleInit {
   private emitFirePositionChanged(
     action: 'created' | 'updated' | 'deleted' | 'changed',
     id: string,
+    unitId: string | null,
   ): void {
     this.realtimeEvents.emitMany(['map', 'analytics', 'events'], action, {
       entity: 'fire_position',
       id,
+      unitId: unitId || undefined,
     });
   }
 

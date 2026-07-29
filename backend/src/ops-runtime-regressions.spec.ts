@@ -9,6 +9,12 @@ import {
 import { ExecutionRecordArtillery } from './execution/execution-record-artillery.entity';
 import { ConfirmFirePositionReadinessDto } from './fire-positions/dto/confirm-fire-position-readiness.dto';
 import { StockMovement } from './stock-movements/stock-movement.entity';
+import { AirThreat } from './air-threats/air-threat.entity';
+import { AppSetting } from './settings/app-setting.entity';
+import { Primer } from './primers/primer.entity';
+import { WeaponDeployment } from './weapon-systems/weapon-deployment.entity';
+import { WeaponSystem } from './weapon-systems/weapon-system.entity';
+import { Zone } from './zones/zone.entity';
 
 describe('OPS runtime regressions', () => {
   it('allows marking a fire position not ready without sending readinessStatus', async () => {
@@ -74,5 +80,64 @@ describe('OPS runtime regressions', () => {
     );
     expect(sql).toContain('chk_execution_records_purpose');
     expect(sql).toContain('main_fire');
+  });
+
+  it('ships the complete rerunnable release preflight schema repair', () => {
+    const sql = readFileSync(
+      join(
+        process.cwd(),
+        '..',
+        'database',
+        'init',
+        '51_release_preflight_schema_contract.sql',
+      ),
+      'utf8',
+    );
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS app_settings');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS air_threats');
+    expect(sql).toContain('ALTER COLUMN ammo_type DROP NOT NULL');
+    expect(sql).toContain('ALTER COLUMN from_location_type DROP NOT NULL');
+    expect(sql).toContain('ALTER COLUMN weapon_model DROP NOT NULL');
+    expect(sql).toContain('ALTER COLUMN zone_id DROP NOT NULL');
+    expect(sql).toContain('ALTER COLUMN item_type TYPE varchar(50)');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS ammo_depot_id uuid NULL');
+    expect(sql).toContain('ON CONFLICT (key) DO NOTHING');
+  });
+
+  it('keeps entity metadata aligned with the repaired clean schema', () => {
+    const columns = getMetadataArgsStorage().columns;
+    const column = (target: object, propertyName: string) =>
+      columns.find(
+        (item) => item.target === target && item.propertyName === propertyName,
+      );
+
+    expect(column(Primer, 'ammoType')?.options).toEqual(
+      expect.objectContaining({ nullable: true, length: 100 }),
+    );
+    expect(column(WeaponDeployment, 'fromLocationType')?.options.nullable).toBe(
+      true,
+    );
+    expect(column(WeaponDeployment, 'toLocationType')?.options.nullable).toBe(
+      true,
+    );
+    expect(column(ExecutionRecordArtillery, 'zoneId')?.options.nullable).toBe(
+      true,
+    );
+    expect(column(StockMovement, 'itemType')?.options.length).toBe(50);
+    expect(column(WeaponSystem, 'lat')?.options.nullable).toBe(true);
+    expect(column(WeaponSystem, 'lng')?.options.nullable).toBe(true);
+    expect(column(WeaponSystem, 'ammoDepotId')?.options.nullable).toBe(true);
+    expect(
+      getMetadataArgsStorage().tables.some(
+        (table) => table.target === AppSetting && table.name === 'app_settings',
+      ),
+    ).toBe(true);
+    expect(
+      getMetadataArgsStorage().tables.some(
+        (table) => table.target === AirThreat && table.name === 'air_threats',
+      ),
+    ).toBe(true);
+    expect(column(Zone, 'weaponModelId')?.options.nullable).not.toBe(true);
   });
 });

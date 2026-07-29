@@ -216,7 +216,7 @@ export class ExecutionEngineService {
       });
 
       if (!recordWithRelations) {
-        throw new NotFoundException('Р—Р°РїРёСЃ Р¶СѓСЂРЅР°Р»Сѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+        throw new NotFoundException('Запис журналу не знайдено');
       }
 
       const lockedOrder = await manager.findOne(ServiceOrder, {
@@ -243,7 +243,7 @@ export class ExecutionEngineService {
       });
 
       if (!orderWithRelations) {
-        throw new NotFoundException('Р’Р“Р— РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+        throw new NotFoundException('ВГЗ не знайдено');
       }
 
       const context = this.buildContextFromRecord(

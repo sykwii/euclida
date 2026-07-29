@@ -97,7 +97,7 @@ export class DroneStockEngineService {
         if (input.operationType === 'correction') {
           if (!input.destination) {
             throw new BadRequestException(
-              'Р”Р»СЏ РєРѕСЂРµРєС†С–С— РїРѕС‚СЂС–Р±РЅРµ РјС–СЃС†Рµ Р·Р±РµСЂС–РіР°РЅРЅСЏ',
+              'Для корекції потрібне місце зберігання',
             );
           }
 
@@ -176,7 +176,7 @@ export class DroneStockEngineService {
         unitId: input.unitId ?? user.unitId ?? null,
         entityType: 'drone_stock_movement',
         entityId: movement.id,
-        title: 'РџСЂРѕРІРµРґРµРЅРѕ СЂСѓС… СЂРµСЃСѓСЂСЃСѓ Р‘РїР›Рђ',
+        title: 'Проведено рух ресурсу БпЛА',
         details: input.comment ?? null,
         metadata: {
           movementType: input.movementType,
@@ -216,7 +216,7 @@ export class DroneStockEngineService {
   private validate(input: DroneStockOperationRequest): void {
     if (!input.resources?.length) {
       throw new BadRequestException(
-        'РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё С…РѕС‡Р° Р± РѕРґРёРЅ СЂРµСЃСѓСЂСЃ',
+        'Потрібно вказати хоча б один ресурс',
       );
     }
 
@@ -224,23 +224,23 @@ export class DroneStockEngineService {
     const quantity = Number(resource.quantity);
 
     if (!input.idempotencyKey?.trim()) {
-      throw new BadRequestException('idempotencyKey РѕР±РѕРІвЂ™СЏР·РєРѕРІРёР№');
+      throw new BadRequestException('idempotencyKey обов’язковий');
     }
 
     if (!Number.isFinite(quantity) || quantity < 0) {
-      throw new BadRequestException('РќРµРєРѕСЂРµРєС‚РЅР° РєС–Р»СЊРєС–СЃС‚СЊ');
+      throw new BadRequestException('Некоректна кількість');
     }
 
     if (
       input.operationType !== 'correction' &&
       quantity <= 0
     ) {
-      throw new BadRequestException('РљС–Р»СЊРєС–СЃС‚СЊ РјР°С” Р±СѓС‚Рё Р±С–Р»СЊС€Рµ 0');
+      throw new BadRequestException('Кількість має бути більше 0');
     }
 
     if (!input.source && !input.destination) {
       throw new BadRequestException(
-        'РџРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РґР¶РµСЂРµР»Рѕ Р°Р±Рѕ РѕС‚СЂРёРјСѓРІР°С‡Р°',
+        'Потрібно вказати джерело або отримувача',
       );
     }
   }
@@ -250,7 +250,7 @@ export class DroneStockEngineService {
   ): DroneStockResourceRef {
     if (resources.length !== 1) {
       throw new BadRequestException(
-        'DroneStockEngineService РїС–РґС‚СЂРёРјСѓС” РѕРґРёРЅ СЂРµСЃСѓСЂСЃ РЅР° РѕРїРµСЂР°С†С–СЋ',
+        'DroneStockEngineService підтримує один ресурс на операцію',
       );
     }
 
@@ -271,12 +271,12 @@ export class DroneStockEngineService {
       });
 
       if (!depot) {
-        throw new NotFoundException('РЎРєР»Р°Рґ Р‘РїР›Рђ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+        throw new NotFoundException('Склад БпЛА не знайдено');
       }
 
       if (depot.depotType !== 'drone_depot') {
         throw new BadRequestException(
-          'Р РµСЃСѓСЂСЃРё Р‘РїР›Рђ РґРѕР·РІРѕР»РµРЅС– С‚С–Р»СЊРєРё РЅР° СЃРєР»Р°РґР°С… Р‘РїР›Рђ',
+          'Ресурси БпЛА дозволені тільки на складах БпЛА',
         );
       }
 
@@ -289,7 +289,7 @@ export class DroneStockEngineService {
 
     if (!position) {
       throw new NotFoundException(
-        'Р РѕР·СЂР°С…СѓРЅРѕРє РїРѕРІС–С‚СЂСЏРЅРёС… Р·Р°СЃРѕР±С–РІ РЅРµ Р·РЅР°Р№РґРµРЅРѕ',
+        'Розрахунок повітряних засобів не знайдено',
       );
     }
   }

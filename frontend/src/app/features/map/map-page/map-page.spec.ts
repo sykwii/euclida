@@ -1,3 +1,4 @@
+import { resolveLeafletModule } from '../../../shared/leaflet-module';
 import { MapPage } from './map-page';
 import { FirePosition } from '../../fire-positions/fire-position.model';
 
@@ -22,6 +23,26 @@ describe('MapPage fire-position readiness', () => {
       {} as never,
       {} as never,
     );
+  });
+
+  it('unwraps nested CommonJS Leaflet default exports', () => {
+    const map = vi.fn();
+    const layerGroup = vi.fn();
+    const resolved = resolveLeafletModule({
+      default: {
+        default: {
+          default: {
+            default: {
+              map,
+              layerGroup,
+            },
+          },
+        },
+      },
+    });
+
+    expect(resolved.map).toBe(map);
+    expect(resolved.layerGroup).toBe(layerGroup);
   });
 
   it('renders canonical combat-ready status as ready', () => {

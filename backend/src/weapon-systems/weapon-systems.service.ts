@@ -170,7 +170,7 @@ export class WeaponSystemsService implements OnModuleInit {
 
     const saved = await this.repository.save(item);
     await this.writeWeaponEvent(saved, user, 'created');
-    this.emitWeaponChanged('created', saved.id);
+    this.emitWeaponChanged('created', saved.id, [], saved.unitId);
     return this.findOne(saved.id, user);
   }
 
@@ -205,6 +205,10 @@ export class WeaponSystemsService implements OnModuleInit {
       serialNumber: data.serialNumber ?? item.serialNumber,
       callsign: data.callsign ?? item.callsign,
       unitId: data.unitId ?? item.unitId,
+      lat: data.lat !== undefined ? data.lat : item.lat,
+      lng: data.lng !== undefined ? data.lng : item.lng,
+      ammoDepotId:
+        data.ammoDepotId !== undefined ? data.ammoDepotId : item.ammoDepotId,
       readinessStatus: item.readinessStatus,
       notReadyReason: item.notReadyReason,
     };
@@ -212,7 +216,12 @@ export class WeaponSystemsService implements OnModuleInit {
     Object.assign(item, assignable);
     const saved = await this.repository.save(item);
     await this.writeWeaponEvent(saved, user, 'updated');
-    this.emitWeaponChanged('updated', saved.id, [saved.currentFirePositionId]);
+    this.emitWeaponChanged(
+      'updated',
+      saved.id,
+      [saved.currentFirePositionId],
+      saved.unitId,
+    );
     await this.operationalNotifications?.notifyWeaponReadinessTransition(
       previousReadinessStatus,
       saved.id,
@@ -246,6 +255,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'moved',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -275,6 +285,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'updated',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -295,6 +306,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'moved',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -323,6 +335,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'moved',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -340,6 +353,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'moved',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -367,6 +381,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'updated',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -387,6 +402,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'moved',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -407,6 +423,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'moved',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -460,6 +477,7 @@ export class WeaponSystemsService implements OnModuleInit {
       'moved',
       result.weapon.id,
       this.firePositionIds(result.weapon, result.deployment),
+      result.weapon.unitId,
     );
     return this.findOne(result.weapon.id, user);
   }
@@ -538,9 +556,12 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result.weapon, user, 'opened');
-    this.emitWeaponChanged('updated', result.weapon.id, [
-      result.weapon.currentFirePositionId,
-    ]);
+    this.emitWeaponChanged(
+      'updated',
+      result.weapon.id,
+      [result.weapon.currentFirePositionId],
+      result.weapon.unitId,
+    );
     await this.operationalNotifications?.notifyWeaponReadinessTransition(
       result.previousReadinessStatus,
       result.weapon.id,
@@ -582,9 +603,12 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'started');
-    this.emitWeaponChanged('updated', result.id, [
-      result.currentFirePositionId,
-    ]);
+    this.emitWeaponChanged(
+      'updated',
+      result.id,
+      [result.currentFirePositionId],
+      result.unitId,
+    );
     return this.findOne(result.id, user);
   }
 
@@ -619,9 +643,12 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'cancelled');
-    this.emitWeaponChanged('updated', result.id, [
-      result.currentFirePositionId,
-    ]);
+    this.emitWeaponChanged(
+      'updated',
+      result.id,
+      [result.currentFirePositionId],
+      result.unitId,
+    );
     return this.findOne(result.id, user);
   }
 
@@ -670,9 +697,12 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'extended');
-    this.emitWeaponChanged('updated', result.id, [
-      result.currentFirePositionId,
-    ]);
+    this.emitWeaponChanged(
+      'updated',
+      result.id,
+      [result.currentFirePositionId],
+      result.unitId,
+    );
     return this.findOne(result.id, user);
   }
 
@@ -720,9 +750,12 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeMaintenanceEvent(result, user, 'completed');
-    this.emitWeaponChanged('updated', result.id, [
-      result.currentFirePositionId,
-    ]);
+    this.emitWeaponChanged(
+      'updated',
+      result.id,
+      [result.currentFirePositionId],
+      result.unitId,
+    );
     return this.findOne(result.id, user);
   }
 
@@ -734,8 +767,7 @@ export class WeaponSystemsService implements OnModuleInit {
     this.ensureMaintenanceFieldOperator(user);
     const item = await this.findOne(id, user);
     if (
-      this.normalizeWeaponReadiness(body.readinessStatus) ===
-        'combat_ready' &&
+      this.normalizeWeaponReadiness(body.readinessStatus) === 'combat_ready' &&
       (await getActiveMaintenance(this.dataSource, item.id))
     ) {
       throw new BadRequestException(
@@ -750,7 +782,12 @@ export class WeaponSystemsService implements OnModuleInit {
     );
     const saved = await this.repository.save(item);
     await this.writeWeaponEvent(saved, user, 'updated');
-    this.emitWeaponChanged('updated', saved.id, [saved.currentFirePositionId]);
+    this.emitWeaponChanged(
+      'updated',
+      saved.id,
+      [saved.currentFirePositionId],
+      saved.unitId,
+    );
     await this.operationalNotifications?.notifyWeaponReadinessTransition(
       previousReadinessStatus,
       saved.id,
@@ -767,18 +804,18 @@ export class WeaponSystemsService implements OnModuleInit {
 
     const firePositions = await firePositionRepository.find({
       where: allowedUnitIds === null ? {} : { unitId: In(allowedUnitIds) },
-      select: { id: true },
+      select: { id: true, unitId: true },
     });
 
     for (const firePosition of firePositions) {
       await this.syncFirePositionWeaponState(firePosition.id);
+      this.emitWeaponChanged(
+        'synced',
+        undefined,
+        [firePosition.id],
+        firePosition.unitId,
+      );
     }
-
-    this.emitWeaponChanged(
-      'synced',
-      undefined,
-      firePositions.map((position) => position.id),
-    );
     return { updated: firePositions.length };
   }
 
@@ -816,7 +853,12 @@ export class WeaponSystemsService implements OnModuleInit {
       item.currentFirePositionId ?? item.firePositionId;
     await this.syncFirePositionWeaponState(previousFirePositionId);
     await this.writeWeaponEvent(item, user, 'deleted');
-    this.emitWeaponChanged('deleted', item.id, [previousFirePositionId]);
+    this.emitWeaponChanged(
+      'deleted',
+      item.id,
+      [previousFirePositionId],
+      item.unitId,
+    );
   }
 
   async archive(id: string, user: AuthUser): Promise<WeaponSystem> {
@@ -836,7 +878,12 @@ export class WeaponSystemsService implements OnModuleInit {
     });
 
     await this.writeWeaponEvent(item, user, 'updated');
-    this.emitWeaponChanged('updated', item.id, [item.currentFirePositionId]);
+    this.emitWeaponChanged(
+      'updated',
+      item.id,
+      [item.currentFirePositionId],
+      item.unitId,
+    );
     return this.findOne(item.id, user);
   }
 
@@ -1622,6 +1669,7 @@ export class WeaponSystemsService implements OnModuleInit {
   private weaponRelations() {
     return {
       unit: true,
+      ammoDepot: true,
       weaponModel: true,
       firePosition: true,
       currentFirePosition: true,
@@ -1630,9 +1678,7 @@ export class WeaponSystemsService implements OnModuleInit {
     };
   }
 
-  private async decorateWeaponResponses(
-    items: WeaponSystem[],
-  ): Promise<void> {
+  private async decorateWeaponResponses(items: WeaponSystem[]): Promise<void> {
     if (items.length === 0) {
       return;
     }
@@ -1666,9 +1712,7 @@ export class WeaponSystemsService implements OnModuleInit {
     );
 
     for (const item of items) {
-      const activeMaintenance = activeMaintenanceFromHistory(
-        item.maintenances,
-      );
+      const activeMaintenance = activeMaintenanceFromHistory(item.maintenances);
       item.activeMaintenance = activeMaintenance;
       item.maintenanceStatus = activeMaintenance?.status ?? null;
       item.hasHistoricalReferences = referencedIds.has(item.id);
@@ -1750,6 +1794,7 @@ export class WeaponSystemsService implements OnModuleInit {
     action: 'created' | 'updated' | 'deleted' | 'moved' | 'synced' = 'moved',
     id?: string,
     firePositionIds: Array<string | null | undefined> = [],
+    unitId?: string | null,
   ): void {
     this.realtimeEvents.emitMany(
       ['weapons', 'map', 'analytics', 'events'],
@@ -1757,6 +1802,7 @@ export class WeaponSystemsService implements OnModuleInit {
       {
         entity: 'weapon_system',
         id,
+        unitId: unitId || undefined,
       },
     );
     const uniqueFirePositionIds = new Set(
@@ -1766,6 +1812,7 @@ export class WeaponSystemsService implements OnModuleInit {
       this.realtimeEvents.emit('map', action, {
         entity: 'fire_position',
         id: firePositionId,
+        unitId: unitId || undefined,
         reason: 'weapon_state_changed',
       });
     }

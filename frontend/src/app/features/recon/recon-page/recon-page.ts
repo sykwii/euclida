@@ -13,6 +13,10 @@ import { Observable, Subscription, catchError, forkJoin, of } from 'rxjs';
 import ms from 'milsymbol';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 import {
+  LeafletModule,
+  resolveLeafletModule,
+} from '../../../shared/leaflet-module';
+import {
   ReconAnalytics,
   ReconArea,
   ReconAreaAnalyticsRow,
@@ -29,7 +33,6 @@ import {
 } from '../recon.model';
 import { ReconService } from '../recon.service';
 
-type LeafletModule = typeof import('leaflet');
 type LeafletMap = import('leaflet').Map;
 type LeafletLayerGroup = import('leaflet').LayerGroup;
 type LeafletLatLngExpression = import('leaflet').LatLngExpression;
@@ -216,7 +219,7 @@ export class ReconPage implements AfterViewInit, OnDestroy {
   async ngAfterViewInit(): Promise<void> {
     if (isPlatformBrowser(this.platformId)) {
       const leafletModule = await import('leaflet');
-      this.L = ((leafletModule as unknown as { default?: LeafletModule }).default || leafletModule) as LeafletModule;
+      this.L = resolveLeafletModule(leafletModule);
       this.initMap();
     }
 

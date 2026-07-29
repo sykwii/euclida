@@ -79,7 +79,7 @@ export class ShotConfigurationsService {
     });
 
     if (!item) {
-      throw new NotFoundException('РљРѕРјРїР»РµРєС‚ РїРѕСЃС‚СЂС–Р»Сѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      throw new NotFoundException('Комплект пострілу не знайдено');
     }
 
     return item;
@@ -195,7 +195,7 @@ export class ShotConfigurationsService {
     const name = data.name.trim();
 
     if (!name) {
-      throw new BadRequestException('Р’РєР°Р¶С–С‚СЊ РЅР°Р·РІСѓ РєРѕРјРїР»РµРєС‚Сѓ РїРѕСЃС‚СЂС–Р»Сѓ');
+      throw new BadRequestException('Вкажіть назву комплекту пострілу');
     }
 
     const duplicate = await this.repository.findOne({
@@ -207,7 +207,7 @@ export class ShotConfigurationsService {
 
     if (duplicate && duplicate.id !== currentId) {
       throw new BadRequestException(
-        'Р”Р»СЏ С†С–С”С— РјРѕРґРµР»С– РѕР·Р±СЂРѕС”РЅРЅСЏ РІР¶Рµ С–СЃРЅСѓС” РєРѕРјРїР»РµРєС‚ РїРѕСЃС‚СЂС–Р»Сѓ Р· С‚Р°РєРѕСЋ РЅР°Р·РІРѕСЋ',
+        'Для цієї моделі озброєння вже існує комплект пострілу з такою назвою',
       );
     }
 
@@ -216,14 +216,14 @@ export class ShotConfigurationsService {
     });
 
     if (!weaponModel) {
-      throw new BadRequestException('РњРѕРґРµР»СЊ РѕР·Р±СЂРѕС”РЅРЅСЏ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      throw new BadRequestException('Модель озброєння не знайдено');
     }
 
     const shell = await this.shellRepository.findOne({
       where: { id: data.shellId },
     });
     if (!shell) {
-      throw new BadRequestException('РЎРЅР°СЂСЏРґ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+      throw new BadRequestException('Снаряд не знайдено');
     }
 
     if (data.fuzeId) {
@@ -231,7 +231,7 @@ export class ShotConfigurationsService {
         where: { id: data.fuzeId },
       });
       if (!fuze) {
-        throw new BadRequestException('РџС–РґСЂРёРІРЅРёРє РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+        throw new BadRequestException('Підривник не знайдено');
       }
     }
 
@@ -240,14 +240,14 @@ export class ShotConfigurationsService {
         where: { id: data.primerId },
       });
       if (!primer) {
-        throw new BadRequestException('РљР°РїСЃСѓР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ');
+        throw new BadRequestException('Капсуль не знайдено');
       }
     }
 
     const chargeIds = data.charges.map((item) => item.chargeId);
     if (new Set(chargeIds).size !== chargeIds.length) {
       throw new BadRequestException(
-        'РЈ РєРѕРјРїР»РµРєС‚С– РїРѕСЃС‚СЂС–Р»Сѓ РЅРµ РјРѕР¶РЅР° РґСѓР±Р»СЋРІР°С‚Рё РѕРґРёРЅ С– С‚РѕР№ СЃР°РјРёР№ Р·Р°СЂСЏРґ',
+        'У комплекті пострілу не можна дублювати один і той самий заряд',
       );
     }
 
@@ -257,7 +257,7 @@ export class ShotConfigurationsService {
 
     if (charges.length !== chargeIds.length) {
       throw new BadRequestException(
-        'РћРґРёРЅ Р°Р±Рѕ РєС–Р»СЊРєР° Р·Р°СЂСЏРґС–РІ РЅРµ Р·РЅР°Р№РґРµРЅРѕ',
+        'Один або кілька зарядів не знайдено',
       );
     }
 
@@ -272,7 +272,7 @@ export class ShotConfigurationsService {
         charge.chargeKind === 'modular' ? 'module' : 'piece';
       if (component.accountingUnit !== expectedAccountingUnit) {
         throw new BadRequestException(
-          'РћРґРёРЅ Р°Р±Рѕ РєС–Р»СЊРєР° РєРѕРјРїРѕРЅРµРЅС‚С–РІ РјР°СЋС‚СЊ РЅРµРєРѕСЂРµРєС‚РЅСѓ РѕРґРёРЅРёС†СЋ РѕР±Р»С–РєСѓ',
+          'Один або кілька компонентів мають некоректну одиницю обліку',
         );
       }
     }
@@ -280,13 +280,13 @@ export class ShotConfigurationsService {
     if (data.isActive) {
       if (!data.fuzeId) {
         throw new BadRequestException(
-          'Р”Р»СЏ Р°РєС‚РёРІРЅРѕРіРѕ РєРѕРјРїР»РµРєС‚Сѓ РїРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РїС–РґСЂРёРІРЅРёРє',
+          'Для активного комплекту потрібно вказати підривник',
         );
       }
 
       if (!data.primerId) {
         throw new BadRequestException(
-          'Р”Р»СЏ Р°РєС‚РёРІРЅРѕРіРѕ РєРѕРјРїР»РµРєС‚Сѓ РїРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РїСЂР°Р№РјРµСЂ',
+          'Для активного комплекту потрібно вказати праймер',
         );
       }
 
@@ -296,7 +296,7 @@ export class ShotConfigurationsService {
         data.zoneNumber <= 0
       ) {
         throw new BadRequestException(
-          'Р”Р»СЏ Р°РєС‚РёРІРЅРѕРіРѕ РєРѕРјРїР»РµРєС‚Сѓ РїРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё РЅРѕРјРµСЂ Р·РѕРЅРё',
+          'Для активного комплекту потрібно вказати номер зони',
         );
       }
     }

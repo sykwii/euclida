@@ -13,6 +13,7 @@ import { WeaponModel } from '../weapon-models/weapon-model.entity';
 import { FirePosition } from '../fire-positions/fire-position.entity';
 import { WeaponDeployment } from './weapon-deployment.entity';
 import { WeaponMaintenance } from './weapon-maintenance.entity';
+import { Depot } from '../depots/depot.entity';
 
 @Entity('weapon_systems')
 export class WeaponSystem {
@@ -38,6 +39,19 @@ export class WeaponSystem {
   @ManyToOne(() => Unit, { nullable: true })
   @JoinColumn({ name: 'unit_id' })
   unit!: Unit | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  lat!: number | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  lng!: number | null;
+
+  @Column({ name: 'ammo_depot_id', type: 'uuid', nullable: true })
+  ammoDepotId!: string | null;
+
+  @ManyToOne(() => Depot, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'ammo_depot_id' })
+  ammoDepot!: Depot | null;
 
   @Column({
     name: 'readiness_status',

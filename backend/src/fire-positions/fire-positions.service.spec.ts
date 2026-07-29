@@ -11,6 +11,7 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
       weaponRepository: { find: jest.Mock; findOne: jest.Mock };
       deploymentRepository: { find: jest.Mock; findOne: jest.Mock };
       shotConfigurationRepository: { find: jest.Mock };
+      realtimeEvents: { emitMany: jest.Mock };
     };
   };
   const user: AuthUser = {
@@ -97,6 +98,7 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
       query: jest.fn(async () => []),
     };
 
+    const realtimeEvents = { emitMany: jest.fn() };
     const service = new FirePositionsService(
       firePositionRepository as never,
       {
@@ -106,7 +108,7 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
         canAccessUnit: jest.fn(async () => options.canAccessUnit ?? true),
       } as never,
       dataSource as never,
-      { emitMany: jest.fn() } as never,
+      realtimeEvents as never,
       { create: jest.fn(async () => undefined) } as never,
     );
     return Object.assign(service, {
@@ -114,9 +116,34 @@ describe('FirePositionsService OPS-1 aggregate readiness', () => {
         weaponRepository,
         deploymentRepository,
         shotConfigurationRepository,
+        realtimeEvents,
       },
     });
   }
+
+  it('scopes fire-position events to the owning unit', () => {
+    const service = createService(createFirePosition(), createWeapon());
+
+    (
+      service as unknown as {
+        emitFirePositionChanged: (
+          action: 'updated',
+          id: string,
+          unitId: string,
+        ) => void;
+      }
+    ).emitFirePositionChanged('updated', 'fp-1', 'unit-1');
+
+    expect(service.testMocks.realtimeEvents.emitMany).toHaveBeenCalledWith(
+      ['map', 'analytics', 'events'],
+      'updated',
+      {
+        entity: 'fire_position',
+        id: 'fp-1',
+        unitId: 'unit-1',
+      },
+    );
+  });
 
   it('keeps a blocked fire position not combat ready with an arrived weapon', async () => {
     const service = createService(

@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { formatKyivDateTime, minutesSince } from '../../../core/kyiv-time.util';
+import { resolveLeafletModule } from '../../../shared/leaflet-module';
 import { AirThreat } from '../../air-threats/air-threat.model';
 import { AirThreatsService } from '../../air-threats/air-threats.service';
 import { FirePosition } from '../../fire-positions/fire-position.model';
@@ -117,7 +118,7 @@ export class HomePage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.L = await import('leaflet');
+    this.L = resolveLeafletModule(await import('leaflet'));
     queueMicrotask(() => this.initDashboardMap());
     setTimeout(() => this.initDashboardMap(), 120);
   }

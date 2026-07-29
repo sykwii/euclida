@@ -7,13 +7,17 @@ import {
   OnDestroy,
   PLATFORM_ID,
 } from '@angular/core';
-type LeafletModule = typeof import('leaflet');
+import {
+  LeafletModule,
+  resolveLeafletModule,
+} from '../../../shared/leaflet-module';
 type LeafletMap = import('leaflet').Map;
 type LeafletLayerGroup = import('leaflet').LayerGroup;
 type LeafletLatLngExpression = import('leaflet').LatLngExpression;
 type LeafletMouseEvent = import('leaflet').LeafletMouseEvent;
 type LeafletDivIcon = import('leaflet').DivIcon;
 type LeafletPolylineOptions = import('leaflet').PolylineOptions;
+
 import { ActivatedRoute, Router } from '@angular/router';
 import { AirThreat } from '../../air-threats/air-threat.model';
 import { AirThreatsService } from '../../air-threats/air-threats.service';
@@ -160,8 +164,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
     }
 
     const leafletModule = await import('leaflet');
-    this.L = ((leafletModule as unknown as { default?: LeafletModule }).default ||
-      leafletModule) as LeafletModule;
+    this.L = resolveLeafletModule(leafletModule);
     this.restoreMapFilters();
 
     this.initMap();
