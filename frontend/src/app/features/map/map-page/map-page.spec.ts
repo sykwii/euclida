@@ -156,6 +156,64 @@ describe('MapPage fire-position readiness', () => {
     expect(refresh).toHaveBeenCalledWith('fp-1');
     vi.useRealTimers();
   });
+
+  it('cancels delayed map invalidation during teardown', () => {
+    vi.useFakeTimers();
+    const invalidateSize = vi.fn();
+    const remove = vi.fn();
+    const removeLayer = vi.fn();
+    const map = component as unknown as {
+      map: {
+        invalidateSize(): void;
+        eachLayer(callback: (layer: unknown) => void): void;
+        hasLayer(layer: unknown): boolean;
+        removeLayer(layer: unknown): void;
+        remove(): void;
+      };
+      mapInvalidateTimers: number[];
+    };
+    map.map = {
+      invalidateSize,
+      eachLayer: () => undefined,
+      hasLayer: () => false,
+      removeLayer,
+      remove,
+    };
+    map.mapInvalidateTimers.push(window.setTimeout(invalidateSize, 0));
+
+    component.ngOnDestroy();
+    vi.runAllTimers();
+
+    expect(invalidateSize).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it('removes vector paths before the shared Leaflet renderer', () => {
+    const pathLayer = { _renderer: {} };
+    const ordinaryLayer = {};
+    const rendererLayer = { _redrawRequest: 42 };
+    const removed: unknown[] = [];
+    const map = component as unknown as {
+      map: {
+        eachLayer(callback: (layer: unknown) => void): void;
+        hasLayer(layer: unknown): boolean;
+        removeLayer(layer: unknown): void;
+        remove(): void;
+      };
+    };
+    map.map = {
+      eachLayer: (callback) =>
+        [rendererLayer, ordinaryLayer, pathLayer].forEach(callback),
+      hasLayer: () => true,
+      removeLayer: (layer) => removed.push(layer),
+      remove: vi.fn(),
+    };
+
+    component.ngOnDestroy();
+
+    expect(removed).toEqual([pathLayer, ordinaryLayer, rendererLayer]);
+  });
 });
 
 function createLayerGroup() {

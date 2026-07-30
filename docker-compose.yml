@@ -4,9 +4,9 @@ services:
     container_name: euclida-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: euclida_user
-      POSTGRES_PASSWORD: euclida_password
-      POSTGRES_DB: euclida_situation_db
+      POSTGRES_USER: ${POSTGRES_USER:-euclida_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-euclida_situation_db}
     ports:
       - "5433:5432"
     volumes:

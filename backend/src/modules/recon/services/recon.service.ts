@@ -624,6 +624,9 @@ export class ReconService {
 
     const delimiter = this.detectDelimiter(normalized);
     const matrix = this.parseDelimitedRows(normalized, delimiter).filter((row) => row.some((cell) => cell.trim() !== ''));
+    if (matrix.length > 5_001) {
+      throw new BadRequestException('CSV містить більше 5000 рядків');
+    }
     if (matrix.length < 2) {
       return { delimiter, headers: matrix[0]?.map((item) => item.trim()) || [], rows: [] };
     }
@@ -1185,8 +1188,9 @@ export class ReconService {
   }
 
   private csvCell(value: unknown): string {
-    const text = String(value ?? '').replace(/\r?\n/g, ' ').replace(/"/g, '""');
-    return `"${text}"`;
+    const text = String(value ?? '').replace(/\r?\n/g, ' ');
+    const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
   }
 
   private chunk<T>(items: T[], size: number): T[][] {

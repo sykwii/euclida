@@ -6,20 +6,17 @@ import { AccessScopeModule } from '../access-scope/access-scope.module';
 import { RealtimeEventsService } from './realtime-events.service';
 import { RealtimeGateway } from './realtime.gateway';
 import { Unit } from '../units/unit.entity';
+import { User } from '../users/user.entity';
+import { buildJwtModuleOptions } from '../auth/jwt-config';
 
 @Module({
   imports: [
     AccessScopeModule,
     ConfigModule,
-    TypeOrmModule.forFeature([Unit]),
+    TypeOrmModule.forFeature([Unit, User]),
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'euclida-local-dev-secret'),
-        signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN', '12h') as never,
-        },
-      }),
+      useFactory: buildJwtModuleOptions,
     }),
   ],
   providers: [RealtimeGateway, RealtimeEventsService],

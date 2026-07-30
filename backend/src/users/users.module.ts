@@ -9,24 +9,16 @@ import { User } from './user.entity';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { buildJwtModuleOptions } from '../auth/jwt-config';
 
 @Module({
-  imports: [RealtimeModule, 
-    TypeOrmModule.forFeature([
-      User,
-      Unit,
-    ]),
+  imports: [
+    RealtimeModule,
+    TypeOrmModule.forFeature([User, Unit]),
     ConfigModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        return {
-          secret: config.get<string>('JWT_SECRET', 'euclida-local-dev-secret'),
-          signOptions: {
-            expiresIn: config.get<string>('JWT_EXPIRES_IN', '12h') as never,
-          },
-        };
-      },
+      useFactory: buildJwtModuleOptions,
     }),
   ],
   controllers: [UsersController],

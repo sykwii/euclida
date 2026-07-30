@@ -12,8 +12,7 @@ import { AdminOnlyGuard } from '../auth/admin-only.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './user.entity';
-import { UsersService } from './users.service';
+import { UsersService, type UserResponse } from './users.service';
 
 @UseGuards(JwtAuthGuard, AdminOnlyGuard)
 @Controller('users')
@@ -21,12 +20,12 @@ export class UsersController {
   constructor(private readonly service: UsersService) {}
 
   @Get()
-  findAll(): Promise<User[]> {
+  findAll(): Promise<UserResponse[]> {
     return this.service.findAll();
   }
 
   @Post()
-  create(@Body() body: CreateUserDto): Promise<User> {
+  create(@Body() body: CreateUserDto): Promise<UserResponse> {
     return this.service.create(body);
   }
 
@@ -34,7 +33,7 @@ export class UsersController {
   update(
     @Param('id') id: string,
     @Body() body: UpdateUserDto,
-  ): Promise<User> {
+  ): Promise<UserResponse> {
     return this.service.update(id, body);
   }
 

@@ -52,16 +52,28 @@ import { OperationalNotificationsModule } from './operational-notifications/oper
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DB_HOST', '127.0.0.1'),
-        port: Number(config.get<string>('DB_PORT', '5433')),
-        username: config.get<string>('DB_USER', 'euclida_user'),
-        password: config.get<string>('DB_PASSWORD', 'euclida_password'),
-        database: config.get<string>('DB_NAME', 'euclida_situation_db'),
-        autoLoadEntities: true,
-        synchronize: false,
-      }),
+      useFactory: (config: ConfigService) => {
+        const environment = config.get<string>('NODE_ENV', 'development');
+        const password = config.get<string>('DB_PASSWORD');
+
+        if (
+          environment === 'production' &&
+          (!password || password === 'euclida_password')
+        ) {
+          throw new Error('DB_PASSWORD must be configured in production');
+        }
+
+        return {
+          type: 'postgres',
+          host: config.get<string>('DB_HOST', '127.0.0.1'),
+          port: Number(config.get<string>('DB_PORT', '5433')),
+          username: config.get<string>('DB_USER', 'euclida_user'),
+          password: password || 'euclida_password',
+          database: config.get<string>('DB_NAME', 'euclida_situation_db'),
+          autoLoadEntities: true,
+          synchronize: false,
+        };
+      },
     }),
     UnitsModule,
     UsersModule,
@@ -96,13 +108,13 @@ import { OperationalNotificationsModule } from './operational-notifications/oper
     RecommendationsModule,
     DocumentsModule,
     EwModule,
-AirAssetsModule,
-DroneLogisticsModule,
-PlannedTripsModule,
-ReconModule,
-ShotConfigurationsModule,
-ExecutionModule,
-OperationalNotificationsModule,
+    AirAssetsModule,
+    DroneLogisticsModule,
+    PlannedTripsModule,
+    ReconModule,
+    ShotConfigurationsModule,
+    ExecutionModule,
+    OperationalNotificationsModule,
   ],
   providers: [
     {

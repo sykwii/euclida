@@ -102,6 +102,10 @@ get<T>(url: string) {
       localStorage.removeItem(this.tokenKey);
       localStorage.removeItem(this.userKey);
 
+      if (window.location.pathname === '/login') {
+        return throwError(() => error);
+      }
+
       const returnUrl = `${window.location.pathname}${window.location.search}`;
 
       void this.router.navigate(['/login'], {

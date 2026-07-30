@@ -10,6 +10,7 @@ import {
 import { Router } from '@angular/router';
 import { Subscription, timer } from 'rxjs';
 import { RealtimeService } from '../../core/realtime.service';
+import { AuthService } from '../auth/auth.service';
 import {
   OperationalNotification,
   OperationalNotificationsService,
@@ -280,6 +281,7 @@ export class OperationalNotificationOverlayComponent implements OnInit, OnDestro
   constructor(
     private readonly notifications: OperationalNotificationsService,
     private readonly realtime: RealtimeService,
+    private readonly auth: AuthService,
     private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
   ) {}
@@ -418,6 +420,12 @@ export class OperationalNotificationOverlayComponent implements OnInit, OnDestro
   }
 
   private reconcile(): void {
+    if (!this.auth.isLoggedIn()) {
+      this.allUnread = [];
+      this.refreshVisible();
+      return;
+    }
+
     this.notifications.getAll(true).subscribe({
       next: (items) => {
         this.allUnread = items.filter((item) => !this.expiredIds.has(item.id));
@@ -426,6 +434,10 @@ export class OperationalNotificationOverlayComponent implements OnInit, OnDestro
           this.lastKey = this.stackKey(first);
           this.lastKeyAt = Date.now();
         }
+        this.refreshVisible();
+      },
+      error: () => {
+        this.allUnread = [];
         this.refreshVisible();
       },
     });

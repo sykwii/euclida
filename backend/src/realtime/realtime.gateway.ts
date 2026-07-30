@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
@@ -10,11 +11,20 @@ import { Server, Socket } from 'socket.io';
 import { AccessScopeService } from '../access-scope/access-scope.service';
 import type { AuthUser } from '../auth/auth-user.types';
 import { RealtimeEventPayload } from './realtime.types';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '../users/user.entity';
+import {
+  configuredCorsOrigins,
+  isAllowedOrigin,
+} from '../common/security/cors-policy';
 
 const realtimeLogger = new Logger('RealtimeGateway');
 
 function shouldLogRealtime(): boolean {
-  return process.env.REALTIME_DEBUG === '1' || process.env.REALTIME_DEBUG === 'true';
+  return (
+    process.env.REALTIME_DEBUG === '1' || process.env.REALTIME_DEBUG === 'true'
+  );
 }
 
 function logRealtimeEvent(payload: RealtimeEventPayload): void {
@@ -27,46 +37,17 @@ function logRealtimeEvent(payload: RealtimeEventPayload): void {
   );
 }
 
-function isAllowedOrigin(origin: string | undefined, allowedOrigins: string[]): boolean {
-  if (!origin) {
-    return true;
-  }
-
-  if (allowedOrigins.includes(origin)) {
-    return true;
-  }
-
-  try {
-    const { hostname } = new URL(origin);
-
-    return (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('10.') ||
-      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
-    );
-  } catch {
-    return false;
-  }
-}
-
 type AuthenticatedRealtimeSocket = Socket & {
   data: Socket['data'] & {
     user?: AuthUser;
+    tokenExpiresAt?: number;
   };
 };
 
 @WebSocketGateway({
   cors: {
     origin: (origin, callback) => {
-      const allowedOrigins = (
-        process.env.CORS_ORIGINS ||
-        'http://localhost:4200,http://localhost:8844,http://127.0.0.1:8844,http://194.146.231.21:8844'
-      )
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
+      const allowedOrigins = configuredCorsOrigins();
 
       if (isAllowedOrigin(origin, allowedOrigins)) {
         callback(null, true);
@@ -78,28 +59,59 @@ type AuthenticatedRealtimeSocket = Socket & {
     credentials: true,
   },
 })
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server!: Server;
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly accessScope: AccessScopeService,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
   ) {}
 
-  async handleConnection(client: AuthenticatedRealtimeSocket): Promise<void> {
-    const token = this.extractToken(client);
+  afterInit(server: Server): void {
+    server.use(async (socket, next) => {
+      try {
+        await this.authenticateClient(socket as AuthenticatedRealtimeSocket);
+        next();
+      } catch {
+        next(new Error('Unauthorized'));
+      }
+    });
+  }
 
-    if (!token) {
-      client.disconnect(true);
+  async handleConnection(client: AuthenticatedRealtimeSocket): Promise<void> {
+    if (client.data.user) {
       return;
     }
 
     try {
-      client.data.user = await this.jwtService.verifyAsync<AuthUser>(token);
+      await this.authenticateClient(client);
     } catch {
       client.disconnect(true);
     }
+  }
+
+  private async authenticateClient(
+    client: AuthenticatedRealtimeSocket,
+  ): Promise<void> {
+    const token = this.extractToken(client);
+
+    if (!token) {
+      throw new Error('Unauthorized');
+    }
+
+    const payload = await this.jwtService.verifyAsync<AuthUser & { exp?: number }>(
+        token,
+      );
+    client.data.user = await this.findActiveAuthUser(payload.sub);
+    if (!client.data.user) {
+      throw new Error('Unauthorized');
+    }
+    client.data.tokenExpiresAt = payload.exp ? payload.exp * 1_000 : undefined;
   }
 
   handleDisconnect(_client: AuthenticatedRealtimeSocket): void {}
@@ -113,7 +125,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     payload: RealtimeEventPayload,
   ): Promise<void> {
     const sockets = Array.from(
-      (this.server?.sockets.sockets.values() || []) as Iterable<AuthenticatedRealtimeSocket>,
+      (this.server?.sockets.sockets.values() ||
+        []) as Iterable<AuthenticatedRealtimeSocket>,
     );
 
     if (!sockets?.length) {
@@ -122,11 +135,26 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     await Promise.all(
       sockets.map(async (client) => {
-        const user = client.data.user;
+        const tokenUser = client.data.user;
 
-        if (!user) {
+        if (!tokenUser) {
           return;
         }
+
+        if (
+          client.data.tokenExpiresAt &&
+          client.data.tokenExpiresAt <= Date.now()
+        ) {
+          client.disconnect(true);
+          return;
+        }
+
+        const user = await this.findActiveAuthUser(tokenUser.sub);
+        if (!user) {
+          client.disconnect(true);
+          return;
+        }
+        client.data.user = user;
 
         if (!(await this.canReceiveRealtimeEvent(user, payload))) {
           return;
@@ -154,13 +182,29 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
     }
 
-    const queryToken = client.handshake.query['token'];
+    return null;
+  }
 
-    if (typeof queryToken === 'string' && queryToken.trim()) {
-      return queryToken.trim();
+  private async findActiveAuthUser(id: string): Promise<AuthUser | null> {
+    const user = await this.usersRepository.findOne({
+      where: {
+        id,
+        isActive: true,
+      },
+    });
+
+    if (!user) {
+      return null;
     }
 
-    return null;
+    return {
+      sub: user.id,
+      login: user.login,
+      role: user.role,
+      scope: user.scope,
+      unitId: user.unitId,
+      fullName: user.fullName,
+    };
   }
 
   private async canReceiveRealtimeEvent(

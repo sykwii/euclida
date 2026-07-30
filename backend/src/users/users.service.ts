@@ -11,6 +11,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { User } from './user.entity';
 
+export type UserResponse = Omit<User, 'passwordHash'>;
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -20,16 +22,16 @@ export class UsersService {
   ) {}
 
   findByLogin(login: string): Promise<User | null> {
-    return this.repository.findOne({
-      where: {
-        login,
-        isActive: true,
-      },
-    });
+    return this.repository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.login = :login', { login })
+      .andWhere('user.isActive = true')
+      .getOne();
   }
 
-  findAll(): Promise<User[]> {
-    return this.repository.find({
+  async findAll(): Promise<UserResponse[]> {
+    const users = await this.repository.find({
       relations: {
         unit: true,
       },
@@ -37,9 +39,10 @@ export class UsersService {
         createdAt: 'DESC',
       },
     });
+    return users.map((user) => this.toResponse(user));
   }
 
-  async create(data: CreateUserDto): Promise<User> {
+  async create(data: CreateUserDto): Promise<UserResponse> {
     const existing = await this.repository.findOne({
       where: {
         login: data.login.trim(),
@@ -51,7 +54,9 @@ export class UsersService {
     }
 
     if (data.scope !== 'main' && !data.unitId) {
-      throw new BadRequestException('Для рівня дивізіон/батарея потрібно обрати підрозділ');
+      throw new BadRequestException(
+        'Для рівня дивізіон/батарея потрібно обрати підрозділ',
+      );
     }
 
     const passwordHash = await bcrypt.hash(data.password, 10);
@@ -68,10 +73,10 @@ export class UsersService {
 
     const saved = await this.repository.save(user);
     this.emitUserChanged('created', saved.id);
-    return saved;
+    return this.toResponse(saved);
   }
 
-  async update(id: string, data: UpdateUserDto): Promise<User> {
+  async update(id: string, data: UpdateUserDto): Promise<UserResponse> {
     const user = await this.repository.findOne({
       where: {
         id,
@@ -123,7 +128,9 @@ export class UsersService {
     }
 
     if (user.scope !== 'main' && !user.unitId) {
-      throw new BadRequestException('Для рівня дивізіон/батарея потрібно обрати підрозділ');
+      throw new BadRequestException(
+        'Для рівня дивізіон/батарея потрібно обрати підрозділ',
+      );
     }
 
     if (data.isActive !== undefined) {
@@ -132,7 +139,7 @@ export class UsersService {
 
     const saved = await this.repository.save(user);
     this.emitUserChanged('updated', saved.id);
-    return saved;
+    return this.toResponse(saved);
   }
 
   async remove(id: string): Promise<void> {
@@ -150,10 +157,18 @@ export class UsersService {
     this.emitUserChanged('deleted', id);
   }
 
-  private emitUserChanged(action: 'created' | 'updated' | 'deleted', id: string): void {
+  private emitUserChanged(
+    action: 'created' | 'updated' | 'deleted',
+    id: string,
+  ): void {
     this.realtimeEvents.emitMany(['users', 'events'], action, {
       entity: 'user',
       id,
     });
+  }
+
+  private toResponse(user: User): UserResponse {
+    const { passwordHash: _passwordHash, ...response } = user;
+    return response;
   }
 }

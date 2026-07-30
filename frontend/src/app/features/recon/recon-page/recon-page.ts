@@ -32,6 +32,7 @@ import {
   ReconTarget,
 } from '../recon.model';
 import { ReconService } from '../recon.service';
+import { escapeHtml } from '../../../shared/html-escape';
 
 type LeafletMap = import('leaflet').Map;
 type LeafletLayerGroup = import('leaflet').LayerGroup;
@@ -1175,12 +1176,12 @@ export class ReconPage implements AfterViewInit, OnDestroy {
     comment?: string | null,
   ): string {
     return [
-      `<strong>${typeLabel}</strong>`,
-      `${this.targetTypeLabel(targetType)} · ${sourceLabel}`,
-      time ? new Date(time).toLocaleString('uk-UA') : '',
-      mgrs ? `MGRS: ${mgrs}` : '',
-      status ? `Статус: ${status}` : '',
-      comment ? `Коментар: ${comment}` : '',
+      `<strong>${escapeHtml(typeLabel)}</strong>`,
+      `${escapeHtml(this.targetTypeLabel(targetType))} · ${escapeHtml(sourceLabel)}`,
+      time ? escapeHtml(new Date(time).toLocaleString('uk-UA')) : '',
+      mgrs ? `MGRS: ${escapeHtml(mgrs)}` : '',
+      status ? `Статус: ${escapeHtml(status)}` : '',
+      comment ? `Коментар: ${escapeHtml(comment)}` : '',
     ]
       .filter(Boolean)
       .join('<br>');
@@ -1188,25 +1189,25 @@ export class ReconPage implements AfterViewInit, OnDestroy {
 
   private areaPopup(area: ReconArea, analytics?: ReconAreaAnalyticsRow | null): string {
     const lines = [
-      `<strong>${area.name}</strong>`,
-      area.description || '',
-      `??????: ${area.status}`,
+      `<strong>${escapeHtml(area.name)}</strong>`,
+      escapeHtml(area.description || ''),
+      `Статус: ${escapeHtml(area.status)}`,
     ];
     if (analytics) {
-      lines.push(`??????????: ${Math.round(analytics.primary.activityIndex)}`);
-      lines.push(`?????: ${analytics.change.percent}%`);
-      lines.push(`?????????????: ${analytics.primary.observations}`);
-      lines.push(`????: ${analytics.primary.targets}`);
-      lines.push(`????????????: ${analytics.recommendation}`);
+      lines.push(`Активність: ${Math.round(analytics.primary.activityIndex)}`);
+      lines.push(`Зміна: ${analytics.change.percent}%`);
+      lines.push(`Спостереження: ${analytics.primary.observations}`);
+      lines.push(`Цілі: ${analytics.primary.targets}`);
+      lines.push(`Рекомендація: ${escapeHtml(analytics.recommendation)}`);
     }
     return lines.filter(Boolean).join('<br>');
   }
 
   private areaLabel(name: string, analytics?: ReconAreaAnalyticsRow | null): string {
-    if (!analytics || !this.layerState.analyticalColoring) return name;
+    if (!analytics || !this.layerState.analyticalColoring) return escapeHtml(name);
     const activity = Math.round(analytics.primary.activityIndex || 0);
     const delta = analytics.change.percent > 0 ? `+${analytics.change.percent}` : `${analytics.change.percent}`;
-    return `${name}<br>${activity} ? ${delta}%`;
+    return `${escapeHtml(name)}<br>${activity} | ${delta}%`;
   }
 
   private selectCreatedItem(kind: 'observation' | 'impact', item: ReconObservation | ReconImpact): void {

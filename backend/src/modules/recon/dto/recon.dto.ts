@@ -1,4 +1,16 @@
-import { IsArray, IsIn, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import {
   RECON_INPUT_PROVIDERS,
   RECON_SOURCES,
@@ -16,13 +28,17 @@ import type {
 
 export class CreateReconAreaDto {
   @IsString()
+  @MaxLength(255)
   name!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(4_000)
   description?: string;
 
   @IsArray()
+  @ArrayMinSize(3)
+  @ArrayMaxSize(1_000)
   coordinates!: [number, number][];
 }
 
@@ -100,10 +116,12 @@ export class CreateReconImpactDto extends CreateReconObservationDto {
 
 export class DeltaImportDto {
   @IsString()
+  @MaxLength(1_000_000)
   csv!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   filename?: string;
 
   @IsOptional()
@@ -141,10 +159,14 @@ export class CreateReconTargetDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(-90)
+  @Max(90)
   lat?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-180)
+  @Max(180)
   lng?: number;
 
   @IsOptional()
@@ -242,6 +264,10 @@ export class RecalculateCorrelationsDto {
 }
 
 export class HeatmapQueryDto {
+  @IsOptional()
+  @IsString()
+  _ts?: string;
+
   @IsOptional()
   @IsString()
   type?: 'observation' | 'target' | 'activity' | 'threat';

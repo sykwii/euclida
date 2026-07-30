@@ -6,10 +6,12 @@ import { Unit } from './unit.entity';
 import { UnitsController } from './units.controller';
 import { UnitsService } from './units.service';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { AccessScopeModule } from '../access-scope/access-scope.module';
 
 @Module({
   imports: [
     RealtimeModule,
+    AccessScopeModule,
     TypeOrmModule.forFeature([Unit, Depot]),
     AuthModule,
   ],

@@ -8,6 +8,12 @@ import { DepotShellStock } from '../depot-shell-stock/depot-shell-stock.entity';
 
 export type DocumentKind = 'summary' | 'orders' | 'stock' | 'readiness';
 
+export function escapeCsvCell(value: string | number): string {
+  const text = String(value);
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
 @Injectable()
 export class DocumentsService {
   constructor(
@@ -63,8 +69,7 @@ export class DocumentsService {
   }
 
   private csv(headers: string[], rows: Array<Array<string | number>>): string {
-    const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
-    return [headers.map(escape).join(','), ...rows.map((row) => row.map(escape).join(','))].join('\n');
+    return [headers.map(escapeCsvCell).join(','), ...rows.map((row) => row.map(escapeCsvCell).join(','))].join('\n');
   }
 
   private minimalPdf(text: string): Buffer {

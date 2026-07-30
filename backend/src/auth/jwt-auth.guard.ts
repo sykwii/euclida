@@ -7,24 +7,24 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { DataSource } from 'typeorm';
 import { AuthUser } from './auth-user.types';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { User } from '../users/user.entity';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
+    private readonly dataSource: DataSource,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(
-      IS_PUBLIC_KEY,
-      [
-        context.getHandler(),
-        context.getClass(),
-      ],
-    );
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
     if (isPublic) {
       return true;
@@ -45,8 +45,22 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync<AuthUser>(token);
+      const user = await this.dataSource.getRepository(User).findOne({
+        where: { id: payload.sub, isActive: true },
+      });
 
-      request.user = payload;
+      if (!user) {
+        throw new UnauthorizedException();
+      }
+
+      request.user = {
+        sub: user.id,
+        login: user.login,
+        role: user.role,
+        scope: user.scope,
+        unitId: user.unitId,
+        fullName: user.fullName,
+      };
 
       return true;
     } catch {

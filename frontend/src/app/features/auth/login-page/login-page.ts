@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { ChangeDetectorRef, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../auth.service';
@@ -21,6 +21,7 @@ export class LoginPage {
     private readonly auth: AuthService,
     private readonly route: ActivatedRoute,
     private readonly router: Router,
+    private readonly cdr: ChangeDetectorRef,
   ) {}
 
   submit(): void {
@@ -36,11 +37,13 @@ export class LoginPage {
     this.auth.login(this.login.trim(), this.password).subscribe({
       next: () => {
         this.loading = false;
+        this.cdr.detectChanges();
         void this.router.navigateByUrl(this.getReturnUrl());
       },
       error: () => {
         this.loading = false;
         this.error = 'Невірний логін або пароль. Перевірте введені дані.';
+        this.cdr.detectChanges();
       },
     });
   }

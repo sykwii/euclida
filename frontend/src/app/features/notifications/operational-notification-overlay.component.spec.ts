@@ -36,6 +36,7 @@ function notification(
 function createComponent(options: {
   initial?: OperationalNotification[];
   byId?: Record<string, OperationalNotification>;
+  loggedIn?: boolean;
 } = {}) {
   const events$ = new Subject<RealtimeEventPayload>();
   const service = {
@@ -56,6 +57,7 @@ function createComponent(options: {
   const component = new OperationalNotificationOverlayComponent(
     service,
     realtime,
+    { isLoggedIn: () => options.loggedIn !== false } as never,
     router as never,
     cdr as never,
   );
@@ -78,6 +80,18 @@ describe('OperationalNotificationOverlayComponent', () => {
     expect(component.visible).toHaveLength(3);
     expect(component.overflowCount).toBe(1);
 
+    component.ngOnDestroy();
+  });
+
+  it('does not request notifications before authentication', () => {
+    const { component } = createComponent({
+      initial: [notification('1')],
+      loggedIn: false,
+    });
+
+    component.ngOnInit();
+
+    expect(component.visible).toHaveLength(0);
     component.ngOnDestroy();
   });
 

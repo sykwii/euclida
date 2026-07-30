@@ -9,6 +9,8 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { HttpWriteGuard } from './http-write.guard';
 import { MainScopeGuard } from './main-scope.guard';
 import { WriteAccessGuard } from './write-access.guard';
+import { buildJwtModuleOptions } from './jwt-config';
+import { LoginRateLimitGuard } from './login-rate-limit.guard';
 
 @Global()
 @Module({
@@ -17,14 +19,7 @@ import { WriteAccessGuard } from './write-access.guard';
     UsersModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        return {
-          secret: config.get<string>('JWT_SECRET', 'euclida-local-dev-secret'),
-          signOptions: {
-            expiresIn: config.get<string>('JWT_EXPIRES_IN', '12h') as never,
-          },
-        };
-      },
+      useFactory: buildJwtModuleOptions,
     }),
   ],
   controllers: [AuthController],
@@ -35,6 +30,7 @@ import { WriteAccessGuard } from './write-access.guard';
     WriteAccessGuard,
     AdminOnlyGuard,
     MainScopeGuard,
+    LoginRateLimitGuard,
   ],
   exports: [
     JwtModule,

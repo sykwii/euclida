@@ -24,6 +24,7 @@ import { AnalyticsService } from '../../analytics/analytics.service';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 import { catchError, finalize } from 'rxjs/operators';
+import { escapeHtml } from '../../../shared/html-escape';
 
 interface CommandDashboardCard {
   label: string;
@@ -755,7 +756,10 @@ export class HomePage implements OnInit, AfterViewInit, OnDestroy {
             iconAnchor: [11, 11],
           }),
         });
-        marker.bindTooltip(position.name, { direction: 'top', opacity: 0.9 });
+        marker.bindTooltip(escapeHtml(position.name), {
+          direction: 'top',
+          opacity: 0.9,
+        });
         marker.addTo(this.dashboardMapLayer!);
         bounds.push([position.lat, position.lng]);
 

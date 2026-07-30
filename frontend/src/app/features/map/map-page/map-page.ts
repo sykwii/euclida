@@ -41,6 +41,7 @@ import { catchError, forkJoin, of, Subscription } from 'rxjs';
 import { AutoRefreshService } from '../../../core/auto-refresh.service';
 import { RealtimeEventPayload, RealtimeService } from '../../../core/realtime.service';
 import ms from 'milsymbol';
+import { escapeHtml } from '../../../shared/html-escape';
 
 @Component({
   selector: 'app-map-page',
@@ -56,6 +57,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
   private activeOrdersRequest?: Subscription;
   private positionCardRequest?: Subscription;
   private scheduledRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly mapInvalidateTimers: number[] = [];
   private readonly liveMarkerTimers = new Map<string, number>();
   private readonly mapFilterKey = 'euclida_map_filters';
   private L!: LeafletModule;
@@ -211,9 +213,41 @@ export class MapPage implements AfterViewInit, OnDestroy {
     this.firePositionRefreshTimers.clear();
     this.liveMarkerTimers.forEach((timer) => clearTimeout(timer));
     this.liveMarkerTimers.clear();
+    this.mapInvalidateTimers.forEach((timer) => clearTimeout(timer));
+    this.mapInvalidateTimers.length = 0;
     if (this.scheduledRefreshTimer) clearInterval(this.scheduledRefreshTimer);
     if (this.cursorStableTimer) clearTimeout(this.cursorStableTimer);
-    this.map?.remove();
+    this.removeMapLayersAndRenderer();
+  }
+
+  private removeMapLayersAndRenderer(): void {
+    if (!this.map) {
+      return;
+    }
+
+    type InternalLeafletLayer = import('leaflet').Layer & {
+      _renderer?: unknown;
+      _redrawRequest?: number | null;
+      _ctx?: CanvasRenderingContext2D;
+    };
+    const layers: InternalLeafletLayer[] = [];
+    this.map.eachLayer((layer) => layers.push(layer as InternalLeafletLayer));
+    const rendererLayers = layers.filter(
+      (layer) => '_redrawRequest' in layer || '_ctx' in layer,
+    );
+    const pathLayers = layers.filter(
+      (layer) => layer._renderer && !rendererLayers.includes(layer),
+    );
+    const otherLayers = layers.filter(
+      (layer) => !rendererLayers.includes(layer) && !pathLayers.includes(layer),
+    );
+
+    [...pathLayers, ...otherLayers, ...rendererLayers].forEach((layer) => {
+      if (this.map.hasLayer(layer)) {
+        this.map.removeLayer(layer);
+      }
+    });
+    this.map.remove();
   }
 
   private initMap(): void {
@@ -263,8 +297,21 @@ export class MapPage implements AfterViewInit, OnDestroy {
       this.cdr.detectChanges();
     });
 
-    window.setTimeout(() => this.map.invalidateSize(), 0);
-    window.setTimeout(() => this.map.invalidateSize(), 250);
+    this.scheduleMapInvalidate(0);
+    this.scheduleMapInvalidate(250);
+  }
+
+  private scheduleMapInvalidate(delay: number): void {
+    const timer = window.setTimeout(() => {
+      const index = this.mapInvalidateTimers.indexOf(timer);
+      if (index >= 0) {
+        this.mapInvalidateTimers.splice(index, 1);
+      }
+      if (document.getElementById('work-map')?.isConnected) {
+        this.map.invalidateSize();
+      }
+    }, delay);
+    this.mapInvalidateTimers.push(timer);
   }
 
   private addBaseMapLayers(): void {
@@ -551,7 +598,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       icon: this.createPositionIcon(position),
     });
 
-    marker.bindTooltip(this.getFirePositionLabel(position), {
+    marker.bindTooltip(this.escapeHtml(this.getFirePositionLabel(position)), {
       direction: 'top',
       offset: [0, -18],
       opacity: 0.92,
@@ -588,7 +635,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       icon: this.createSpecialAssetIcon('ew', position.readinessStatus, position.stationName),
     });
 
-    marker.bindTooltip(`РЕБ ${position.callsign} · ${position.stationName}`, {
+    marker.bindTooltip(`РЕБ ${this.escapeHtml(position.callsign)} · ${this.escapeHtml(position.stationName)}`, {
       direction: 'top',
       offset: [0, -16],
       opacity: 0.92,
@@ -615,7 +662,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       ),
     });
 
-    marker.bindTooltip(`${this.getAirAssetGroupLabel(position)} ${position.callsign}`, {
+    marker.bindTooltip(`${this.escapeHtml(this.getAirAssetGroupLabel(position))} ${this.escapeHtml(position.callsign)}`, {
       direction: 'top',
       offset: [0, -16],
       opacity: 0.92,
@@ -638,7 +685,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       icon: this.createThreatIcon(threat),
     });
 
-    marker.bindTooltip(`Загроза: ${threat.threatType}`);
+    marker.bindTooltip(`Загроза: ${this.escapeHtml(threat.threatType)}`);
 
     marker.on('click', () => {
       this.selectedThreat = threat;
@@ -1889,7 +1936,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
     });
 
     marker.bindPopup(`
-    <strong>${orderNumber}</strong><br />    Ціль: ${lat}, ${lng}<br />    Район: ${settlement || '-'}
+    <strong>${this.escapeHtml(orderNumber)}</strong><br />    Ціль: ${lat}, ${lng}<br />    Район: ${this.escapeHtml(settlement || '-')}
   `);
 
     marker.addTo(this.focusLayer);
@@ -1928,10 +1975,10 @@ export class MapPage implements AfterViewInit, OnDestroy {
       });
 
       marker.bindPopup(`
-      <strong>${item.orderNumber}</strong><br />
-      ${this.getResultTypeLabel(item.resultType)}<br />      Район: ${item.targetSettlement || '-'}<br />      ВП: ${item.firePositionName || '-'}<br />
-      A+B: ${item.shellMarking || '-'} + ${item.chargeMarking || '-'}<br />      Зона: ${item.zoneName || '-'}<br />      Факт: ${item.actualQuantity ?? '-'}<br />
-      ${item.resultComment || ''}
+      <strong>${this.escapeHtml(item.orderNumber)}</strong><br />
+      ${this.escapeHtml(this.getResultTypeLabel(item.resultType))}<br />      Район: ${this.escapeHtml(item.targetSettlement || '-')}<br />      ВП: ${this.escapeHtml(item.firePositionName || '-')}<br />
+      A+B: ${this.escapeHtml(item.shellMarking || '-')} + ${this.escapeHtml(item.chargeMarking || '-')}<br />      Зона: ${this.escapeHtml(item.zoneName || '-')}<br />      Факт: ${item.actualQuantity ?? '-'}<br />
+      ${this.escapeHtml(item.resultComment || '')}
     `);
 
       marker.addTo(this.resultMarkersLayer);
@@ -1963,7 +2010,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
         opacity: 0.82,
         dashArray: '10 8',
       })
-        .bindTooltip(route.name, { sticky: true, opacity: 0.92 })
+        .bindTooltip(this.escapeHtml(route.name), { sticky: true, opacity: 0.92 })
         .addTo(this.plannedRoutesLayer);
 
       points.forEach((point, index) => {
@@ -1974,7 +2021,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
           fillColor: '#02080d',
           fillOpacity: 0.92,
         })
-          .bindTooltip(`${route.name}: ${index + 1}`, { direction: 'top', opacity: 0.88 })
+          .bindTooltip(`${this.escapeHtml(route.name)}: ${index + 1}`, { direction: 'top', opacity: 0.88 })
           .addTo(this.plannedRoutesLayer);
       });
     });
@@ -2404,12 +2451,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
   }
 
   private escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    return escapeHtml(value);
   }
 
   private formatApproxMgrs(lat: number, lng: number): string {

@@ -17,7 +17,7 @@ export class User {
   @Column({ unique: true })
   login!: string;
 
-  @Column({ name: 'password_hash', type: 'text' })
+  @Column({ name: 'password_hash', type: 'text', select: false })
   passwordHash!: string;
 
   @Column({ name: 'full_name', type: 'varchar', length: 255, nullable: true })
